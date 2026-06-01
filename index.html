@@ -144,8 +144,8 @@ select.form-control { cursor: pointer; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 
 /* ── MODAL ───────────────────────────────────────────── */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
-.modal-overlay.open { display: flex; }
+.modal-overlay { position: fixed !important; inset: 0 !important; background: rgba(0,0,0,.35); z-index: 9998 !important; display: none !important; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex !important; }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-md); }
 .modal-lg { max-width: 680px; }
 .modal-title { font-family: 'Instrument Serif', serif; font-size: 20px; margin-bottom: 4px; }
@@ -696,30 +696,7 @@ select.form-control { cursor: pointer; }
   </div>
 </div>
 
-<!-- ── MODAL CADASTRO ── -->
-<div class="modal-overlay" id="modal-cadastro">
-  <div class="modal">
-    <div class="modal-title">Criar Conta</div>
-    <div class="modal-sub">Acesse o sistema Lume Financeiro</div>
-    <div class="form-group">
-      <label class="form-label">Nome</label>
-      <input class="form-control" type="text" id="cad-nome" placeholder="Seu nome">
-    </div>
-    <div class="form-group">
-      <label class="form-label">E-mail</label>
-      <input class="form-control" type="email" id="cad-email" placeholder="seu@email.com">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Senha</label>
-      <input class="form-control" type="password" id="cad-senha" placeholder="Mínimo 6 caracteres">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="fecharModal('modal-cadastro')">Cancelar</button>
-      <button class="btn btn-primary" onclick="criarConta()">Criar Conta</button>
-    </div>
-    <div class="login-err" id="cad-err"></div>
-  </div>
-</div>
+
 
 <!-- ── PLUGGY WIDGET ── -->
 <div id="pluggy-widget-container"></div>
@@ -1865,5 +1842,29 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
+<!-- ── MODAL CADASTRO ── -->
+<div class="modal-overlay" id="modal-cadastro">
+  <div class="modal">
+    <div class="modal-title">Criar Conta</div>
+    <div class="modal-sub">Acesse o sistema Lume Financeiro</div>
+    <div class="form-group">
+      <label class="form-label">Nome</label>
+      <input class="form-control" type="text" id="cad-nome" placeholder="Seu nome">
+    </div>
+    <div class="form-group">
+      <label class="form-label">E-mail</label>
+      <input class="form-control" type="email" id="cad-email" placeholder="seu@email.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Senha</label>
+      <input class="form-control" type="password" id="cad-senha" placeholder="Mínimo 6 caracteres">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-cadastro')">Cancelar</button>
+      <button class="btn btn-primary" onclick="criarConta()">Criar Conta</button>
+    </div>
+    <div class="login-err" id="cad-err"></div>
+  </div>
+</div>
 </body>
 </html>
