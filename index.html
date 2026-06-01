@@ -144,8 +144,25 @@ select.form-control { cursor: pointer; }
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 
 /* ── MODAL ───────────────────────────────────────────── */
-.modal-overlay { position: fixed !important; inset: 0 !important; background: rgba(0,0,0,.35); z-index: 9998 !important; display: none !important; align-items: center; justify-content: center; padding: 20px; }
-.modal-overlay.open { display: flex !important; }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+}
+.modal-overlay.open {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: all;
+}
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-md); }
 .modal-lg { max-width: 680px; }
 .modal-title { font-family: 'Instrument Serif', serif; font-size: 20px; margin-bottom: 4px; }
