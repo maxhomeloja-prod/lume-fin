@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lume · Financeiro</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.pluggy.ai/pluggy-connect/v2.1.0/pluggy-connect.js"></script>
 <style>
 :root {
   --bg: #f7f5f0;
@@ -1692,8 +1691,20 @@ async function loadContasBancarias() {
   }
 }
 
+async function carregarPluggyScript() {
+  return new Promise((resolve, reject) => {
+    if(window.PluggyConnect) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdn.pluggy.ai/pluggy-connect/v2.1.0/pluggy-connect.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Não foi possível carregar o widget do Pluggy'));
+    document.head.appendChild(s);
+  });
+}
+
 async function abrirConectarBanco() {
   try {
+    await carregarPluggyScript();
     // Gerar connect_token via Worker
     const r = await fetch(`${WORKER}/connect-token`, {
       method: 'POST',
@@ -1721,6 +1732,7 @@ async function abrirConectarBanco() {
 
 async function reconectarBanco(itemId) {
   try {
+    await carregarPluggyScript();
     const r = await fetch(`${WORKER}/connect-token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
