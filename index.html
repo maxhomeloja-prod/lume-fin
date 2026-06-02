@@ -242,6 +242,7 @@ select.form-control { cursor: pointer; }
   .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr 1fr; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -289,6 +290,17 @@ select.form-control { cursor: pointer; }
       <button class="sb-item" onclick="navTo('caixa',this)">
         <span class="icon">💵</span> Caixa
       </button>
+      <div class="sb-section" style="margin-top:8px">Vendas</div>
+      <button class="sb-item" onclick="navTo('vendas',this)">
+        <span class="icon">🛒</span> Vendas
+      </button>
+      <button class="sb-item" onclick="navTo('bom',this)">
+        <span class="icon">🧩</span> Estrutura (BOM)
+        <span id="badge-bom" style="margin-left:auto;background:var(--red-bg);color:var(--red);font-size:10px;padding:1px 6px;border-radius:10px;display:none"></span>
+      </button>
+      <button class="sb-item" onclick="navTo('abc',this)">
+        <span class="icon">📈</span> Curva ABC
+      </button>
       <div class="sb-section" style="margin-top:8px">Configuração</div>
       <button class="sb-item" onclick="navTo('contas',this)">
         <span class="icon">🏦</span> Contas Bancárias
@@ -316,7 +328,10 @@ select.form-control { cursor: pointer; }
           <div class="page-title">Categorização</div>
           <div class="page-sub">Classifique as transações bancárias pendentes</div>
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="loadCategorizacao()">↻ Atualizar</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="btn-sync" onclick="sincronizarBanco()">⚡ Sincronizar Banco</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadCategorizacao()">↻ Atualizar</button>
+        </div>
       </div>
       <div class="content">
         <div class="filters">
@@ -469,6 +484,133 @@ select.form-control { cursor: pointer; }
             <div class="tbl-wrap" id="caixa-sai-wrap">
               <div class="loading"><div class="spinner"></div> Carregando...</div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── VENDAS ── -->
+    <div id="panel-vendas" class="panel">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Vendas</div>
+          <div class="page-sub">Registre e acompanhe suas vendas</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-download-planilha" onclick="downloadPlanilhaPadrao()">⬇ Planilha Padrão</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-vendas-input').click()">📂 Upload Planilha</button>
+          <input type="file" id="upload-vendas-input" accept=".csv,.xlsx" style="display:none" onchange="processarUploadVendas(this)">
+          <button class="btn btn-primary btn-sm" onclick="abrirModalVendaManual()">+ Venda Manual</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="filters">
+          <div class="filter-group">
+            <span class="filter-label">De</span>
+            <input type="date" class="filter-control" id="fven-de" onchange="loadVendas()">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Até</span>
+            <input type="date" class="filter-control" id="fven-ate" onchange="loadVendas()">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Canal</span>
+            <input type="text" class="filter-control" id="fven-canal" placeholder="Todos" onchange="loadVendas()" style="width:140px">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">SKU</span>
+            <input type="text" class="filter-control" id="fven-sku" placeholder="Buscar SKU" onchange="loadVendas()" style="width:180px">
+          </div>
+        </div>
+        <div class="grid-4 mb20">
+          <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="ven-kpi-receita">—</div></div>
+          <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-value" id="ven-kpi-pedidos">—</div></div>
+          <div class="kpi"><div class="kpi-label">Unidades</div><div class="kpi-value" id="ven-kpi-unidades">—</div></div>
+          <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-kpi-ticket">—</div></div>
+        </div>
+        <div id="upload-progresso" style="display:none;margin-bottom:16px" class="card">
+          <div style="font-size:12px;color:var(--ink2);margin-bottom:8px" id="upload-status">Processando...</div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div id="upload-bar" style="height:100%;background:var(--green);border-radius:3px;width:0%;transition:width .3s"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap" id="ven-table-wrap">
+            <div class="loading"><div class="spinner"></div> Carregando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BOM ── -->
+    <div id="panel-bom" class="panel">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Estrutura <em>de Materiais</em></div>
+          <div class="page-sub">BOM — Bill of Materials por SKU</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadBOM()">↻ Atualizar</button>
+      </div>
+      <div class="content">
+        <div id="bom-pendencias" class="mb20"></div>
+        <div id="bom-cadastrados"></div>
+      </div>
+    </div>
+
+    <!-- ── CURVA ABC ── -->
+    <div id="panel-abc" class="panel">
+      <div class="topbar">
+        <div>
+          <div class="page-title">Curva <em>ABC</em></div>
+          <div class="page-sub">Análise de Pareto por SKU</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="loadABC()">↻ Atualizar</button>
+      </div>
+      <div class="content">
+        <div class="filters">
+          <div class="filter-group">
+            <span class="filter-label">De</span>
+            <input type="date" class="filter-control" id="fabc-de" onchange="loadABC()">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Até</span>
+            <input type="date" class="filter-control" id="fabc-ate" onchange="loadABC()">
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Canal</span>
+            <input type="text" class="filter-control" id="fabc-canal" placeholder="Todos" style="width:140px" onchange="loadABC()">
+          </div>
+          <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadABC()">Aplicar</button>
+        </div>
+        <div class="grid-3 mb20">
+          <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="abc-kpi-rec">—</div></div>
+          <div class="kpi"><div class="kpi-label">SKUs Analisados</div><div class="kpi-value" id="abc-kpi-skus">—</div></div>
+          <div class="kpi"><div class="kpi-label">Unidades Vendidas</div><div class="kpi-value" id="abc-kpi-uni">—</div></div>
+        </div>
+        <div class="card mb20">
+          <div class="card-title">Pareto — Top 40 SKUs</div>
+          <div class="card-subtitle">Receita acumulada vs % acumulado</div>
+          <div style="position:relative;height:300px"><canvas id="chart-abc-pareto"></canvas></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" id="btn-abc-all" onclick="filtroABCVendas('all')" style="border-color:var(--ink);color:var(--ink)">Todos</button>
+            <button class="btn btn-secondary btn-sm" id="btn-abc-A" onclick="filtroABCVendas('A')">Classe A</button>
+            <button class="btn btn-secondary btn-sm" id="btn-abc-B" onclick="filtroABCVendas('B')">Classe B</button>
+            <button class="btn btn-secondary btn-sm" id="btn-abc-C" onclick="filtroABCVendas('C')">Classe C</button>
+          </div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr>
+                <th>#</th><th>Classe</th><th>SKU</th><th>Categoria</th>
+                <th style="text-align:right">Qtd</th>
+                <th style="text-align:right">Receita</th>
+                <th style="text-align:right">% Receita</th>
+                <th style="text-align:right">% Acum.</th>
+              </tr></thead>
+              <tbody id="abc-tbody-vendas"></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -862,8 +1004,8 @@ async function iniciarApp() {
   // Definir datas padrão
   const hoje = new Date(), ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const fmtDate = d => d.toISOString().split('T')[0];
-  ['fcat-de','fbal-de','flan-de'].forEach(id => { const el = document.getElementById(id); if(el) el.value = fmtDate(ini); });
-  ['fcat-ate','fbal-ate','flan-ate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = fmtDate(hoje); });
+  ['fcat-de','fbal-de','flan-de','fven-de','fabc-de'].forEach(id => { const el = document.getElementById(id); if(el) el.value = fmtDate(ini); });
+  ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = fmtDate(hoje); });
   document.getElementById('sai-data').value = fmtDate(hoje);
   document.getElementById('lan-venc').value = fmtDate(hoje);
 
@@ -879,6 +1021,7 @@ async function iniciarApp() {
   } else {
     document.getElementById('app').style.display = 'flex';
     await loadCategorizacao();
+  await verificarBOMPendencias();
   }
 }
 
@@ -977,12 +1120,16 @@ function navTo(panel, el) {
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if(el) el.classList.add('active');
-  document.getElementById('panel-' + panel).classList.add('active');
+  const panelEl = document.getElementById('panel-' + panel);
+  if(panelEl) panelEl.classList.add('active');
   if(panel === 'balancete') loadBalancete();
   if(panel === 'lancamentos') loadLancamentos();
   if(panel === 'caixa') loadCaixa();
   if(panel === 'contas') loadContasBancarias();
   if(panel === 'empresa') loadEmpresas();
+  if(panel === 'vendas') loadVendas();
+  if(panel === 'bom') loadBOM();
+  if(panel === 'abc') loadABC();
 }
 
 // ============================================================
@@ -1889,6 +2036,605 @@ async function criarCategoria(nome, tipo) {
   return cat?.[0];
 }
 
+
+// ============================================================
+// VENDAS
+// ============================================================
+let _vendas = [], _produtos = [], _clientes = [], _abcFiltroAtivo = 'all', _abcData = [];
+let _bomLinhas = 0;
+
+// Categoria estimada pelo SKU
+function estimarCategoria(sku) {
+  const s = sku.toUpperCase();
+  if(s.includes('LENÇOL') || s.includes('LENCOL') || s.includes('JOGO')) return 'Lençóis';
+  if(s.includes('CORTINA') || s.includes('BLACKOUT')) return 'Cortinas';
+  if(s.includes('MANTA')) return 'Mantas';
+  if(s.includes('PROTETOR')) return 'Protetores';
+  if(s.includes('FRONHA')) return 'Fronhas';
+  if(s.includes('TAPETE')) return 'Tapetes';
+  if(s.includes('TOALHA')) return 'Toalhas';
+  if(s.includes('TRAVESSEIRO')) return 'Travesseiros';
+  return 'Outros';
+}
+
+// Garantir categoria existe e retornar seu id
+async function garantirCategoriaProduto(nome) {
+  let cat = _catsProduto.find(c => c.nome === nome);
+  if(!cat) {
+    const res = await sbPost('categorias_produto', { empresa_id: EMPRESA_ID, nome });
+    cat = res[0];
+    _catsProduto.push(cat);
+  }
+  return cat.id;
+}
+
+// Garantir produto existe e retornar seu id
+async function garantirProduto(sku, descricao) {
+  let prod = _produtos.find(p => p.sku.toUpperCase() === sku.toUpperCase());
+  if(!prod) {
+    const catNome = estimarCategoria(sku);
+    const catId = await garantirCategoriaProduto(catNome);
+    const res = await sbPost('produtos', {
+      empresa_id: EMPRESA_ID, sku: sku.toUpperCase(),
+      descricao: descricao || sku, categoria_id: catId, ativo: true
+    });
+    prod = res[0];
+    _produtos.push(prod);
+  }
+  return prod;
+}
+
+// Garantir cliente existe e retornar seu id
+async function garantirCliente(nome) {
+  if(!nome || !nome.trim()) return null;
+  let cli = _clientes.find(c => c.nome.toLowerCase() === nome.toLowerCase().trim());
+  if(!cli) {
+    const res = await sbPost('clientes', { empresa_id: EMPRESA_ID, nome: nome.trim() });
+    cli = res[0];
+    _clientes.push(cli);
+  }
+  return cli?.id || null;
+}
+
+// Carregar produtos e clientes
+async function carregarProdutosClientes() {
+  if(!EMPRESA_ID) return;
+  [_produtos, _clientes, _catsProduto] = await Promise.all([
+    sbGet('produtos', `?empresa_id=eq.${EMPRESA_ID}&ativo=eq.true&order=sku`),
+    sbGet('clientes', `?empresa_id=eq.${EMPRESA_ID}&order=nome`),
+    sbGet('categorias_produto', `?empresa_id=eq.${EMPRESA_ID}&order=nome`)
+  ]);
+  // Preencher datalist do modal
+  const dl = document.getElementById('venda-sku-list');
+  if(dl) dl.innerHTML = _produtos.map(p => `<option value="${p.sku}">${p.descricao || ''}</option>`).join('');
+  const dlC = document.getElementById('venda-cliente-list');
+  if(dlC) dlC.innerHTML = _clientes.map(c => `<option value="${c.nome}">`).join('');
+}
+
+let _catsProduto = [];
+
+// ── LOAD VENDAS ───────────────────────────────────────────────
+async function loadVendas() {
+  if(!EMPRESA_ID) return;
+  const de  = document.getElementById('fven-de')?.value;
+  const ate = document.getElementById('fven-ate')?.value;
+  const canal = document.getElementById('fven-canal')?.value.trim();
+  const sku = document.getElementById('fven-sku')?.value.trim().toUpperCase();
+
+  let q = `?empresa_id=eq.${EMPRESA_ID}&order=data_venda.desc&limit=500`;
+  if(de)  q += `&data_venda=gte.${de}`;
+  if(ate) q += `&data_venda=lte.${ate}`;
+  if(canal) q += `&canal_venda=ilike.*${canal}*`;
+  if(sku) q += `&sku=ilike.*${sku}*`;
+
+  document.getElementById('ven-table-wrap').innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  try {
+    _vendas = await sbGet('vendas', q);
+    renderVendas();
+  } catch(e) {
+    document.getElementById('ven-table-wrap').innerHTML = `<div class="empty">Erro: ${e.message}</div>`;
+  }
+}
+
+function renderVendas() {
+  const rec = _vendas.reduce((s,v) => s + v.valor_total, 0);
+  const uni = _vendas.reduce((s,v) => s + v.quantidade, 0);
+  document.getElementById('ven-kpi-receita').textContent  = fBRL(rec);
+  document.getElementById('ven-kpi-pedidos').textContent  = fN(_vendas.length);
+  document.getElementById('ven-kpi-unidades').textContent = fN(uni);
+  document.getElementById('ven-kpi-ticket').textContent   = _vendas.length ? fBRL(rec/_vendas.length) : '—';
+
+  if(!_vendas.length) {
+    document.getElementById('ven-table-wrap').innerHTML = '<div class="empty">Nenhuma venda encontrada. Faça upload de uma planilha ou lance manualmente.</div>';
+    return;
+  }
+  document.getElementById('ven-table-wrap').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>
+        <th style="text-align:right">Qtd</th>
+        <th style="text-align:right">Preço Unit.</th>
+        <th style="text-align:right">Total</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${_vendas.map(v => `<tr>
+          <td>${fDate(v.data_venda)}</td>
+          <td style="font-size:11px;color:var(--ink2)">${v.canal_venda || '—'}</td>
+          <td style="font-weight:500">${v.sku}</td>
+          <td style="font-size:11px;color:var(--ink2)">${v.cliente_nome || '—'}</td>
+          <td style="text-align:right">${fN(v.quantidade)}</td>
+          <td style="text-align:right">${fBRL(v.preco_unitario)}</td>
+          <td style="text-align:right;color:var(--green);font-weight:500">${fBRL(v.valor_total)}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="excluirVenda('${v.id}')">✕</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function excluirVenda(id) {
+  if(!confirm('Excluir esta venda?')) return;
+  await sbDelete('vendas', `id=eq.${id}`);
+  loadVendas();
+}
+
+// ── VENDA MANUAL ─────────────────────────────────────────────
+async function abrirModalVendaManual() {
+  await carregarProdutosClientes();
+  document.getElementById('venda-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('venda-sku').value = '';
+  document.getElementById('venda-canal').value = '';
+  document.getElementById('venda-cliente').value = '';
+  document.getElementById('venda-desc').value = '';
+  document.getElementById('venda-categoria').value = '';
+  document.getElementById('venda-qtd').value = '1';
+  document.getElementById('venda-preco').value = '';
+  document.getElementById('venda-total-preview').textContent = '';
+  document.getElementById('venda-produto-info').textContent = '';
+  abrirModal('modal-venda');
+}
+
+function buscarProdutoManual() {
+  const sku = document.getElementById('venda-sku').value.trim();
+  if(!sku) return;
+  const prod = _produtos.find(p => p.sku.toUpperCase() === sku.toUpperCase());
+  if(prod) {
+    document.getElementById('venda-desc').value = prod.descricao || '';
+    document.getElementById('venda-produto-info').textContent = '✓ Produto encontrado';
+    document.getElementById('venda-produto-info').style.color = 'var(--green)';
+  } else {
+    document.getElementById('venda-desc').value = '';
+    document.getElementById('venda-produto-info').textContent = '+ Novo produto — será criado automaticamente';
+    document.getElementById('venda-produto-info').style.color = 'var(--amber)';
+    document.getElementById('venda-categoria').value = estimarCategoria(sku);
+  }
+}
+
+function calcularTotalVenda() {
+  const qtd = parseFloat(document.getElementById('venda-qtd').value) || 0;
+  const preco = parseFloat(document.getElementById('venda-preco').value) || 0;
+  const total = qtd * preco;
+  document.getElementById('venda-total-preview').textContent = total > 0 ? `Total: ${fBRL(total)}` : '';
+}
+
+async function salvarVendaManual() {
+  const sku = document.getElementById('venda-sku').value.trim().toUpperCase();
+  const qtd = parseInt(document.getElementById('venda-qtd').value);
+  const preco = parseFloat(document.getElementById('venda-preco').value);
+  if(!sku || !qtd || !preco) return alert('Preencha SKU, quantidade e preço');
+
+  try {
+    const prod = await garantirProduto(sku, document.getElementById('venda-desc').value.trim());
+    const cliId = await garantirCliente(document.getElementById('venda-cliente').value.trim());
+    await sbPost('vendas', {
+      empresa_id:    EMPRESA_ID,
+      data_venda:    document.getElementById('venda-data').value,
+      canal_venda:   document.getElementById('venda-canal').value.trim() || null,
+      produto_id:    prod.id,
+      sku:           sku,
+      cliente_id:    cliId,
+      cliente_nome:  document.getElementById('venda-cliente').value.trim() || null,
+      quantidade:    qtd,
+      preco_unitario: preco
+    });
+    fecharModal('modal-venda');
+    loadVendas();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+// ── DOWNLOAD PLANILHA PADRÃO ──────────────────────────────────
+function downloadPlanilhaPadrao() {
+  const csv = [
+    'data_venda,canal_venda,sku,cliente,quantidade,preco_unitario',
+    '2025-06-01,Shopee,LENÇOL_CASAL_3P_BEGE,João Silva,2,89.90',
+    '2025-06-01,Mercado Livre,CORTINA_MICRO_90X205_2PARTES_BRANCO,,1,59.90',
+    '2025-06-02,Loja Física,PROTETOR_CASAL_BRANCO,Maria Santos,3,45.00'
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'lume_vendas_modelo.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── UPLOAD PLANILHA ───────────────────────────────────────────
+async function processarUploadVendas(input) {
+  const file = input.files[0];
+  if(!file) return;
+  input.value = '';
+
+  const progresso = document.getElementById('upload-progresso');
+  const status = document.getElementById('upload-status');
+  const bar = document.getElementById('upload-bar');
+  progresso.style.display = '';
+  status.textContent = 'Lendo arquivo...';
+  bar.style.width = '5%';
+
+  await carregarProdutosClientes();
+
+  const text = await file.text();
+  const linhas = text.trim().split('\n');
+  const header = linhas[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g,''));
+
+  const iData   = header.indexOf('data_venda');
+  const iCanal  = header.indexOf('canal_venda');
+  const iSku    = header.indexOf('sku');
+  const iCliente= header.indexOf('cliente');
+  const iQtd    = header.indexOf('quantidade');
+  const iPreco  = header.indexOf('preco_unitario');
+
+  if(iSku < 0 || iQtd < 0 || iPreco < 0) {
+    alert('Planilha inválida. Use a planilha padrão como base (colunas: data_venda, canal_venda, sku, cliente, quantidade, preco_unitario)');
+    progresso.style.display = 'none';
+    return;
+  }
+
+  const registros = linhas.slice(1).filter(l => l.trim());
+  let inseridos = 0, erros = 0;
+
+  for(let i = 0; i < registros.length; i++) {
+    const cols = registros[i].split(',').map(c => c.trim().replace(/"/g,''));
+    const sku    = cols[iSku]?.toUpperCase();
+    const qtd    = parseInt(cols[iQtd]);
+    const preco  = parseFloat(cols[iPreco]);
+    if(!sku || !qtd || !preco) continue;
+
+    try {
+      const prod = await garantirProduto(sku, sku);
+      const cliNome = iCliente >= 0 ? cols[iCliente] : '';
+      const cliId = await garantirCliente(cliNome);
+      const dataVenda = (iData >= 0 && cols[iData]) ? cols[iData] : new Date().toISOString().split('T')[0];
+      await sbPost('vendas', {
+        empresa_id: EMPRESA_ID,
+        data_venda: dataVenda,
+        canal_venda: (iCanal >= 0 && cols[iCanal]) ? cols[iCanal] : null,
+        produto_id: prod.id, sku,
+        cliente_id: cliId, cliente_nome: cliNome || null,
+        quantidade: qtd, preco_unitario: preco
+      });
+      inseridos++;
+    } catch(e) { erros++; }
+
+    const pct = Math.round((i+1)/registros.length*100);
+    bar.style.width = pct + '%';
+    status.textContent = `Processando ${i+1}/${registros.length} — ${inseridos} inseridos${erros ? ', ' + erros + ' erros' : ''}`;
+  }
+
+  bar.style.width = '100%';
+  status.textContent = `✅ Concluído: ${inseridos} vendas importadas${erros ? ', ' + erros + ' erros' : ''}`;
+  setTimeout(() => { progresso.style.display = 'none'; }, 4000);
+  loadVendas();
+  verificarBOMPendencias();
+}
+
+// ── BOM ───────────────────────────────────────────────────────
+async function loadBOM() {
+  if(!EMPRESA_ID) return;
+  await carregarProdutosClientes();
+
+  // SKUs com vendas
+  const vendasTodas = await sbGet('vendas', `?empresa_id=eq.${EMPRESA_ID}&select=sku&limit=5000`);
+  const skusComVenda = [...new Set(vendasTodas.map(v => v.sku))];
+
+  // SKUs com estrutura
+  const bomExistente = await sbGet('estrutura_produto', `?empresa_id=eq.${EMPRESA_ID}&select=sku`);
+  const skusComBOM = new Set(bomExistente.map(b => b.sku));
+
+  const pendentes = skusComVenda.filter(s => !skusComBOM.has(s));
+  const cadastrados = skusComVenda.filter(s => skusComBOM.has(s));
+
+  // Badge
+  const badge = document.getElementById('badge-bom');
+  if(pendentes.length > 0) { badge.textContent = pendentes.length; badge.style.display = ''; }
+  else badge.style.display = 'none';
+
+  // Renderizar pendências
+  const bomPend = document.getElementById('bom-pendencias');
+  if(pendentes.length > 0) {
+    bomPend.innerHTML = `
+      <div class="card mb20">
+        <div class="card-title" style="color:var(--red)">⚠ Pendências — ${pendentes.length} SKU${pendentes.length>1?'s':''} sem estrutura</div>
+        <div class="card-subtitle">Sem estrutura cadastrada a aba Verba não terá dados suficientes</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px">
+          ${pendentes.map(sku => `
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;font-weight:500">${sku}</span>
+              <span style="font-size:11px;color:var(--ink3)">${estimarCategoria(sku)}</span>
+              <button class="btn btn-primary btn-sm" onclick="abrirModalBOM('${sku}')">Cadastrar</button>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  } else {
+    bomPend.innerHTML = '<div class="card mb20"><div class="empty">✓ Todos os SKUs com vendas têm estrutura cadastrada</div></div>';
+  }
+
+  // Renderizar cadastrados
+  const bomCad = document.getElementById('bom-cadastrados');
+  if(cadastrados.length > 0) {
+    const estruturas = await sbGet('estrutura_produto', `?empresa_id=eq.${EMPRESA_ID}&order=sku`);
+    const porSku = {};
+    estruturas.forEach(e => { if(!porSku[e.sku]) porSku[e.sku]=[]; porSku[e.sku].push(e); });
+
+    bomCad.innerHTML = `
+      <div class="card">
+        <div class="card-title">Estruturas Cadastradas — ${cadastrados.length} SKUs</div>
+        <div class="card-subtitle">Composição de materiais por produto</div>
+        <div style="margin-top:8px">
+          ${cadastrados.map(sku => `
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2)">
+                <div>
+                  <span style="font-weight:600;font-size:13px">${sku}</span>
+                  <span style="font-size:11px;color:var(--ink3);margin-left:8px">${estimarCategoria(sku)}</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="abrirModalBOM('${sku}',true)">✎ Editar</button>
+              </div>
+              <table style="width:100%">
+                <thead><tr>
+                  <th>Material</th><th style="text-align:right">Qtd</th>
+                  <th>Unidade</th><th style="text-align:right">Preço Unit.</th>
+                  <th style="text-align:right">Custo</th>
+                </tr></thead>
+                <tbody>
+                  ${(porSku[sku]||[]).map(m => `<tr>
+                    <td>${m.material_nome}</td>
+                    <td style="text-align:right">${m.quantidade}</td>
+                    <td style="color:var(--ink3)">${m.unidade}</td>
+                    <td style="text-align:right">${m.preco_unitario ? fBRL(m.preco_unitario) : '—'}</td>
+                    <td style="text-align:right;color:var(--green)">${m.preco_unitario ? fBRL(m.quantidade*m.preco_unitario) : '—'}</td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  } else {
+    bomCad.innerHTML = '';
+  }
+}
+
+async function verificarBOMPendencias() {
+  if(!EMPRESA_ID) return;
+  try {
+    const vendasTodas = await sbGet('vendas', `?empresa_id=eq.${EMPRESA_ID}&select=sku&limit=5000`);
+    const skusComVenda = [...new Set(vendasTodas.map(v => v.sku))];
+    const bomExistente = await sbGet('estrutura_produto', `?empresa_id=eq.${EMPRESA_ID}&select=sku`);
+    const skusComBOM = new Set(bomExistente.map(b => b.sku));
+    const pendentes = skusComVenda.filter(s => !skusComBOM.has(s)).length;
+    const badge = document.getElementById('badge-bom');
+    if(pendentes > 0) { badge.textContent = pendentes; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  } catch(e) {}
+}
+
+async function abrirModalBOM(sku, editar = false) {
+  document.getElementById('modal-bom-sku').textContent = sku;
+  document.getElementById('bom-sku-val').value = sku;
+  const prod = _produtos.find(p => p.sku === sku);
+  document.getElementById('bom-produto-id').value = prod?.id || '';
+  _bomLinhas = 0;
+  document.getElementById('bom-linhas').innerHTML = '';
+
+  if(editar) {
+    // Carregar estrutura existente
+    const estruturas = await sbGet('estrutura_produto', `?empresa_id=eq.${EMPRESA_ID}&sku=eq.${encodeURIComponent(sku)}`);
+    estruturas.forEach(e => adicionarLinhaBOM(e));
+  } else {
+    adicionarLinhaBOM();
+  }
+  abrirModal('modal-bom');
+}
+
+function adicionarLinhaBOM(dados = null) {
+  _bomLinhas++;
+  const n = _bomLinhas;
+  const div = document.createElement('div');
+  div.id = `bom-linha-${n}`;
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 100px auto;gap:8px;margin-bottom:8px;align-items:end';
+  div.innerHTML = `
+    <div>
+      ${n===1 ? '<label class="form-label">Material</label>' : ''}
+      <input class="form-control" id="bom-mat-${n}" placeholder="Nome do material" value="${dados?.material_nome||''}">
+    </div>
+    <div>
+      ${n===1 ? '<label class="form-label">Qtd</label>' : ''}
+      <input class="form-control" type="number" id="bom-qtd-${n}" step="0.01" placeholder="0" value="${dados?.quantidade||''}">
+    </div>
+    <div>
+      ${n===1 ? '<label class="form-label">Unidade</label>' : ''}
+      <select class="form-control" id="bom-un-${n}">
+        <option value="un" ${dados?.unidade==='un'?'selected':''}>un</option>
+        <option value="m" ${dados?.unidade==='m'?'selected':''}>m</option>
+        <option value="kg" ${dados?.unidade==='kg'?'selected':''}>kg</option>
+        <option value="g" ${dados?.unidade==='g'?'selected':''}>g</option>
+        <option value="L" ${dados?.unidade==='L'?'selected':''}>L</option>
+      </select>
+    </div>
+    <div>
+      ${n===1 ? '<label class="form-label">Preço Unit.</label>' : ''}
+      <input class="form-control" type="number" id="bom-preco-${n}" step="0.01" placeholder="0,00" value="${dados?.preco_unitario||''}">
+    </div>
+    <button class="btn btn-danger btn-sm" style="margin-bottom:0" onclick="document.getElementById('bom-linha-${n}').remove()">✕</button>`;
+  document.getElementById('bom-linhas').appendChild(div);
+}
+
+async function salvarBOM() {
+  const sku = document.getElementById('bom-sku-val').value;
+  const prodId = document.getElementById('bom-produto-id').value;
+  const linhas = document.getElementById('bom-linhas').querySelectorAll('[id^=bom-mat-]');
+
+  const itens = [];
+  linhas.forEach(el => {
+    const n = el.id.split('-').pop();
+    const mat = el.value.trim();
+    const qtd = parseFloat(document.getElementById(`bom-qtd-${n}`).value);
+    const un  = document.getElementById(`bom-un-${n}`).value;
+    const preco = parseFloat(document.getElementById(`bom-preco-${n}`).value) || null;
+    if(mat && qtd) itens.push({ material_nome: mat, quantidade: qtd, unidade: un, preco_unitario: preco });
+  });
+
+  if(!itens.length) return alert('Adicione pelo menos um material');
+
+  try {
+    // Deletar estrutura existente e recriar
+    await sbDelete('estrutura_produto', `empresa_id=eq.${EMPRESA_ID}&sku=eq.${encodeURIComponent(sku)}`);
+    for(const item of itens) {
+      await sbPost('estrutura_produto', {
+        empresa_id: EMPRESA_ID, produto_id: prodId || null,
+        sku, material_nome: item.material_nome,
+        quantidade: item.quantidade, unidade: item.unidade,
+        preco_unitario: item.preco_unitario
+      });
+    }
+    fecharModal('modal-bom');
+    loadBOM();
+  } catch(e) { alert('Erro: ' + e.message); }
+}
+
+// ── CURVA ABC VENDAS ──────────────────────────────────────────
+async function loadABC() {
+  if(!EMPRESA_ID) return;
+  const de   = document.getElementById('fabc-de')?.value;
+  const ate  = document.getElementById('fabc-ate')?.value;
+  const canal = document.getElementById('fabc-canal')?.value.trim();
+
+  let q = `?empresa_id=eq.${EMPRESA_ID}&limit=10000`;
+  if(de)  q += `&data_venda=gte.${de}`;
+  if(ate) q += `&data_venda=lte.${ate}`;
+  if(canal) q += `&canal_venda=ilike.*${canal}*`;
+
+  try {
+    const vendas = await sbGet('vendas', q);
+
+    // Agrupar por SKU
+    const porSku = {};
+    vendas.forEach(v => {
+      if(!porSku[v.sku]) porSku[v.sku] = { sku: v.sku, rec: 0, qtd: 0 };
+      porSku[v.sku].rec += v.valor_total;
+      porSku[v.sku].qtd += v.quantidade;
+    });
+
+    const sorted = Object.values(porSku).sort((a,b) => b.rec-a.rec);
+    const total = sorted.reduce((s,r) => s+r.rec, 0);
+    const totalUni = sorted.reduce((s,r) => s+r.qtd, 0);
+
+    document.getElementById('abc-kpi-rec').textContent  = fBRL(total);
+    document.getElementById('abc-kpi-skus').textContent = fN(sorted.length);
+    document.getElementById('abc-kpi-uni').textContent  = fN(totalUni);
+
+    let acum = 0;
+    _abcData = sorted.map((r,i) => {
+      acum += r.rec;
+      const pct = total ? r.rec/total*100 : 0;
+      const pctA = total ? acum/total*100 : 0;
+      return { rank:i+1, ...r, pct, pctA, cl: pctA<=80?'A':pctA<=95?'B':'C', cat: estimarCategoria(r.sku) };
+    });
+
+    renderABCVendas('all');
+    renderABCChart();
+  } catch(e) {
+    console.error('Erro ABC:', e);
+  }
+}
+
+function filtroABCVendas(cl) {
+  _abcFiltroAtivo = cl;
+  ['all','A','B','C'].forEach(x => {
+    const b = document.getElementById('btn-abc-' + x);
+    if(b) { b.style.borderColor = x===cl?'var(--ink)':''; b.style.color = x===cl?'var(--ink)':''; }
+  });
+  renderABCVendas(cl);
+}
+
+function renderABCVendas(cl) {
+  const dados = cl==='all' ? _abcData : _abcData.filter(r => r.cl===cl);
+  document.getElementById('abc-tbody-vendas').innerHTML = dados.map(r => `<tr>
+    <td style="color:var(--ink3)">${r.rank}</td>
+    <td><span class="abc-badge abc-${r.cl}">${r.cl}</span></td>
+    <td style="font-weight:500">${r.sku}</td>
+    <td style="font-size:11px;color:var(--ink2)">${r.cat}</td>
+    <td style="text-align:right">${fN(r.qtd)}</td>
+    <td style="text-align:right;color:var(--green)">${fBRL(r.rec)}</td>
+    <td style="text-align:right">${r.pct.toFixed(2)}%</td>
+    <td style="text-align:right">${r.pctA.toFixed(2)}%</td>
+  </tr>`).join('');
+}
+
+function renderABCChart() {
+  const top = _abcData.slice(0,40);
+  const ctx = document.getElementById('chart-abc-pareto')?.getContext('2d');
+  if(!ctx) return;
+  if(window._chartABC) window._chartABC.destroy();
+  window._chartABC = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(r => r.sku.length>14 ? r.sku.slice(0,14)+'…' : r.sku),
+      datasets: [{
+        label:'Receita', data: top.map(r=>r.rec), yAxisID:'y',
+        backgroundColor: top.map(r=>r.cl==='A'?'rgba(26,122,74,.7)':r.cl==='B'?'rgba(180,83,9,.7)':'rgba(192,57,43,.4)'),
+        borderRadius:3
+      },{
+        label:'% Acum.', data: top.map(r=>r.pctA),
+        borderColor:'#1d4ed8', borderWidth:2, pointRadius:2, tension:.2,
+        type:'line', fill:false, yAxisID:'y2'
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{labels:{color:'#6b6760',font:{family:'Geist Mono',size:11},boxWidth:12}},
+        tooltip:{backgroundColor:'#fff',borderColor:'#e2ddd6',borderWidth:1,titleColor:'#1a1814',bodyColor:'#6b6760'}
+      },
+      scales:{
+        x:{ticks:{display:false},grid:{color:'#f0ede6'}},
+        y:{position:'left',ticks:{callback:v=>'R$'+(v/1000).toFixed(0)+'k',color:'#a09d98',font:{size:10}},grid:{color:'#f0ede6'}},
+        y2:{position:'right',min:0,max:100,ticks:{callback:v=>v+'%',color:'#a09d98',font:{size:10}},grid:{display:false}}
+      }
+    }
+  });
+}
+
+// ── SYNC BANCO ────────────────────────────────────────────────
+async function sincronizarBanco() {
+  const btn = document.getElementById('btn-sync');
+  btn.textContent = '⏳ Sincronizando...';
+  btn.disabled = true;
+  try {
+    const r = await fetch(`${WORKER}/sync?empresa_id=${EMPRESA_ID}`);
+    const data = await r.json();
+    const novas = data.total_novas || 0;
+    btn.textContent = `✓ ${novas} novas transações`;
+    setTimeout(() => {
+      btn.textContent = '⚡ Sincronizar Banco';
+      btn.disabled = false;
+    }, 3000);
+    if(novas > 0) await loadCategorizacao();
+  } catch(e) {
+    btn.textContent = '⚠ Erro — tente novamente';
+    btn.disabled = false;
+  }
+}
+
 // ============================================================
 // BOOT
 // ============================================================
@@ -1925,6 +2671,78 @@ window.addEventListener('DOMContentLoaded', () => {
       <button onclick="criarConta()" style="padding:9px 18px;border:none;background:#1a1814;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Criar Conta</button>
     </div>
     <div id="cad-err" style="font-size:11px;color:#c0392b;text-align:center;margin-top:10px;min-height:16px"></div>
+  </div>
+</div>
+
+<!-- ── MODAL VENDA MANUAL ── -->
+<div class="modal-overlay" id="modal-venda">
+  <div class="modal modal-lg">
+    <div class="modal-title">Nova Venda</div>
+    <div class="modal-sub">Lançamento manual de venda</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Data da Venda</label>
+        <input class="form-control" type="date" id="venda-data">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Canal de Venda</label>
+        <input class="form-control" type="text" id="venda-canal" placeholder="Ex: Shopee, Loja física, WhatsApp">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">SKU / Produto</label>
+        <input class="form-control" type="text" id="venda-sku" list="venda-sku-list" placeholder="Digite o SKU" oninput="buscarProdutoManual()">
+        <datalist id="venda-sku-list"></datalist>
+        <div style="font-size:11px;color:var(--ink3);margin-top:3px" id="venda-produto-info"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição do Produto</label>
+        <input class="form-control" type="text" id="venda-desc" placeholder="Preenchido automaticamente ou novo">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Cliente (opcional)</label>
+        <input class="form-control" type="text" id="venda-cliente" list="venda-cliente-list" placeholder="Nome do cliente">
+        <datalist id="venda-cliente-list"></datalist>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoria</label>
+        <input class="form-control" type="text" id="venda-categoria" placeholder="Estimada automaticamente pelo SKU">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Quantidade</label>
+        <input class="form-control" type="number" id="venda-qtd" value="1" min="1" oninput="calcularTotalVenda()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Preço Unitário (R$)</label>
+        <input class="form-control" type="number" id="venda-preco" step="0.01" placeholder="0,00" oninput="calcularTotalVenda()">
+      </div>
+    </div>
+    <div style="text-align:right;font-size:14px;color:var(--green);font-weight:600;margin-top:4px" id="venda-total-preview"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-venda')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarVendaManual()">Salvar Venda</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL BOM ── -->
+<div class="modal-overlay" id="modal-bom">
+  <div class="modal modal-lg">
+    <div class="modal-title">Cadastrar Estrutura</div>
+    <div class="modal-sub" id="modal-bom-sku">SKU —</div>
+    <input type="hidden" id="bom-sku-val">
+    <input type="hidden" id="bom-produto-id">
+    <div id="bom-linhas"></div>
+    <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="adicionarLinhaBOM()">+ Adicionar Material</button>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-bom')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarBOM()">Salvar Estrutura</button>
+    </div>
   </div>
 </div>
 </body>
