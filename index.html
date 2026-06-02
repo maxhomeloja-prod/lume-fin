@@ -2247,14 +2247,14 @@ function gerarPDFFaccao(obs, total) {
 
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
-  // Botões da tela de escolha — addEventListener é mais confiável que onclick inline
-  document.getElementById('btn-ir-empresa')?.addEventListener('click', mostrarLoginEmpresa);
-  document.getElementById('btn-ir-faccao')?.addEventListener('click', mostrarLoginFaccao);
-  document.getElementById('btn-criar-conta')?.addEventListener('click', abrirCadastro);
-  document.getElementById('btn-voltar-empresa')?.addEventListener('click', voltarEscolha);
-  document.getElementById('btn-voltar-faccao')?.addEventListener('click', voltarEscolha);
-  document.getElementById('btn-login-empresa')?.addEventListener('click', fazerLogin);
-  document.getElementById('btn-login-faccao')?.addEventListener('click', loginFaccao);
+  // Botões da tela de escolha — arrow functions para resolver depois
+  document.getElementById('btn-ir-empresa')?.addEventListener('click', ()=>mostrarLoginEmpresa());
+  document.getElementById('btn-ir-faccao')?.addEventListener('click', ()=>mostrarLoginFaccao());
+  document.getElementById('btn-criar-conta')?.addEventListener('click', ()=>abrirCadastro());
+  document.getElementById('btn-voltar-empresa')?.addEventListener('click', ()=>voltarEscolha());
+  document.getElementById('btn-voltar-faccao')?.addEventListener('click', ()=>voltarEscolha());
+  document.getElementById('btn-login-empresa')?.addEventListener('click', ()=>fazerLogin());
+  document.getElementById('btn-login-faccao')?.addEventListener('click', ()=>loginFaccao());
   ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
   document.getElementById('fac-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
   document.getElementById('fac-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
