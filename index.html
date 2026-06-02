@@ -739,7 +739,20 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fbal-de"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fbal-ate"></div>
-        <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
+        <div class="filter-group">
+          <span class="filter-label">Empresa / CNPJ</span>
+          <select class="filter-control" id="fbal-empresa" style="min-width:180px">
+            <option value="">Todas as empresas</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;align-self:flex-end">
+          <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">⊞ Visão Semanal</button>
+          <button class="btn btn-primary btn-sm" onclick="loadBalancete()">Aplicar</button>
+        </div>
+      </div>
+      <div id="bal-semanal-wrap" style="display:none" class="card mb16">
+        <div class="card-title">Fluxo Semanal</div>
+        <div class="tbl-wrap" id="bal-semanal-table"></div>
       </div>
       <div id="bal-saldos" class="saldo-cards"></div>
       <div class="kpi-grid">
@@ -762,6 +775,8 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Situação</span><select class="filter-control" id="flan-sit" onchange="loadLancamentos()"><option value="EM_ABERTO">Em Aberto</option><option value="">Todos</option><option value="PAGO_RECEBIDO">Pago</option></select></div>
         <div class="filter-group"><span class="filter-label">Vencimento de</span><input type="date" class="filter-control" id="flan-de" onchange="loadLancamentos()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="flan-ate" onchange="loadLancamentos()"></div>
+        <div class="filter-group"><span class="filter-label">Fornecedor / Cliente</span><input type="text" class="filter-control" id="flan-cf-filter" placeholder="Digite para filtrar" oninput="loadLancamentos()" style="min-width:160px"></div>
+        <div class="filter-group"><span class="filter-label">Categoria</span><select class="filter-control" id="flan-cat" onchange="loadLancamentos()" style="min-width:160px"><option value="">Todas</option></select></div>
       </div>
       <div class="grid-3 mb16">
         <div class="kpi"><div class="kpi-label">A Pagar</div><div class="kpi-value red" id="lan-pagar">—</div></div>
@@ -780,9 +795,14 @@ tr:hover td{background:var(--surface2);}
           <button class="btn btn-danger btn-sm" onclick="abrirModalSaida()">− Saída</button>
         </div>
       </div>
-      <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0">
+      <div style="display:flex;gap:4px;margin-bottom:0;border-bottom:1px solid var(--border);padding-bottom:0">
         <button class="nav-group-btn active" id="tab-cx-ent" onclick="switchCaixa('entradas',this)" style="border-bottom:2px solid var(--accent);border-radius:0;color:var(--accent)">Entradas</button>
         <button class="nav-group-btn" id="tab-cx-sai" onclick="switchCaixa('saidas',this)" style="border-radius:0">Saídas</button>
+      </div>
+      <div class="filters" style="border-radius:0 0 var(--radius) var(--radius);margin-bottom:16px">
+        <div class="filter-group"><span class="filter-label">Tipo</span><select class="filter-control" id="fcx-tipo" onchange="renderCaixaFiltrado()"><option value="">Todos</option><option value="DINHEIRO">Dinheiro</option><option value="CHEQUE">Cheque</option></select></div>
+        <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fcx-de" onchange="renderCaixaFiltrado()"></div>
+        <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fcx-ate" onchange="renderCaixaFiltrado()"></div>
       </div>
       <div id="cx-ent-panel"><div class="card"><div class="tbl-wrap" id="cx-ent-wrap"></div></div></div>
       <div id="cx-sai-panel" style="display:none"><div class="card"><div class="tbl-wrap" id="cx-sai-wrap"></div></div></div>
@@ -1163,6 +1183,7 @@ function preencherSelects(){
   const dep=folhas.filter(c=>c.tipo==='DESPESA').map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
   const all=`<optgroup label="Receitas">${rec}</optgroup><optgroup label="Despesas">${dep}</optgroup>`;
   ['lan-cat','ent-cat','sai-cat'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=all;});
+  const fcl=document.getElementById('flan-cat');if(fcl)fcl.innerHTML='<option value="">Todas</option>'+all;
   document.getElementById('flan-cat')?document.getElementById('flan-cat').innerHTML='<option value="">Todas</option>'+all:'';
 }
 
@@ -1484,11 +1505,133 @@ function renderOPs(){
   }
 }
 
+let _opDetalheAtual = null;
+
 function abrirDetalhesOP(id,e){
   if(e){e.stopPropagation();}
   const op=_ops.find(o=>o.id===id);if(!op)return;
-  // Mostrar modal de entrega
-  abrirEntregaOPDireto(op);
+  _opDetalheAtual=op;
+  const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
+  const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
+  const aberto=op.quantidade-op.quantidade_entregue;
+  const corSit={ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa',CONCLUIDA:'#00d4a0',CANCELADA:'#4a7a9b'};
+
+  document.getElementById('mod-op-num').textContent=op.numero;
+  document.getElementById('mod-op-badge').innerHTML=opBadge(op.situacao);
+  document.getElementById('mod-op-desc').textContent=op.sku+(op.descricao?' — '+op.descricao:'');
+  document.getElementById('mod-op-qtd').textContent=fN(op.quantidade);
+  document.getElementById('mod-op-entregue').textContent=fN(op.quantidade_entregue);
+  document.getElementById('mod-op-aberto').textContent=fN(aberto);
+  document.getElementById('mod-op-pct').textContent=pct+'%';
+  document.getElementById('mod-op-bar').style.width=pct+'%';
+  document.getElementById('mod-op-bar').style.background=corSit[op.situacao]||'var(--green)';
+  document.getElementById('mod-op-faccao').textContent=tercMap[op.terceiro_id]||'—';
+  document.getElementById('mod-op-preco').textContent=op.preco_unitario?fBRL(op.preco_unitario):'—';
+  document.getElementById('mod-op-abertura').textContent=fDate(op.data_abertura);
+  document.getElementById('mod-op-prev-info').textContent=fDate(op.data_previsao);
+  document.getElementById('mod-op-valor-total').textContent=op.preco_unitario?fBRL(op.quantidade*op.preco_unitario):'—';
+  const obsWrap=document.getElementById('mod-op-obs-wrap');
+  if(op.observacao){document.getElementById('mod-op-obs-txt').textContent=op.observacao;obsWrap.style.display='';}
+  else obsWrap.style.display='none';
+
+  // Mostrar/ocultar botão entrega
+  document.getElementById('btn-mod-entrega').style.display=op.situacao==='CONCLUIDA'||op.situacao==='CANCELADA'?'none':'';
+
+  abrirModal('modal-op-detalhe');
+}
+
+function abrirEntregaDaModal(){
+  if(!_opDetalheAtual)return;
+  fecharModal('modal-op-detalhe');
+  setTimeout(()=>abrirEntregaOPDireto(_opDetalheAtual),150);
+}
+
+function editarOPDaModal(){
+  if(!_opDetalheAtual)return;
+  fecharModal('modal-op-detalhe');
+  setTimeout(()=>abrirModalOP(_opDetalheAtual.id),150);
+}
+
+async function alterarSitOP(novaSit){
+  if(!_opDetalheAtual)return;
+  if(!confirm('Alterar situação para '+novaSit+'?'))return;
+  try{
+    await sbPatch('ordens_producao',`id=eq.${_opDetalheAtual.id}`,{
+      situacao:novaSit,
+      data_conclusao:novaSit==='CONCLUIDA'?new Date().toISOString().split('T')[0]:null
+    });
+    _opDetalheAtual.situacao=novaSit;
+    document.getElementById('mod-op-badge').innerHTML=opBadge(novaSit);
+    loadOPs();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+function imprimirOP(){
+  if(!_opDetalheAtual)return;
+  const op=_opDetalheAtual;
+  const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const aberto=op.quantidade-op.quantidade_entregue;
+  const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
+  const win=window.open('','_blank');
+  if(!win){alert('Permita pop-ups para imprimir');return;}
+  win.document.write(`<!DOCTYPE html><html><head><title>OP ${op.numero}</title><style>
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e9be8;padding-bottom:16px;margin-bottom:24px;}
+    .company h1{margin:0;font-size:24px;color:#0d1b2a;} .company p{margin:4px 0 0;color:#666;font-size:13px;}
+    .op-badge{text-align:right;} .op-label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#999;}
+    .op-num{font-size:32px;font-weight:700;color:#1e9be8;} .op-date{font-size:12px;color:#999;margin-top:4px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+    .field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:4px;}
+    .field .val{font-size:14px;font-weight:500;padding:8px 12px;background:#f5f5f5;border-radius:6px;}
+    .field.highlight .val{background:#e8f4ff;color:#0070c0;font-size:16px;font-weight:700;}
+    .progress-wrap{margin-bottom:24px;} .progress-label{display:flex;justify-content:space-between;font-size:12px;color:#666;margin-bottom:6px;}
+    .progress-bg{height:12px;background:#eee;border-radius:6px;overflow:hidden;}
+    .progress-fill{height:100%;background:#1e9be8;border-radius:6px;}
+    .obs{border:1px solid #eee;border-radius:6px;padding:16px;margin-bottom:24px;}
+    .obs label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#999;display:block;margin-bottom:8px;}
+    .obs-lines{min-height:60px;color:#999;font-size:13px;}
+    .sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:32px;}
+    .sign-field{border-top:1px solid #ccc;padding-top:8px;font-size:11px;color:#999;text-align:center;}
+    .footer{margin-top:32px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center;}
+    @media print{.no-print{display:none;}}
+  </style></head><body>
+    <div class="header">
+      <div class="company"><h1>Lume · Gestão</h1><p>Ordem de Produção</p></div>
+      <div class="op-badge">
+        <div class="op-label">Ordem de Produção</div>
+        <div class="op-num">${op.numero}</div>
+        <div class="op-date">Emitida em ${hoje}</div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="field" style="grid-column:span 2"><label>SKU / Produto</label><div class="val" style="font-family:monospace">${op.sku}</div></div>
+      <div class="field" style="grid-column:span 2"><label>Descrição</label><div class="val">${op.descricao||'—'}</div></div>
+      <div class="field highlight"><label>Quantidade a Produzir</label><div class="val">${fN(op.quantidade)} unidades</div></div>
+      <div class="field highlight"><label>Em Aberto</label><div class="val">${fN(aberto)} unidades</div></div>
+      <div class="field"><label>Facção / Responsável</label><div class="val">${tercMap[op.terceiro_id]||'—'}</div></div>
+      <div class="field"><label>Preço Unitário</label><div class="val">${op.preco_unitario?fBRL(op.preco_unitario):'—'}</div></div>
+      <div class="field"><label>Data de Abertura</label><div class="val">${fDate(op.data_abertura)}</div></div>
+      <div class="field"><label>Previsão de Entrega</label><div class="val">${fDate(op.data_previsao)}</div></div>
+      <div class="field"><label>Situação</label><div class="val">${op.situacao.replace('_',' ')}</div></div>
+      <div class="field"><label>Valor Total</label><div class="val">${op.preco_unitario?fBRL(op.quantidade*op.preco_unitario):'—'}</div></div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>Progresso de entrega</span><span>${pct}%</span></div>
+      <div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="obs">
+      <label>Observações</label>
+      <div class="obs-lines">${op.observacao||'&nbsp;'}</div>
+    </div>
+    <div class="sign">
+      <div class="sign-field">Assinatura do Responsável</div>
+      <div class="sign-field">Conferência / Supervisão</div>
+    </div>
+    <div class="footer">Lume · ${op.numero} · Emitida em ${hoje}</div>
+    <br><button class="no-print" onclick="window.print()" style="padding:10px 20px;background:#1e9be8;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 Imprimir / Salvar PDF</button>
+  </body></html>`);
+  win.document.close();
 }
 
 function abrirModalOP(id,e){
@@ -2010,12 +2153,30 @@ async function confirmarTodas(){
   for(const id of visiveis)await confirmarUma(id);
 }
 
+let _balSemanalAberto=false;
+function toggleBalSemanal(){
+  _balSemanalAberto=!_balSemanalAberto;
+  const wrap=document.getElementById('bal-semanal-wrap');
+  const btn=document.getElementById('btn-bal-semanal');
+  wrap.style.display=_balSemanalAberto?'':'none';
+  btn.style.borderColor=_balSemanalAberto?'var(--accent)':'';
+  btn.style.color=_balSemanalAberto?'var(--accent)':'';
+  if(_balSemanalAberto)renderBalSemanal();
+}
+
 async function loadBalancete(){
   if(!EMPRESA_ID){semEmpresaMsg('bal-corpo');return;}
-  const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
+  const de=document.getElementById('fbal-de')?.value;
+  const ate=document.getElementById('fbal-ate')?.value;
+  // Preencher filtro de empresa
+  const selEmp=document.getElementById('fbal-empresa');
+  if(selEmp&&selEmp.options.length<=1){
+    selEmp.innerHTML='<option value="">Todas as empresas</option>'+EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}${e.cnpj?' · '+e.cnpj:''}</option>`).join('');
+  }
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    let qT=`?empresa_id=eq.${EMPRESA_ID}&status=eq.CONFIRMADA`;
+    const empFiltro=document.getElementById('fbal-empresa')?.value||EMPRESA_ID;
+    let qT=`?empresa_id=eq.${empFiltro}&status=eq.CONFIRMADA`;
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
@@ -2057,17 +2218,124 @@ function renderBalancete(){
   const desp=Object.values(agrupado).filter(g=>g.tipo==='DESPESA'&&!g.especial).sort((a,b)=>a.total-b.total);
   const rec=Object.values(agrupado).filter(g=>g.tipo==='RECEITA'&&!g.especial).sort((a,b)=>b.total-a.total);
   const esp=Object.values(agrupado).filter(g=>g.especial);
-  function secao(titulo,itens,cls){if(!itens.length)return'';const sub=itens.reduce((s,i)=>s+Math.abs(i.total),0);return`<div class="bal-section"><div class="bal-section-title">${titulo}</div><div class="bal-table">${itens.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val ${cls}">${fBRL(i.total)}</span></div>`).join('')}<div class="bal-row bal-subtotal"><span class="bal-row-name">Total ${titulo}</span><span class="bal-row-val ${cls}">${fBRL(sub)}</span></div></div></div>`;}
+  function secao(titulo,itens,cls){
+    if(!itens.length)return'';
+    const sub=itens.reduce((s,i)=>s+Math.abs(i.total),0);
+    return`<div class="bal-section">
+      <div class="bal-section-title">${titulo}</div>
+      <div class="bal-table">
+        ${itens.map(i=>{
+          // Buscar transações individuais desta categoria/agrupamento
+          const transIndiv=_balTransacoes.filter(t=>{
+            const cat=CATEGORIAS.find(c=>c.id===t.categoria_id);
+            const nomeT=cat?.categoria_pai_id?CATEGORIAS.find(c=>c.id===cat.categoria_pai_id)?.nome||cat.nome:cat?.nome||'(Sem categoria)';
+            return nomeT===i.nome&&!CATS_ESPECIAIS.has(t.categoria_id);
+          });
+          const idExpandir='bal-exp-'+i.nome.replace(/\s/g,'_').replace(/[^\w]/g,'');
+          return`<div>
+            <div class="bal-row" style="cursor:pointer" onclick="toggleBalLinha('${idExpandir}',this)">
+              <span class="bal-row-name">
+                <span style="color:var(--text3);margin-right:6px;font-size:10px" id="ico-${idExpandir}">▶</span>
+                ${i.nome}
+              </span>
+              <span class="bal-row-val ${cls}">${fBRL(i.total)}</span>
+            </div>
+            <div id="${idExpandir}" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border)">
+              <table style="width:100%">
+                <thead><tr>
+                  <th style="padding:6px 12px 6px 28px">Data</th>
+                  <th>Descrição</th>
+                  <th style="text-align:right">Valor</th>
+                </tr></thead>
+                <tbody>
+                  ${transIndiv.sort((a,b)=>a.data.localeCompare(b.data)).map(t=>`
+                    <tr>
+                      <td style="padding:6px 12px 6px 28px;color:var(--text3)">${fDate(t.data)}</td>
+                      <td style="color:var(--text2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.descricao}</td>
+                      <td style="text-align:right;color:${t.valor>=0?'var(--green)':'var(--red)'}">${fBRL(t.valor)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+        }).join('')}
+        <div class="bal-row bal-subtotal">
+          <span class="bal-row-name">Total ${titulo}</span>
+          <span class="bal-row-val ${cls}">${fBRL(sub)}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+  
+  function toggleBalLinha(id,row){
+    const el=document.getElementById(id);
+    const ico=document.getElementById('ico-'+id);
+    if(!el)return;
+    const open=el.style.display==='block';
+    el.style.display=open?'none':'block';
+    if(ico)ico.textContent=open?'▶':'▼';
+  }
   document.getElementById('bal-corpo').innerHTML=secao('Receitas',rec,'recei')+secao('Despesas',desp,'desp')+(esp.length?`<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transferências e Outros</div><div class="bal-table">${esp.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val" style="color:var(--text2)">${fBRL(i.total)}</span></div>`).join('')}</div></div>`:'');
+  if(_balSemanalAberto)renderBalSemanal();
+}
+
+// Visão semanal
+function renderBalSemanal(){
+  if(!_balTransacoes.length){document.getElementById('bal-semanal-table').innerHTML='<div class="empty">Sem dados</div>';return;}
+  // Agrupar por semana ISO
+  const semanas={};
+  _balTransacoes.filter(t=>!CATS_ESPECIAIS.has(t.categoria_id)).forEach(t=>{
+    const d=new Date(t.data+'T12:00:00');
+    const dow=d.getDay();const diff=d.getDate()-(dow===0?6:dow-1);
+    const seg=new Date(d);seg.setDate(diff);
+    const key=seg.toISOString().split('T')[0];
+    if(!semanas[key])semanas[key]={de:key,rec:0,desp:0,trans:[]};
+    const cat=CATEGORIAS.find(c=>c.id===t.categoria_id);
+    const tipo=cat?.tipo||(t.valor>=0?'RECEITA':'DESPESA');
+    if(tipo==='RECEITA')semanas[key].rec+=t.valor;
+    else semanas[key].desp+=Math.abs(t.valor);
+    semanas[key].trans.push(t);
+  });
+  const sorted=Object.values(semanas).sort((a,b)=>a.de.localeCompare(b.de));
+  const rows=sorted.map(s=>{
+    const saldo=s.rec-s.desp;
+    const ate=new Date(s.de+'T12:00:00');ate.setDate(ate.getDate()+6);
+    const label=fDate(s.de)+' a '+fDate(ate.toISOString().split('T')[0]);
+    return `<tr>
+      <td>${label}</td>
+      <td style="text-align:right;color:var(--green)">${fBRL(s.rec)}</td>
+      <td style="text-align:right;color:var(--red)">${fBRL(s.desp)}</td>
+      <td style="text-align:right;color:${saldo>=0?'var(--green)':'var(--red)'};font-weight:600">${fBRL(saldo)}</td>
+      <td style="text-align:right;color:var(--text3)">${fN(s.trans.length)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('bal-semanal-table').innerHTML=`<table>
+    <thead><tr><th>Semana</th><th style="text-align:right">Receitas</th><th style="text-align:right">Despesas</th><th style="text-align:right">Saldo</th><th style="text-align:right">Transações</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr style="border-top:2px solid var(--border)">
+      <td style="font-weight:600">Total</td>
+      <td style="text-align:right;color:var(--green);font-weight:600">${fBRL(sorted.reduce((s,x)=>s+x.rec,0))}</td>
+      <td style="text-align:right;color:var(--red);font-weight:600">${fBRL(sorted.reduce((s,x)=>s+x.desp,0))}</td>
+      <td style="text-align:right;font-weight:600">${fBRL(sorted.reduce((s,x)=>s+x.rec-x.desp,0))}</td>
+      <td style="text-align:right;color:var(--text3)">${fN(sorted.reduce((s,x)=>s+x.trans.length,0))}</td>
+    </tr></tfoot>
+  </table>`;
 }
 
 async function loadLancamentos(){
   if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
   const tipo=document.getElementById('flan-tipo')?.value;const sit=document.getElementById('flan-sit')?.value;
   const de=document.getElementById('flan-de')?.value;const ate=document.getElementById('flan-ate')?.value;
+  const cf=document.getElementById('flan-cf-filter')?.value.trim();
+  const cat=document.getElementById('flan-cat')?.value;
   let q=`?empresa_id=eq.${EMPRESA_ID}&order=data_vencimento.asc`;
-  if(tipo)q+=`&tipo_lancamento=eq.${tipo}`;if(sit)q+=`&situacao=eq.${sit}`;
-  if(de)q+=`&data_vencimento=gte.${de}`;if(ate)q+=`&data_vencimento=lte.${ate}`;
+  if(tipo)q+=`&tipo_lancamento=eq.${tipo}`;
+  if(sit)q+=`&situacao=eq.${sit}`;
+  if(de)q+=`&data_vencimento=gte.${de}`;
+  if(ate)q+=`&data_vencimento=lte.${ate}`;
+  if(cat)q+=`&categoria_id=eq.${cat}`;
+  // filtro fornecedor/cliente via OR no PostgREST
+  if(cf)q+=`&or=(fornecedor.ilike.*${encodeURIComponent(cf)}*,cliente.ilike.*${encodeURIComponent(cf)}*,descricao.ilike.*${encodeURIComponent(cf)}*)`;
   document.getElementById('lan-wrap').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     _lancamentos=await sbGet('lancamentos_externos',q+'&limit=500');
@@ -2123,13 +2391,41 @@ function switchCaixa(tab,el){
   document.getElementById('cx-ent-panel').style.display=tab==='entradas'?'':'none';
   document.getElementById('cx-sai-panel').style.display=tab==='saidas'?'':'none';
 }
-function renderCaixaEnt(){
-  if(!_caixaEntradas.length){document.getElementById('cx-ent-wrap').innerHTML='<div class="empty"><div class="empty-icon">💵</div><div class="empty-title">Nenhuma entrada</div></div>';return;}
-  document.getElementById('cx-ent-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Disponível</th><th></th></tr></thead><tbody>'+_caixaEntradas.map(e=>`<tr class="caixa-entrada"><td>${fDate(e.criado_em?.split('T')[0])}</td><td>${e.cliente||'—'}</td><td><span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></td><td style="color:var(--text3)">${getNomeCat(e.categoria_id)}</td><td style="text-align:right">${fBRL(e.valor_original)}</td><td style="text-align:right;color:var(--green)">${fBRL(e.valor_disponivel)}</td><td><button class="btn btn-danger btn-sm" onclick="excluirEntrada('${e.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
+function renderCaixaFiltrado(){
+  const tipo=document.getElementById('fcx-tipo')?.value;
+  const de=document.getElementById('fcx-de')?.value;
+  const ate=document.getElementById('fcx-ate')?.value;
+  const tabAtiva=document.getElementById('cx-ent-panel')?.style.display!=='none';
+  if(tabAtiva){
+    const dados=_caixaEntradas.filter(e=>{
+      if(tipo&&e.tipo!==tipo)return false;
+      const data=e.criado_em?.split('T')[0];
+      if(de&&data<de)return false;
+      if(ate&&data>ate)return false;
+      return true;
+    });
+    renderCaixaEntDados(dados);
+  }else{
+    const dados=_caixaSaidas.filter(s=>{
+      const data=s.data||s.criado_em?.split('T')[0];
+      if(de&&data<de)return false;
+      if(ate&&data>ate)return false;
+      return true;
+    });
+    renderCaixaSaiDados(dados);
+  }
 }
-function renderCaixaSai(){
-  if(!_caixaSaidas.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
-  document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_caixaSaidas.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
+
+function renderCaixaEnt(){renderCaixaEntDados(_caixaEntradas);}
+function renderCaixaSai(){renderCaixaSaiDados(_caixaSaidas);}
+
+function renderCaixaEntDados(dados){
+  if(!dados.length){document.getElementById('cx-ent-wrap').innerHTML='<div class="empty"><div class="empty-icon">💵</div><div class="empty-title">Nenhuma entrada</div></div>';return;}
+  document.getElementById('cx-ent-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Disponível</th><th></th></tr></thead><tbody>'+dados.map(e=>`<tr class="caixa-entrada"><td>${fDate(e.criado_em?.split('T')[0])}</td><td>${e.cliente||'—'}</td><td><span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></td><td style="color:var(--text3)">${getNomeCat(e.categoria_id)}</td><td style="text-align:right">${fBRL(e.valor_original)}</td><td style="text-align:right;color:var(--green)">${fBRL(e.valor_disponivel)}</td><td><button class="btn btn-danger btn-sm" onclick="excluirEntrada('${e.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
+}
+function renderCaixaSaiDados(dados){
+  if(!dados.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
+  document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+dados.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
 }
 function abrirModalEntrada(){toggleEntFields();abrirModal('modal-entrada');}
 function toggleEntFields(){const t=document.getElementById('ent-tipo')?.value;const f=document.getElementById('ent-cheque-fields');if(f)f.style.display=t==='CHEQUE'?'':'none';}
@@ -2259,7 +2555,93 @@ function gerarPDFFaccao(obs, total) {
     <tbody>${itensHTML}</tbody></table>
     <div class="total">Total: ${fBRL(total)}</div>
     <br><button class="no-print" onclick="window.print()" style="padding:10px 20px;background:#1e9be8;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Imprimir / Salvar PDF</button>
-  </body></html>`);
+  
+<!-- ── MODAL DETALHE OP ── -->
+<div class="modal-overlay" id="modal-op-detalhe">
+  <div class="modal modal-lg">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+      <div>
+        <div class="modal-title" id="mod-op-num">OP-0000</div>
+        <div id="mod-op-badge" style="margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="imprimirOP()">🖨 Imprimir</button>
+        <button class="btn btn-primary btn-sm" id="btn-mod-entrega" onclick="abrirEntregaDaModal()">📦 Registrar Entrega</button>
+        <button class="btn btn-ghost btn-sm" onclick="editarOPDaModal()">✎ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="fecharModal('modal-op-detalhe')">✕</button>
+      </div>
+    </div>
+    <div class="modal-sub" id="mod-op-desc">—</div>
+
+    <!-- Info principal -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Quantidade</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600" id="mod-op-qtd">—</div>
+        <div style="font-size:11px;color:var(--text3)">peças total</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Entregue</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--green)" id="mod-op-entregue">—</div>
+        <div style="font-size:11px;color:var(--text3)">peças</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Em Aberto</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--amber)" id="mod-op-aberto">—</div>
+        <div style="font-size:11px;color:var(--text3)">peças</div>
+      </div>
+    </div>
+
+    <!-- Barra de progresso -->
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px">
+        <span>Progresso</span><span id="mod-op-pct">0%</span>
+      </div>
+      <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div id="mod-op-bar" style="height:100%;border-radius:4px;transition:width .5s;background:var(--green)"></div>
+      </div>
+    </div>
+
+    <!-- Detalhes -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Facção</div>
+        <div style="font-size:13px;color:var(--text2)" id="mod-op-faccao">—</div>
+      </div>
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Preço Unitário</div>
+        <div style="font-size:13px;color:var(--accent)" id="mod-op-preco">—</div>
+      </div>
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Abertura</div>
+        <div style="font-size:13px;color:var(--text2)" id="mod-op-abertura">—</div>
+      </div>
+      <div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Previsão</div>
+        <div style="font-size:13px;color:var(--text2)" id="mod-op-prev-info">—</div>
+      </div>
+      <div style="grid-column:span 2">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Valor Total</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:600;color:var(--green)" id="mod-op-valor-total">—</div>
+      </div>
+      <div style="grid-column:span 2" id="mod-op-obs-wrap" style="display:none">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:3px">Observação</div>
+        <div style="font-size:12px;color:var(--text2)" id="mod-op-obs-txt">—</div>
+      </div>
+    </div>
+
+    <!-- Situação rápida -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text3);align-self:center">Alterar situação:</span>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('ABERTA')">Aberta</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
+      <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
+      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar</button>
+    </div>
+  </div>
+</div>
+</body></html>`);
   win.document.close();
 }
 
