@@ -832,6 +832,7 @@ async function criarConta() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error_description || data.msg || 'Erro ao criar conta');
     fecharModal('modal-cadastro');
+    document.getElementById('login-screen').classList.remove('hidden');
     // Auto-login
     document.getElementById('login-email').value = email;
     document.getElementById('login-senha').value = senha;
@@ -1008,7 +1009,14 @@ const fDate = s => s ? s.split('-').reverse().join('/') : '—';
 const fDateISO = s => s || '';
 
 function abrirModal(id) { const el = document.getElementById(id); console.log('abrirModal:', id, 'el:', el); if(el) el.classList.add('open'); }
-function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+function fecharModal(id) {
+  const el = document.getElementById(id);
+  if(el) { el.style.cssText = ''; el.classList.remove('open'); }
+  // Restaurar login-screen se estava escondido
+  if(id === 'modal-cadastro') {
+    document.getElementById('login-screen').classList.remove('hidden');
+  }
+}
 
 function getNomeCat(id) {
   if (!id) return '—';
