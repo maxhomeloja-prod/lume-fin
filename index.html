@@ -843,11 +843,34 @@ async function criarConta() {
 
 function abrirCadastro() {
   const el = document.getElementById('modal-cadastro');
-  el.style.visibility = 'visible';
-  el.style.opacity = '1';
-  el.style.pointerEvents = 'all';
-  el.classList.add('open');
-  console.log('modal-cadastro classes:', el.className, 'computed visibility:', window.getComputedStyle(el).visibility);
+  // Forçar TODOS os estilos inline — ignora qualquer CSS
+  el.style.cssText = `
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0,0,0,0.5) !important;
+    z-index: 99999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  `;
+  const inner = el.querySelector('.modal');
+  if(inner) inner.style.cssText = `
+    background: white !important;
+    padding: 32px !important;
+    border-radius: 12px !important;
+    width: 380px !important;
+    max-width: 90vw !important;
+    z-index: 100000 !important;
+    position: relative !important;
+  `;
+  console.log('modal forçado', el.getBoundingClientRect());
 }
 
 function logout() {
