@@ -2245,6 +2245,190 @@ function gerarPDFFaccao(obs, total) {
   win.document.close();
 }
 
+// ============================================================
+// FACÇÃO — Login e operação
+// ============================================================
+let FACCAO_LOGADO=null,_facCarrinho=[],_facOPs=[];
+
+function mostrarLoginEmpresa(){
+  document.getElementById('login-escolha').style.display='none';
+  document.getElementById('login-empresa').style.display='';
+}
+function mostrarLoginFaccao(){
+  document.getElementById('login-escolha').style.display='none';
+  document.getElementById('login-faccao').style.display='';
+}
+function voltarEscolha(){
+  document.getElementById('login-empresa').style.display='none';
+  document.getElementById('login-faccao').style.display='none';
+  document.getElementById('login-escolha').style.display='';
+}
+async function loginFaccao(){
+  const emailOuNome=document.getElementById('fac-email').value.trim();
+  const senha=document.getElementById('fac-senha').value;
+  const err=document.getElementById('fac-err');
+  err.textContent='';
+  if(!emailOuNome||!senha){err.textContent='Preencha e-mail/nome e senha';return;}
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/terceiros?or=(email.eq.${encodeURIComponent(emailOuNome)},nome.ilike.${encodeURIComponent(emailOuNome)})&ativo=eq.true&select=*`,
+      {headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});
+    const lista=await r.json();
+    if(!Array.isArray(lista)||!lista.length){err.textContent='Usuário não encontrado';return;}
+    const terceiro=lista.find(t=>t.senha_hash===btoa(senha));
+    if(!terceiro){err.textContent='Senha incorreta';return;}
+    FACCAO_LOGADO=terceiro;
+    localStorage.setItem('lume_faccao',JSON.stringify(terceiro));
+    iniciarFaccaoView();
+  }catch(e){err.textContent='Erro: '+e.message;}
+}
+function logoutFaccao(){
+  FACCAO_LOGADO=null;localStorage.removeItem('lume_faccao');
+  _facCarrinho=[];
+  document.getElementById('faccao-view').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  voltarEscolha();
+}
+async function iniciarFaccaoView(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='none';
+  document.getElementById('faccao-view').style.display='flex';
+  document.getElementById('fac-nome-display').textContent=FACCAO_LOGADO.nome;
+  _facCarrinho=[];renderFacCarrinho();
+  await carregarOPsFaccao();
+}
+async function carregarOPsFaccao(){
+  document.getElementById('fac-ops').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/ordens_producao?terceiro_id=eq.${FACCAO_LOGADO.id}&situacao=neq.CANCELADA&order=criado_em.desc&limit=100`,
+      {headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});
+    _facOPs=await r.json();
+    if(!Array.isArray(_facOPs))_facOPs=[];
+    renderOPsFaccao();
+  }catch(e){document.getElementById('fac-ops').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
+}
+function renderOPsFaccao(){
+  const el=document.getElementById('fac-ops');
+  const abertas=_facOPs.filter(o=>o.situacao!=='CONCLUIDA'&&o.situacao!=='CANCELADA');
+  if(!_facOPs.length){el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhuma OP vinculada</div><div class="empty-sub">Use "Entrega sem OP" para entregas avulsas</div></div>';return;}
+  const cor={ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa',CONCLUIDA:'#00d4a0',CANCELADA:'#4a7a9b'};
+  el.innerHTML='<div class="op-cards">'+abertas.map(op=>{
+    const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
+    const c=cor[op.situacao]||'#4a7a9b';
+    return`<div class="op-card">
+      <div class="op-card-accent" style="background:${c}"></div>
+      <div class="op-card-num">${op.numero} · ${opBadge(op.situacao)}</div>
+      <div class="op-card-sku">${op.sku}</div>
+      <div class="op-card-desc">${op.descricao||'—'}</div>
+      <div class="op-card-progress"><div class="op-card-progress-fill" style="width:${pct}%;background:${c}"></div></div>
+      <div class="op-card-footer">
+        <span class="op-card-qty">${fN(op.quantidade_entregue)}/${fN(op.quantidade)} · ${pct}%</span>
+        <span style="font-size:11px;color:var(--accent)">Restante: ${fN(op.quantidade-op.quantidade_entregue)}</span>
+      </div>
+      <button class="btn btn-primary btn-sm" style="width:100%;margin-top:10px" onclick="faccaoSelecionarOP('${op.id}')">+ Adicionar ao carrinho</button>
+    </div>`;
+  }).join('')+'</div>';
+}
+function faccaoBuscar(){
+  const q=document.getElementById('fac-busca').value.trim().toUpperCase();
+  if(!q){document.getElementById('fac-resultados').innerHTML='';return;}
+  const ops=_facOPs.filter(o=>o.sku.toUpperCase().includes(q)||o.numero.toUpperCase().includes(q));
+  if(!ops.length){
+    document.getElementById('fac-resultados').innerHTML=`<div style="padding:12px;color:var(--text2);font-size:12px">Nenhuma OP para "<strong>${q}</strong>". <button class="btn btn-secondary btn-sm" style="margin-left:8px" onclick="faccaoSemOPSku('${q}')">Entregar sem OP</button></div>`;
+    return;
+  }
+  document.getElementById('fac-resultados').innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+ops.map(op=>`
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div><div style="font-weight:600">${op.numero} · ${op.sku}</div><div style="font-size:11px;color:var(--text2)">Restante: ${fN(op.quantidade-op.quantidade_entregue)} peças</div></div>
+      <button class="btn btn-primary btn-sm" onclick="faccaoSelecionarOP('${op.id}')">+ Carrinho</button>
+    </div>`).join('')+'</div>';
+}
+function faccaoSelecionarOP(id){
+  const op=_facOPs.find(o=>o.id===id);if(!op)return;
+  const restante=op.quantidade-op.quantidade_entregue;
+  if(restante<=0){alert('OP já concluída');return;}
+  const qtd=parseInt(prompt(`OP ${op.numero} — ${op.sku}\nRestante: ${restante} peças\n\nQuantidade a entregar:`)||'0');
+  if(!qtd||qtd<=0)return;
+  if(qtd>restante){alert(`Máximo: ${restante} peças`);return;}
+  adicionarFacCarrinho({opId:op.id,opNumero:op.numero,sku:op.sku,descricao:op.descricao||op.sku,qtd,preco:op.preco_unitario||0,semOP:false});
+}
+function faccaoSemOP(){
+  const sku=prompt('SKU do produto:');
+  if(!sku?.trim())return;
+  faccaoSemOPSku(sku.trim().toUpperCase());
+}
+function faccaoSemOPSku(sku){
+  const qtd=parseInt(prompt(`Entrega sem OP — ${sku}\nQuantidade:`)||'0');
+  if(!qtd||qtd<=0)return;
+  const precoStr=prompt(`Preço unitário (R$) — ${sku}:\n(Enter para pular)`);
+  const preco=precoStr?parseFloat(precoStr.replace(',','.'))||0:0;
+  adicionarFacCarrinho({opId:null,opNumero:'S/OP',sku,descricao:'Entrega sem OP — '+sku,qtd,preco,semOP:true});
+}
+function adicionarFacCarrinho(item){
+  const ex=_facCarrinho.find(i=>i.opId===item.opId&&i.sku===item.sku);
+  if(ex)ex.qtd+=item.qtd;else _facCarrinho.push(item);
+  renderFacCarrinho();
+  document.getElementById('fac-busca').value='';
+  document.getElementById('fac-resultados').innerHTML='';
+}
+function renderFacCarrinho(){
+  const card=document.getElementById('fac-carrinho-card');
+  if(!_facCarrinho.length){card.style.display='none';return;}
+  card.style.display='';
+  const total=_facCarrinho.reduce((s,i)=>s+i.qtd*i.preco,0);
+  document.getElementById('fac-total').textContent=fBRL(total);
+  document.getElementById('fac-carrinho').innerHTML=_facCarrinho.map((item,idx)=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid var(--border);font-size:12px">
+      <div style="flex:1"><div style="font-weight:600">${item.sku}</div><div style="color:var(--text2)">${item.opNumero} · ${item.descricao}</div></div>
+      <div style="text-align:right"><div>${fN(item.qtd)} peças</div><div style="color:var(--green)">${item.preco?fBRL(item.qtd*item.preco):'—'}</div></div>
+      <button class="btn btn-danger btn-sm" onclick="_facCarrinho.splice(${idx},1);renderFacCarrinho()">✕</button>
+    </div>`).join('');
+}
+function abrirConfirmacaoFaccao(){
+  if(!_facCarrinho.length)return;
+  const total=_facCarrinho.reduce((s,i)=>s+i.qtd*i.preco,0);
+  document.getElementById('fac-conf-total').textContent=fBRL(total);
+  document.getElementById('fac-conf-obs').value='';
+  document.getElementById('fac-conf-itens').innerHTML=_facCarrinho.map(i=>`
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <div><strong>${i.sku}</strong> · ${i.opNumero}<div style="color:var(--text3)">${fN(i.qtd)} × ${i.preco?fBRL(i.preco):'—'}</div></div>
+      <div style="color:var(--green);font-weight:600">${i.preco?fBRL(i.qtd*i.preco):'—'}</div>
+    </div>`).join('');
+  abrirModal('modal-fac-confirmar');
+}
+async function confirmarEntregaFaccao(){
+  const btn=document.getElementById('btn-conf-fac');
+  btn.disabled=true;btn.textContent='Salvando...';
+  const obs=document.getElementById('fac-conf-obs').value.trim();
+  const dataHoje=new Date().toISOString().split('T')[0];
+  const total=_facCarrinho.reduce((s,i)=>s+i.qtd*i.preco,0);
+  try{
+    let catFaccaoId=null;
+    try{const r=await fetch(`${SB_URL}/rest/v1/categorias?nome=ilike.*fac*&select=id&limit=1`,{headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});const c=await r.json();catFaccaoId=c[0]?.id||null;}catch(e){}
+    let lanId=null;
+    if(total>0){
+      const r=await fetch(`${SB_URL}/rest/v1/lancamentos_externos`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,data:dataHoje,data_vencimento:dataHoje,descricao:`Facção — ${FACCAO_LOGADO.nome} (${new Date().toLocaleDateString('pt-BR')})`,valor:parseFloat(total.toFixed(2)),tipo_lancamento:'PAGAR',meio_pagamento:'PIX',situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome,categoria_id:catFaccaoId,observacao:obs||null})});
+      const lan=await r.json();lanId=lan[0]?.id||null;
+    }
+    for(const item of _facCarrinho){
+      await fetch(`${SB_URL}/rest/v1/entregas_op`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,op_id:item.opId||null,terceiro_id:FACCAO_LOGADO.id,quantidade:item.qtd,valor_total:parseFloat((item.qtd*item.preco).toFixed(2)),observacao:obs||null,lancamento_id:lanId})});
+      if(item.opId&&!item.semOP){
+        const op=_facOPs.find(o=>o.id===item.opId);
+        if(op){
+          const nq=op.quantidade_entregue+item.qtd;
+          const ns=nq>=op.quantidade?'CONCLUIDA':nq>0?'PARCIAL':'ABERTA';
+          await fetch(`${SB_URL}/rest/v1/ordens_producao?id=eq.${item.opId}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({quantidade_entregue:nq,situacao:ns,data_conclusao:ns==='CONCLUIDA'?dataHoje:null})});
+          op.quantidade_entregue=nq;op.situacao=ns;
+        }
+      }
+    }
+    const carrinhoParaPDF=[..._facCarrinho];
+    fecharModal('modal-fac-confirmar');
+    _facCarrinho=[];renderFacCarrinho();renderOPsFaccao();
+    gerarPDFFaccao(obs,total,carrinhoParaPDF);
+  }catch(e){alert('Erro: '+e.message);}
+  finally{btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';}
+}
+
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   // Botões da tela de escolha — arrow functions para resolver depois
