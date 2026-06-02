@@ -896,10 +896,15 @@ let _lancamentoEditId = null;
 // SUPABASE HELPERS
 // ============================================================
 async function sbGet(tabela, query = '') {
+  const token = SESSION?.access_token || SB_ANON;
   const r = await fetch(`${SB_URL}/rest/v1/${tabela}${query}`, {
-    headers: { apikey: SB_ANON, Authorization: `Bearer ${SESSION?.access_token || SB_ANON}` }
+    headers: { apikey: SB_ANON, Authorization: `Bearer ${token}` }
   });
-  if (!r.ok) throw new Error(`GET ${tabela}: ${r.status}`);
+  if (!r.ok) {
+    const errBody = await r.text();
+    console.error(`sbGet ${tabela} ${r.status}:`, errBody);
+    throw new Error(`${tabela}: ${r.status} — ${errBody.slice(0,100)}`);
+  }
   return r.json();
 }
 
@@ -1176,8 +1181,9 @@ async function loadCategorizacao() {
     return;
   }
   try {
-    _transacoesPendentes = await sbGet('transacoes',
+    const result = await sbGet('transacoes',
       `?empresa_id=eq.${EMPRESA_ID}&status=eq.PENDENTE&order=data.desc&limit=200`);
+    _transacoesPendentes = Array.isArray(result) ? result : [];
     renderCategorizacao();
     // Badge
     const badge = document.getElementById('badge-pendentes');
@@ -1188,7 +1194,8 @@ async function loadCategorizacao() {
       badge.style.display = 'none';
     }
   } catch(e) {
-    document.getElementById('cat-table-wrap').innerHTML = `<div class="empty">Erro: ${e.message}</div>`;
+    console.error('loadCategorizacao erro:', e);
+    document.getElementById('cat-table-wrap').innerHTML = `<div class="empty">Erro ao carregar: ${e.message}<br><small style="color:var(--ink3)">Verifique se sua sessão está ativa e se as contas bancárias estão configuradas.</small></div>`;
   }
 }
 
@@ -2132,13 +2139,20 @@ async function loadVendas() {
     _vendas = await sbGet('vendas', q);
     renderVendas();
   } catch(e) {
-    document.getElementById('ven-table-wrap').innerHTML = `<div class="empty">Erro: ${e.message}</div>`;
+    console.error('loadVendas erro:', e);
+    // Se for erro de autenticação, tentar com array vazio
+    if(e.message.includes('401') || e.message.includes('403')) {
+      _vendas = [];
+      renderVendas();
+    } else {
+      document.getElementById('ven-table-wrap').innerHTML = `<div class="empty">Erro: ${e.message}</div>`;
+    }
   }
 }
 
 function renderVendas() {
-  const rec = _vendas.reduce((s,v) => s + v.valor_total, 0);
-  const uni = _vendas.reduce((s,v) => s + v.quantidade, 0);
+  const rec = _vendas.reduce((s,v) => s + (v.valor_total ?? v.preco_unitario * v.quantidade ?? 0), 0);
+  const uni = _vendas.reduce((s,v) => s + (v.quantidade || 0), 0);
   document.getElementById('ven-kpi-receita').textContent  = fBRL(rec);
   document.getElementById('ven-kpi-pedidos').textContent  = fN(_vendas.length);
   document.getElementById('ven-kpi-unidades').textContent = fN(uni);
