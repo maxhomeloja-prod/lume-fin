@@ -1313,9 +1313,23 @@ async function salvarTerceiro(){
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
   if(!nome)return alert('Informe o nome');
-  const body={empresa_id:EMPRESA_ID,nome,email:email||null,ativo:true};
-  if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
+  if(!id&&!email)return alert('Informe o e-mail para o terceiro poder fazer login');
+  if(!id&&!senha)return alert('Informe a senha para o terceiro poder fazer login');
   try{
+    let authUserId=null;
+    if(!id&&email&&senha){
+      // Criar conta Auth via Worker
+      const r=await fetch(`${WORKER}/criar-terceiro`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email,password:senha,nome})
+      });
+      const d=await r.json();
+      if(d.error)throw new Error(d.error);
+      authUserId=d.id;
+    }
+    const body={empresa_id:EMPRESA_ID,nome,email:email||null,ativo:true};
+    if(authUserId)body.auth_user_id=authUserId;
     if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
     else await sbPost('terceiros',body);
     fecharModal('modal-terceiro');
@@ -2264,22 +2278,33 @@ function voltarEscolha(){
   document.getElementById('login-escolha').style.display='';
 }
 async function loginFaccao(){
-  const emailOuNome=document.getElementById('fac-email').value.trim();
+  const email=document.getElementById('fac-email').value.trim();
   const senha=document.getElementById('fac-senha').value;
   const err=document.getElementById('fac-err');
   err.textContent='';
-  if(!emailOuNome||!senha){err.textContent='Preencha e-mail/nome e senha';return;}
+  if(!email||!senha){err.textContent='Preencha e-mail e senha';return;}
   try{
-    const r=await fetch(`${SB_URL}/rest/v1/terceiros?or=(email.eq.${encodeURIComponent(emailOuNome)},nome.ilike.${encodeURIComponent(emailOuNome)})&ativo=eq.true&select=*`,
-      {headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});
-    const lista=await r.json();
-    if(!Array.isArray(lista)||!lista.length){err.textContent='Usuário não encontrado';return;}
-    const terceiro=lista.find(t=>t.senha_hash===btoa(senha));
-    if(!terceiro){err.textContent='Senha incorreta';return;}
-    FACCAO_LOGADO=terceiro;
-    localStorage.setItem('lume_faccao',JSON.stringify(terceiro));
+    // Login via Supabase Auth
+    const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=password`,{
+      method:'POST',
+      headers:{apikey:SB_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:senha})
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
+
+    // Buscar dados do terceiro pelo auth_user_id
+    const rT=await fetch(`${SB_URL}/rest/v1/terceiros?auth_user_id=eq.${d.user.id}&ativo=eq.true&select=*`,{
+      headers:{apikey:SB_ANON,Authorization:`Bearer ${d.access_token}`}
+    });
+    const lista=await rT.json();
+    if(!Array.isArray(lista)||!lista.length){
+      err.textContent='Usuário não autorizado como facção';return;
+    }
+    FACCAO_LOGADO={...lista[0],_session:d};
+    localStorage.setItem('lume_faccao',JSON.stringify(FACCAO_LOGADO));
     iniciarFaccaoView();
-  }catch(e){err.textContent='Erro: '+e.message;}
+  }catch(e){err.textContent=e.message;}
 }
 function logoutFaccao(){
   FACCAO_LOGADO=null;localStorage.removeItem('lume_faccao');
@@ -2299,8 +2324,9 @@ async function iniciarFaccaoView(){
 async function carregarOPsFaccao(){
   document.getElementById('fac-ops').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
+    const facToken=FACCAO_LOGADO._session?.access_token||SB_ANON;
     const r=await fetch(`${SB_URL}/rest/v1/ordens_producao?terceiro_id=eq.${FACCAO_LOGADO.id}&situacao=neq.CANCELADA&order=criado_em.desc&limit=100`,
-      {headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});
+      {headers:{apikey:SB_ANON,Authorization:`Bearer ${facToken}`}});
     _facOPs=await r.json();
     if(!Array.isArray(_facOPs))_facOPs=[];
     renderOPsFaccao();
@@ -2402,21 +2428,25 @@ async function confirmarEntregaFaccao(){
   const dataHoje=new Date().toISOString().split('T')[0];
   const total=_facCarrinho.reduce((s,i)=>s+i.qtd*i.preco,0);
   try{
+    const facToken=FACCAO_LOGADO._session?.access_token||SB_ANON;
+    const facH={apikey:SB_ANON,Authorization:`Bearer ${facToken}`,'Content-Type':'application/json'};
+
     let catFaccaoId=null;
-    try{const r=await fetch(`${SB_URL}/rest/v1/categorias?nome=ilike.*fac*&select=id&limit=1`,{headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`}});const c=await r.json();catFaccaoId=c[0]?.id||null;}catch(e){}
+    try{const r=await fetch(`${SB_URL}/rest/v1/categorias?nome=ilike.*fac*&select=id&limit=1`,{headers:{...facH}});const c=await r.json();catFaccaoId=c[0]?.id||null;}catch(e){}
+
     let lanId=null;
     if(total>0){
-      const r=await fetch(`${SB_URL}/rest/v1/lancamentos_externos`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,data:dataHoje,data_vencimento:dataHoje,descricao:`Facção — ${FACCAO_LOGADO.nome} (${new Date().toLocaleDateString('pt-BR')})`,valor:parseFloat(total.toFixed(2)),tipo_lancamento:'PAGAR',meio_pagamento:'PIX',situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome,categoria_id:catFaccaoId,observacao:obs||null})});
+      const r=await fetch(`${SB_URL}/rest/v1/lancamentos_externos`,{method:'POST',headers:{...facH,Prefer:'return=representation'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,data:dataHoje,data_vencimento:dataHoje,descricao:`Facção — ${FACCAO_LOGADO.nome} (${new Date().toLocaleDateString('pt-BR')})`,valor:parseFloat(total.toFixed(2)),tipo_lancamento:'PAGAR',meio_pagamento:'PIX',situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome,categoria_id:catFaccaoId,observacao:obs||null})});
       const lan=await r.json();lanId=lan[0]?.id||null;
     }
     for(const item of _facCarrinho){
-      await fetch(`${SB_URL}/rest/v1/entregas_op`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,op_id:item.opId||null,terceiro_id:FACCAO_LOGADO.id,quantidade:item.qtd,valor_total:parseFloat((item.qtd*item.preco).toFixed(2)),observacao:obs||null,lancamento_id:lanId})});
+      await fetch(`${SB_URL}/rest/v1/entregas_op`,{method:'POST',headers:{...facH,Prefer:'return=minimal'},body:JSON.stringify({empresa_id:FACCAO_LOGADO.empresa_id,op_id:item.opId||null,terceiro_id:FACCAO_LOGADO.id,quantidade:item.qtd,valor_total:parseFloat((item.qtd*item.preco).toFixed(2)),observacao:obs||null,lancamento_id:lanId})});
       if(item.opId&&!item.semOP){
         const op=_facOPs.find(o=>o.id===item.opId);
         if(op){
           const nq=op.quantidade_entregue+item.qtd;
           const ns=nq>=op.quantidade?'CONCLUIDA':nq>0?'PARCIAL':'ABERTA';
-          await fetch(`${SB_URL}/rest/v1/ordens_producao?id=eq.${item.opId}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:`Bearer ${SB_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({quantidade_entregue:nq,situacao:ns,data_conclusao:ns==='CONCLUIDA'?dataHoje:null})});
+          await fetch(`${SB_URL}/rest/v1/ordens_producao?id=eq.${item.opId}`,{method:'PATCH',headers:{...facH,Prefer:'return=minimal'},body:JSON.stringify({quantidade_entregue:nq,situacao:ns,data_conclusao:ns==='CONCLUIDA'?dataHoje:null})});
           op.quantidade_entregue=nq;op.situacao=ns;
         }
       }
