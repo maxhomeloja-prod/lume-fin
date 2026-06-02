@@ -841,7 +841,14 @@ async function criarConta() {
   }
 }
 
-function abrirCadastro() { console.log('abrirCadastro chamado'); abrirModal('modal-cadastro'); console.log('modal aberto'); }
+function abrirCadastro() {
+  const el = document.getElementById('modal-cadastro');
+  el.style.visibility = 'visible';
+  el.style.opacity = '1';
+  el.style.pointerEvents = 'all';
+  el.classList.add('open');
+  console.log('modal-cadastro classes:', el.className, 'computed visibility:', window.getComputedStyle(el).visibility);
+}
 
 function logout() {
   localStorage.removeItem('lume_session');
