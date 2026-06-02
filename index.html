@@ -901,21 +901,21 @@ async function carregarDadosBase() {
   // Carregar IDs especiais reais
   carregarEspeciais();
 
-  // Contas bancárias
-  await carregarContas();
-
   // Preencher selects de categoria em todos os modais
   preencherSelectsCategorias();
 
-  // Fornecedores para autocomplete
-  try {
-    const lans = await sbGet('lancamentos_externos', `?empresa_id=eq.${EMPRESA_ID}&select=fornecedor,cliente&limit=1000`);
-    const nomes = new Set();
-    lans.forEach(l => { if(l.fornecedor) nomes.add(l.fornecedor); if(l.cliente) nomes.add(l.cliente); });
-    _fornecedoresList = [...nomes];
-    const dl = document.getElementById('lan-cf-list');
-    dl.innerHTML = _fornecedoresList.map(n => `<option value="${n}">`).join('');
-  } catch(e) {}
+  // Só carregar contas e fornecedores se tiver empresa
+  if(EMPRESA_ID) {
+    await carregarContas();
+    try {
+      const lans = await sbGet('lancamentos_externos', `?empresa_id=eq.${EMPRESA_ID}&select=fornecedor,cliente&limit=1000`);
+      const nomes = new Set();
+      lans.forEach(l => { if(l.fornecedor) nomes.add(l.fornecedor); if(l.cliente) nomes.add(l.cliente); });
+      _fornecedoresList = [...nomes];
+      const dl = document.getElementById('lan-cf-list');
+      dl.innerHTML = _fornecedoresList.map(n => `<option value="${n}">`).join('');
+    } catch(e) {}
+  }
 }
 
 function carregarEspeciais() {
@@ -927,6 +927,7 @@ function carregarEspeciais() {
 }
 
 async function carregarContas() {
+  if(!EMPRESA_ID) { CONTAS = []; return; }
   CONTAS = await sbGet('contas_bancarias', `?empresa_id=eq.${EMPRESA_ID}&ativa=eq.true&order=banco`);
   const sel = document.getElementById('fcat-conta');
   sel.innerHTML = '<option value="">Todas as contas</option>' +
@@ -1023,6 +1024,10 @@ function getNomeContaBancaria(id) {
 // CATEGORIZAÇÃO
 // ============================================================
 async function loadCategorizacao() {
+  if(!EMPRESA_ID) {
+    document.getElementById('cat-table-wrap').innerHTML = '<div class="empty">Cadastre uma empresa para começar.</div>';
+    return;
+  }
   try {
     _transacoesPendentes = await sbGet('transacoes',
       `?empresa_id=eq.${EMPRESA_ID}&status=eq.PENDENTE&order=data.desc&limit=200`);
@@ -1850,9 +1855,19 @@ async function salvarEmpresa() {
     }
     fecharModal('modal-empresa');
     EMPRESAS = await sbGet('empresas', '?ativa=eq.true&order=nome');
+    // Se primeira empresa, definir como ativa e ir para categorização
+    if(!EMPRESA_ID && EMPRESAS.length > 0) {
+      EMPRESA_ID = EMPRESAS[0].id;
+      localStorage.setItem('lume_empresa_id', EMPRESA_ID);
+      await carregarContas();
+      preencherSelectsCategorias();
+      atualizarNomeEmpresa();
+      navTo('categorizacao', document.querySelector('.sb-item'));
+    }
     const sel = document.getElementById('sel-empresa');
     sel.innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
     if(EMPRESA_ID) sel.value = EMPRESA_ID;
+    atualizarNomeEmpresa();
     loadEmpresas();
   } catch(e) { alert('Erro: ' + e.message); }
 }
