@@ -845,7 +845,7 @@ async function criarConta() {
 function abrirCadastro() {
   document.getElementById('login-screen').style.display = 'none';
   const el = document.getElementById('modal-cadastro');
-  el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  el.style.display = 'flex';
 }
 function logout() {
   localStorage.removeItem('lume_session');
@@ -985,9 +985,11 @@ function abrirModal(id) { const el = document.getElementById(id); console.log('a
 function fecharModal(id) {
   const el = document.getElementById(id);
   if(el) { el.style.cssText = ''; el.classList.remove('open'); }
-  if(id === 'modal-cadastro') {
-    document.getElementById('login-screen').style.display = '';
-  }
+  if(id === 'modal-cadastro') fecharCadastro();
+}
+function fecharCadastro() {
+  document.getElementById('modal-cadastro').style.display = 'none';
+  document.getElementById('login-screen').style.display = '';
 }
 
 function getNomeCat(id) {
@@ -1869,28 +1871,18 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-<!-- ── MODAL CADASTRO ── -->
-<div class="modal-overlay" id="modal-cadastro">
-  <div class="modal">
-    <div class="modal-title">Criar Conta</div>
-    <div class="modal-sub">Acesse o sistema Lume Financeiro</div>
-    <div class="form-group">
-      <label class="form-label">Nome</label>
-      <input class="form-control" type="text" id="cad-nome" placeholder="Seu nome">
+<div id="modal-cadastro" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;">
+  <div style="background:#fff;border-radius:14px;padding:36px;width:100%;max-width:400px;font-family:sans-serif;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="font-size:22px;font-weight:700;margin-bottom:4px;color:#1a1814">Criar Conta</div>
+    <div style="font-size:12px;color:#999;margin-bottom:24px">Acesse o sistema Lume Financeiro</div>
+    <div style="margin-bottom:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:#aaa;margin-bottom:5px">Nome</label><input id="cad-nome" type="text" placeholder="Seu nome" style="width:100%;padding:10px 13px;border:1px solid #ddd;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box;"></div>
+    <div style="margin-bottom:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:#aaa;margin-bottom:5px">E-mail</label><input id="cad-email" type="email" placeholder="seu@email.com" style="width:100%;padding:10px 13px;border:1px solid #ddd;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box;"></div>
+    <div style="margin-bottom:20px"><label style="display:block;font-size:11px;text-transform:uppercase;color:#aaa;margin-bottom:5px">Senha</label><input id="cad-senha" type="password" placeholder="Mínimo 6 caracteres" style="width:100%;padding:10px 13px;border:1px solid #ddd;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid #eee">
+      <button onclick="fecharCadastro()" style="padding:9px 18px;border:1px solid #ddd;background:#fff;border-radius:6px;font-size:13px;cursor:pointer;">Cancelar</button>
+      <button onclick="criarConta()" style="padding:9px 18px;border:none;background:#1a1814;color:#fff;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Criar Conta</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">E-mail</label>
-      <input class="form-control" type="email" id="cad-email" placeholder="seu@email.com">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Senha</label>
-      <input class="form-control" type="password" id="cad-senha" placeholder="Mínimo 6 caracteres">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="fecharModal('modal-cadastro')">Cancelar</button>
-      <button class="btn btn-primary" onclick="criarConta()">Criar Conta</button>
-    </div>
-    <div class="login-err" id="cad-err"></div>
+    <div id="cad-err" style="font-size:11px;color:#c0392b;text-align:center;margin-top:10px;min-height:16px"></div>
   </div>
 </div>
 </body>
