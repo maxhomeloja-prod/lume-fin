@@ -1474,7 +1474,7 @@ function renderOPs(){
     el.innerHTML='<div class="op-cards">'+_ops.map(op=>{
       const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
       const cor=corSit[op.situacao]||'#4a7a9b';
-      return`<div class="op-card" onclick="abrirDetalhesOP('${op.id}')">
+      return`<div class="op-card" data-op-id="${op.id}" style="cursor:pointer">
         <div class="op-card-accent" style="background:${cor}"></div>
         <div class="op-card-num">${op.numero} · ${opBadge(op.situacao)}</div>
         <div class="op-card-sku">${op.sku}</div>
@@ -1486,6 +1486,15 @@ function renderOPs(){
         </div>
       </div>`;
     }).join('')+'</div>';
+  // Delegação de evento nos cards
+  setTimeout(()=>{
+    document.querySelectorAll('.op-card[data-op-id]').forEach(card=>{
+      card.addEventListener('click',()=>{
+        const id=card.getAttribute('data-op-id');
+        abrirDetalhesOP(id);
+      });
+    });
+  },0);
   }else{
     el.innerHTML='<div class="card"><div class="tbl-wrap"><table><thead><tr><th>Nº</th><th>SKU</th><th>Descrição</th><th>Situação</th><th>Terceiro</th><th style="text-align:right">Qtd</th><th style="text-align:right">Entregue</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_ops.map(op=>`<tr>
       <td style="font-weight:600;color:var(--accent)">${op.numero}</td>
@@ -2632,13 +2641,16 @@ function gerarPDFFaccao(obs, total) {
     </div>
 
     <!-- Situação rápida -->
-    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border)">
-      <span style="font-size:11px;color:var(--text3);align-self:center">Alterar situação:</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border);align-items:center">
+      <span style="font-size:11px;color:var(--text3)">Alterar:</span>
       <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('ABERTA')">Aberta</button>
       <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
       <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
       <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
-      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar</button>
+      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary btn-sm" id="btn-finalizar-op" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">✓ Finalizar com Perda</button>
+      </div>
     </div>
   </div>
 </div>
@@ -2844,6 +2856,42 @@ async function confirmarEntregaFaccao(){
     gerarPDFFaccao(obs,total,carrinhoParaPDF);
   }catch(e){alert('Erro: '+e.message);}
   finally{btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';}
+}
+
+async function finalizarOPModal(){
+  if(!_opDetalheAtual)return;
+  const op=_opDetalheAtual;
+  const perda=op.quantidade>0
+    ?Math.max(0,(op.quantidade-op.quantidade_entregue)/op.quantidade*100)
+    :0;
+  const perdaFmt=perda.toFixed(2);
+  const cor=perda>10?'vermelho':perda>5?'amarelo':'verde';
+
+  // Mostrar resumo antes de confirmar
+  const msg=`Finalizar OP ${op.numero}?\n\n`+
+    `SKU: ${op.sku}\n`+
+    `Quantidade pedida: ${op.quantidade} peças\n`+
+    `Quantidade entregue: ${op.quantidade_entregue} peças\n`+
+    `Em aberto: ${op.quantidade-op.quantidade_entregue} peças\n`+
+    `\nPerda calculada: ${perdaFmt}%${perda>10?' ⚠ ALTA':perda>5?' ⚠ MODERADA':' ✓ OK'}`;
+
+  if(!confirm(msg))return;
+
+  try{
+    await sbPatch('ordens_producao',`id=eq.${op.id}`,{
+      situacao:'CONCLUIDA',
+      data_conclusao:new Date().toISOString().split('T')[0],
+      perda:parseFloat(perdaFmt)
+    });
+    _opDetalheAtual.situacao='CONCLUIDA';
+    _opDetalheAtual.perda=parseFloat(perdaFmt);
+    document.getElementById('mod-op-badge').innerHTML=opBadge('CONCLUIDA');
+
+    // Fechar modal e atualizar lista
+    fecharModal('modal-op-detalhe');
+    loadOPs();
+    alert(`✅ OP finalizada!\nPerda registrada: ${perdaFmt}%`);
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
