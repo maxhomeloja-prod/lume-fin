@@ -360,7 +360,7 @@ select.form-control { cursor: pointer; }
         </div>
         <div class="card">
           <div id="cat-table-wrap">
-            <div class="loading"><div class="spinner"></div> Carregando...</div>
+            <div class="empty">Configure uma empresa para começar.</div>
           </div>
         </div>
       </div>
@@ -475,14 +475,14 @@ select.form-control { cursor: pointer; }
         <div id="caixa-entradas-panel">
           <div class="card">
             <div class="tbl-wrap" id="caixa-ent-wrap">
-              <div class="loading"><div class="spinner"></div> Carregando...</div>
+              <div class="empty">Configure uma empresa para começar.</div>
             </div>
           </div>
         </div>
         <div id="caixa-saidas-panel" style="display:none">
           <div class="card">
             <div class="tbl-wrap" id="caixa-sai-wrap">
-              <div class="loading"><div class="spinner"></div> Carregando...</div>
+              <div class="empty">Configure uma empresa para começar.</div>
             </div>
           </div>
         </div>
@@ -537,7 +537,7 @@ select.form-control { cursor: pointer; }
         </div>
         <div class="card">
           <div class="tbl-wrap" id="ven-table-wrap">
-            <div class="loading"><div class="spinner"></div> Carregando...</div>
+            <div class="empty">Configure uma empresa para começar.</div>
           </div>
         </div>
       </div>
@@ -1016,17 +1016,21 @@ async function iniciarApp() {
 
   await carregarDadosBase();
 
-  // Se usuário não tem empresa, mostrar onboarding
+  document.getElementById('app').style.display = 'flex';
+
   if(EMPRESAS.length === 0) {
-    document.getElementById('app').style.display = 'flex';
-    navTo('empresa', document.querySelector('.sb-item:last-of-type'));
-    abrirModalEmpresa();
-    // Mostrar mensagem de boas-vindas
-    setTimeout(() => alert('Bem-vindo ao Lume! Comece cadastrando sua empresa.'), 300);
+    // Sem empresa: mostrar mensagem na aba ativa e banner de boas-vindas
+    semEmpresaMsg('cat-table-wrap');
+    document.getElementById('cat-table-wrap').innerHTML =
+      '<div style="text-align:center;padding:48px 24px">' +
+      '<div style="font-size:28px;margin-bottom:12px">👋</div>' +
+      '<div style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--ink)">Bem-vindo ao Lume!</div>' +
+      '<div style="font-size:13px;color:var(--ink2);margin-bottom:20px">Para começar, cadastre sua empresa e conecte suas contas bancárias.</div>' +
+      '<button class="btn btn-primary" onclick="irParaEmpresa()">Cadastrar Empresa</button>' +
+      '</div>';
   } else {
-    document.getElementById('app').style.display = 'flex';
     await loadCategorizacao();
-  await verificarBOMPendencias();
+    await verificarBOMPendencias();
   }
 }
 
@@ -1128,12 +1132,38 @@ function trocarEmpresa(id) {
 // ============================================================
 // NAVEGAÇÃO
 // ============================================================
+function irParaEmpresa() {
+  navTo('empresa', null);
+  setTimeout(abrirModalEmpresa, 100);
+}
+
+function semEmpresaMsg(wrapId) {
+  const el = document.getElementById(wrapId);
+  if(el) el.innerHTML = '<div class="empty" style="padding:40px">⚠ Cadastre uma empresa em <strong>Configuração → Empresa</strong> para usar esta função.</div>';
+}
+
 function navTo(panel, el) {
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   if(el) el.classList.add('active');
   const panelEl = document.getElementById('panel-' + panel);
   if(panelEl) panelEl.classList.add('active');
+
+  if(!EMPRESA_ID) {
+    // Sem empresa: mostrar mensagem em vez de spinner
+    const wraps = {
+      'categorizacao': 'cat-table-wrap',
+      'vendas': 'ven-table-wrap',
+      'lancamentos': 'lan-table-wrap',
+      'balancete': 'bal-corpo',
+      'bom': 'bom-pendencias',
+      'abc': 'abc-tbody-vendas'
+    };
+    if(wraps[panel]) semEmpresaMsg(wraps[panel]);
+    if(panel === 'empresa') loadEmpresas();
+    return;
+  }
+
   if(panel === 'balancete') loadBalancete();
   if(panel === 'lancamentos') loadLancamentos();
   if(panel === 'caixa') loadCaixa();
