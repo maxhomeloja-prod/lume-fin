@@ -1665,9 +1665,13 @@ async function loadEntregas(){
 
 async function loadPagamentosOP(){
   if(!EMPRESA_ID){semEmpresaMsg('pagamentos-op-lista');return;}
+  // ID da categoria Facção — buscar dinamicamente
+  const CAT_FACCAO_ID = '2d61c87f-a477-4e51-9607-592530ab16e2';
   try{
-    const lans=await sbGet('lancamentos_externos',`?empresa_id=eq.${EMPRESA_ID}&order=data_vencimento.asc&limit=200`);
-    const faccao=lans.filter(l=>l.descricao?.includes('Entrega OP')||l.observacao?.includes('OP'));
+    // Buscar diretamente por categoria Facção
+    const lans=await sbGet('lancamentos_externos',
+      `?empresa_id=eq.${EMPRESA_ID}&categoria_id=eq.${CAT_FACCAO_ID}&tipo_lancamento=eq.PAGAR&order=data_vencimento.asc&limit=200`);
+    const faccao=lans;
     const el=document.getElementById('pagamentos-op-lista');
     if(!faccao.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento de facção pendente</div></div>';return;}
     const pagar=faccao.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
