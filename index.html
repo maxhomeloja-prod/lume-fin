@@ -1300,6 +1300,7 @@ async function confirmarTodas() {
 // BALANCETE
 // ============================================================
 async function loadBalancete() {
+  if(!EMPRESA_ID) return;
   const de  = document.getElementById('fbal-de').value;
   const ate = document.getElementById('fbal-ate').value;
   document.getElementById('bal-corpo').innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
@@ -1468,6 +1469,7 @@ function renderBalancete() {
 // LANÇAMENTOS
 // ============================================================
 async function loadLancamentos() {
+  if(!EMPRESA_ID) return;
   const tipo = document.getElementById('flan-tipo').value;
   const sit  = document.getElementById('flan-sit').value;
   const de   = document.getElementById('flan-de').value;
@@ -1607,9 +1609,10 @@ function switchCaixa(tab, el) {
 }
 
 async function loadCaixa() {
+  if(!EMPRESA_ID) return;
   try {
-    _caixaEntradas = await sbGet('caixa_entradas', `?empresa_id=eq.${EMPRESA_ID}&order=created_at.desc&limit=200`);
-    _caixaSaidas   = await sbGet('caixa_saidas',   `?empresa_id=eq.${EMPRESA_ID}&order=created_at.desc&limit=200`);
+    _caixaEntradas = await sbGet('caixa_entradas', `?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`);
+    _caixaSaidas   = await sbGet('caixa_saidas',   `?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`);
     renderCaixaEntradas();
     renderCaixaSaidas();
   } catch(e) {
@@ -1831,6 +1834,7 @@ async function reverterSaida(id) {
 // CONTAS BANCÁRIAS
 // ============================================================
 async function loadContasBancarias() {
+  if(!EMPRESA_ID) return;
   try {
     const contas = await sbGet('contas_bancarias', `?empresa_id=eq.${EMPRESA_ID}&order=banco`);
     if(!contas.length) {
@@ -1961,6 +1965,7 @@ async function desativarConta(id) {
 // EMPRESA
 // ============================================================
 async function loadEmpresas() {
+  if(!SESSION) return;
   try {
     const emps = await sbGet('empresas', '?order=nome');
     document.getElementById('empresa-lista').innerHTML = `
@@ -2652,19 +2657,18 @@ async function sincronizarBanco() {
 // ============================================================
 // BOOT
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   // Tentar restaurar sessão
   const saved = localStorage.getItem('lume_session');
   if(saved) {
     try {
       const sess = JSON.parse(saved);
-      // Verificar expiração
       if(sess.expires_at && Date.now() / 1000 < sess.expires_at) {
         SESSION = sess;
-        iniciarApp();
+        iniciarApp(); // não precisa de await aqui — iniciarApp é async e gerencia seu próprio estado
         return;
       }
-    } catch(e) {}
+    } catch(e) { console.error('Erro ao restaurar sessão:', e); }
     localStorage.removeItem('lume_session');
   }
   // Enter nos campos de login
