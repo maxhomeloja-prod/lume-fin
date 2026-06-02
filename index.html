@@ -1031,8 +1031,15 @@ async function iniciarApp() {
 }
 
 async function carregarDadosBase() {
+  console.log('carregarDadosBase — SESSION:', SESSION?.user?.id, 'token:', SESSION?.access_token?.slice(0,20));
   // Empresas
-  EMPRESAS = await sbGet('empresas', '?ativa=eq.true&order=nome');
+  try {
+    EMPRESAS = await sbGet('empresas', '?ativa=eq.true&order=nome');
+  } catch(e) {
+    console.error('Erro ao carregar empresas:', e.message);
+    EMPRESAS = [];
+  }
+  console.log('EMPRESAS carregadas:', EMPRESAS.length, 'EMPRESA_ID será:', EMPRESAS[0]?.id);
   const sel = document.getElementById('sel-empresa');
   sel.innerHTML = EMPRESAS.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
 
