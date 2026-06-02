@@ -1170,7 +1170,7 @@ const fN=v=>v.toLocaleString('pt-BR');
 const fDate=s=>s?s.split('-').reverse().join('/'):'—';
 const PAL=['#1e9be8','#00d4a0','#a78bfa','#ffb020','#ff4d6a','#00c4ff','#f472b6','#34d399'];
 function abrirModal(id){document.getElementById(id).classList.add('open');}
-function fecharModal(id){document.getElementById(id).classList.remove('open');}
+function fecharModal(id){const el=document.getElementById(id);if(el){el.classList.remove('open');el.style.cssText='';}}
 function getNomeCat(id){if(!id)return '—';const c=CATEGORIAS.find(x=>x.id===id);if(!c)return'—';if(c.categoria_pai_id){const p=CATEGORIAS.find(x=>x.id===c.categoria_pai_id);return p?p.nome:c.nome;}return c.nome;}
 function estimarCategoria(sku){const s=sku.toUpperCase();if(s.includes('LENÇOL')||s.includes('LENCOL')||s.includes('JOGO'))return'Lençóis';if(s.includes('CORTINA')||s.includes('BLACKOUT'))return'Cortinas';if(s.includes('MANTA'))return'Mantas';if(s.includes('PROTETOR'))return'Protetores';if(s.includes('FRONHA'))return'Fronhas';if(s.includes('TAPETE'))return'Tapetes';if(s.includes('TOALHA'))return'Toalhas';return'Outros';}
 function opBadge(sit){const m={ABERTA:'blue',EM_PRODUCAO:'amber',PARCIAL:'purple',CONCLUIDA:'green',CANCELADA:'gray'};return`<span class="badge badge-${m[sit]||'gray'}">${sit.replace('_',' ')}</span>`;}
@@ -1537,10 +1537,11 @@ function abrirDetalhesOP(id,e){
   // Mostrar/ocultar botão entrega
   document.getElementById('btn-mod-entrega').style.display=op.situacao==='CONCLUIDA'||op.situacao==='CANCELADA'?'none':'';
 
-  abrirModal('modal-op-detalhe');
-}
-
-function abrirEntregaDaModal(){
+    // Forçar visibilidade com estilo inline
+  const modalEl = document.getElementById('modal-op-detalhe');
+  modalEl.classList.add('open');
+  modalEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;visibility:visible;opacity:1;';
+}function abrirEntregaDaModal(){
   if(!_opDetalheAtual)return;
   fecharModal('modal-op-detalhe');
   setTimeout(()=>abrirEntregaOPDireto(_opDetalheAtual),150);
