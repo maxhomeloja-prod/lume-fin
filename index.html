@@ -312,9 +312,21 @@ tr:hover td{background:var(--surface2);}
 
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen">
-  <div class="login-card">
+  <!-- Escolha de tipo -->
+  <div class="login-card" id="login-escolha">
     <div class="login-logo">LUME</div>
     <div class="login-sub">Sistema de Gestão Empresarial</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+      <button class="login-btn" onclick="mostrarLoginEmpresa()">🏢 Entrar como Empresa</button>
+      <button class="login-btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2)" onclick="mostrarLoginFaccao()">🧵 Entrar como Facção</button>
+    </div>
+    <div class="login-link" style="margin-top:20px">Não tem conta? <span onclick="abrirCadastro()">Criar conta gratuita</span></div>
+  </div>
+
+  <!-- Login empresa -->
+  <div class="login-card" id="login-empresa" style="display:none">
+    <div class="login-logo">LUME</div>
+    <div class="login-sub">Acesso Empresarial</div>
     <div class="login-field">
       <label class="login-label">E-mail</label>
       <input class="login-input" type="email" id="login-email" placeholder="seu@email.com" autocomplete="email">
@@ -325,7 +337,85 @@ tr:hover td{background:var(--surface2);}
     </div>
     <button class="login-btn" onclick="fazerLogin()">Entrar</button>
     <div class="login-err" id="login-err"></div>
-    <div class="login-link">Não tem conta? <span onclick="abrirCadastro()">Criar conta gratuita</span></div>
+    <div class="login-link" style="margin-top:12px"><span onclick="voltarEscolha()">← Voltar</span></div>
+  </div>
+
+  <!-- Login facção -->
+  <div class="login-card" id="login-faccao" style="display:none">
+    <div class="login-logo">LUME</div>
+    <div class="login-sub">Acesso de Facção</div>
+    <div class="login-field">
+      <label class="login-label">E-mail / Nome</label>
+      <input class="login-input" type="text" id="fac-email" placeholder="seu@email.com ou nome cadastrado">
+    </div>
+    <div class="login-field">
+      <label class="login-label">Senha</label>
+      <input class="login-input" type="password" id="fac-senha" placeholder="••••••••">
+    </div>
+    <button class="login-btn" onclick="loginFaccao()">Entrar</button>
+    <div class="login-err" id="fac-err"></div>
+    <div class="login-link" style="margin-top:12px"><span onclick="voltarEscolha()">← Voltar</span></div>
+  </div>
+</div>
+
+<!-- VIEW FACÇÃO (substitui o app inteiro para terceiros) -->
+<div id="faccao-view" style="display:none;min-height:100vh;background:var(--bg);flex-direction:column">
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--accent2)">LUME <span style="color:var(--text3);font-size:13px;font-weight:400">· Facção</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:12px;color:var(--text2)" id="fac-nome-display">—</span>
+      <button class="btn btn-ghost btn-sm" onclick="logoutFaccao()">Sair</button>
+    </div>
+  </div>
+  <div style="padding:20px;flex:1">
+    <!-- Busca SKU -->
+    <div class="card mb16">
+      <div class="card-title">Registrar Entrega</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="flex:1;min-width:200px;margin:0">
+          <label class="form-label">Buscar SKU ou OP</label>
+          <input class="form-control" type="text" id="fac-busca" placeholder="Digite o SKU ou número da OP..." oninput="faccaoBuscar()">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="faccaoSemOP()">+ Entrega sem OP</button>
+      </div>
+      <div id="fac-resultados" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Carrinho -->
+    <div class="card mb16" id="fac-carrinho-card" style="display:none">
+      <div class="card-title">Carrinho de Entrega</div>
+      <div id="fac-carrinho"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border);margin-top:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-total">R$ 0,00</div>
+        <button class="btn btn-primary" onclick="abrirConfirmacaoFaccao()">Confirmar Entrega →</button>
+      </div>
+    </div>
+
+    <!-- OPs do terceiro -->
+    <div class="card">
+      <div class="card-title">Minhas Ordens de Produção</div>
+      <div id="fac-ops"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmação entrega facção -->
+<div class="modal-overlay" id="modal-fac-confirmar">
+  <div class="modal">
+    <div class="modal-title">Confirmar Entrega</div>
+    <div class="modal-sub">Revise os itens antes de confirmar</div>
+    <div id="fac-conf-itens" style="margin-bottom:16px"></div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <input class="form-control" type="text" id="fac-conf-obs" placeholder="Opcional">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-conf-total">R$ 0,00</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-fac-confirmar')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-conf-fac" onclick="confirmarEntregaFaccao()">Confirmar e Gerar PDF</button>
+    </div>
   </div>
 </div>
 
@@ -2126,9 +2216,47 @@ async function salvarPerfil(){
   }
 }
 
+function gerarPDFFaccao(obs, total) {
+  const hoje = new Date();
+  const dataStr = hoje.toLocaleDateString('pt-BR');
+  const horaStr = hoje.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const itensHTML = _facCarrinho.map(i =>
+    `<tr><td>${i.opNumero}</td><td>${i.sku}</td><td>${i.descricao}</td><td style="text-align:right">${fN(i.qtd)}</td><td style="text-align:right">${i.preco?fBRL(i.preco):'—'}</td><td style="text-align:right">${i.preco?fBRL(i.qtd*i.preco):'—'}</td></tr>`
+  ).join('');
+  const win = window.open('', '_blank');
+  if (!win) { alert('Permita pop-ups para gerar o PDF'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><title>Recibo de Entrega</title><style>
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;}
+    h2{margin:0 0 4px;font-size:22px;} .sub{color:#666;font-size:13px;margin-bottom:20px;}
+    table{width:100%;border-collapse:collapse;margin-top:16px;}
+    th{background:#f0f0f0;padding:8px 10px;text-align:left;font-size:12px;text-transform:uppercase;}
+    td{padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;}
+    .total{margin-top:16px;text-align:right;font-size:18px;font-weight:700;}
+    @media print{.no-print{display:none;}}
+  </style></head><body>
+    <h2>Recibo de Entrega</h2>
+    <div class="sub">Facção: <strong>${FACCAO_LOGADO.nome}</strong> · ${dataStr} às ${horaStr}</div>
+    ${obs ? `<div style="background:#f9f9f9;padding:10px;border-radius:4px;font-size:13px;margin-bottom:12px"><strong>Obs:</strong> ${obs}</div>` : ''}
+    <table><thead><tr><th>OP</th><th>SKU</th><th>Descrição</th><th>Qtd</th><th>Preço</th><th>Total</th></tr></thead>
+    <tbody>${itensHTML}</tbody></table>
+    <div class="total">Total: ${fBRL(total)}</div>
+    <br><button class="no-print" onclick="window.print()" style="padding:10px 20px;background:#1e9be8;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Imprimir / Salvar PDF</button>
+  </body></html>`);
+  win.document.close();
+}
+
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
+  document.getElementById('fac-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
+  document.getElementById('fac-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
+
+  // Verificar sessão de facção
+  const savedFac = localStorage.getItem('lume_faccao');
+  if(savedFac){
+    try{ FACCAO_LOGADO=JSON.parse(savedFac); iniciarFaccaoView(); return; }catch(e){ localStorage.removeItem('lume_faccao'); }
+  }
+  // Verificar sessão de usuário
   const saved=localStorage.getItem('lume_session');
   if(saved){
     try{
