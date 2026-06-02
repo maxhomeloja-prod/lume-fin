@@ -845,9 +845,7 @@ async function criarConta() {
 function abrirCadastro() {
   document.getElementById('login-screen').style.display = 'none';
   const el = document.getElementById('modal-cadastro');
-  el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
-  const inner = el.querySelector('.modal');
-  if(inner) inner.style.cssText = 'background:white;padding:32px;border-radius:12px;width:420px;max-width:90vw;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+  el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
 }
 function logout() {
   localStorage.removeItem('lume_session');
