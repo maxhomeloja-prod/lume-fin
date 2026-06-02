@@ -1343,7 +1343,7 @@ async function confirmarTodas() {
 // BALANCETE
 // ============================================================
 async function loadBalancete() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('bal-corpo'); return; }
   const de  = document.getElementById('fbal-de').value;
   const ate = document.getElementById('fbal-ate').value;
   document.getElementById('bal-corpo').innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
@@ -1512,7 +1512,7 @@ function renderBalancete() {
 // LANÇAMENTOS
 // ============================================================
 async function loadLancamentos() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('lan-table-wrap'); return; }
   const tipo = document.getElementById('flan-tipo').value;
   const sit  = document.getElementById('flan-sit').value;
   const de   = document.getElementById('flan-de').value;
@@ -1652,7 +1652,7 @@ function switchCaixa(tab, el) {
 }
 
 async function loadCaixa() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('caixa-ent-wrap'); semEmpresaMsg('caixa-sai-wrap'); return; }
   try {
     _caixaEntradas = await sbGet('caixa_entradas', `?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`);
     _caixaSaidas   = await sbGet('caixa_saidas',   `?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`);
@@ -1877,7 +1877,10 @@ async function reverterSaida(id) {
 // CONTAS BANCÁRIAS
 // ============================================================
 async function loadContasBancarias() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) {
+    document.getElementById('contas-lista').innerHTML = '<div class="empty" style="padding:40px">⚠ Cadastre uma empresa primeiro.</div>';
+    return;
+  }
   try {
     const contas = await sbGet('contas_bancarias', `?empresa_id=eq.${EMPRESA_ID}&order=banco`);
     if(!contas.length) {
@@ -2170,7 +2173,7 @@ let _catsProduto = [];
 
 // ── LOAD VENDAS ───────────────────────────────────────────────
 async function loadVendas() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('ven-table-wrap'); return; }
   const de  = document.getElementById('fven-de')?.value;
   const ate = document.getElementById('fven-ate')?.value;
   const canal = document.getElementById('fven-canal')?.value.trim();
@@ -2391,7 +2394,7 @@ async function processarUploadVendas(input) {
 
 // ── BOM ───────────────────────────────────────────────────────
 async function loadBOM() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('bom-pendencias'); return; }
   await carregarProdutosClientes();
 
   // SKUs com vendas
@@ -2575,7 +2578,7 @@ async function salvarBOM() {
 
 // ── CURVA ABC VENDAS ──────────────────────────────────────────
 async function loadABC() {
-  if(!EMPRESA_ID) return;
+  if(!EMPRESA_ID) { semEmpresaMsg('abc-tbody-vendas'); return; }
   const de   = document.getElementById('fabc-de')?.value;
   const ate  = document.getElementById('fabc-ate')?.value;
   const canal = document.getElementById('fabc-canal')?.value.trim();
