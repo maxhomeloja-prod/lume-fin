@@ -1213,16 +1213,21 @@ function getNomeContaBancaria(id) {
 // CATEGORIZAÇÃO
 // ============================================================
 async function loadCategorizacao() {
+  const wrap = document.getElementById('cat-table-wrap');
+  if(!wrap) return;
+
   if(!EMPRESA_ID) {
-    document.getElementById('cat-table-wrap').innerHTML = '<div class="empty">Cadastre uma empresa para começar.</div>';
+    wrap.innerHTML = '<div class="empty">Configure uma empresa para começar.</div>';
     return;
   }
+
+  wrap.innerHTML = '<div class="loading"><div class="spinner"></div> Carregando...</div>';
+
   try {
     const result = await sbGet('transacoes',
       `?empresa_id=eq.${EMPRESA_ID}&status=eq.PENDENTE&order=data.desc&limit=200`);
     _transacoesPendentes = Array.isArray(result) ? result : [];
     renderCategorizacao();
-    // Badge
     const badge = document.getElementById('badge-pendentes');
     if(_transacoesPendentes.length > 0) {
       badge.textContent = _transacoesPendentes.length;
@@ -1232,7 +1237,7 @@ async function loadCategorizacao() {
     }
   } catch(e) {
     console.error('loadCategorizacao erro:', e);
-    document.getElementById('cat-table-wrap').innerHTML = `<div class="empty">Erro ao carregar: ${e.message}<br><small style="color:var(--ink3)">Verifique se sua sessão está ativa e se as contas bancárias estão configuradas.</small></div>`;
+    wrap.innerHTML = `<div class="empty">Erro: ${e.message}</div>`;
   }
 }
 
@@ -1251,6 +1256,7 @@ function renderCategorizacao() {
   });
 
   const wrap = document.getElementById('cat-table-wrap');
+  if(!wrap) return;
   if(!dados.length) {
     wrap.innerHTML = '<div class="empty">✓ Nenhuma transação pendente com esses filtros</div>';
     return;
