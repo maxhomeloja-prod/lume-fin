@@ -2015,6 +2015,8 @@ async function loadABC(){
 }
 
 function renderChartDiario(vendas){
+  const ctx=document.getElementById('chart-daily');
+  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartDiario(vendas),100);return;}
   // Agrupar por data e categoria
   const porDataCat={};
   const cats=new Set();
@@ -2044,7 +2046,6 @@ function renderChartDiario(vendas){
     borderColor:'#e11d48',backgroundColor:'#e11d4822',
     tension:0.3,fill:false,yAxisID:'y2',pointRadius:2,borderDash:[4,4]
   };
-  const ctx=document.getElementById('chart-daily');if(!ctx)return;
   if(_chartDaily){_chartDaily.destroy();}
   _chartDaily=new Chart(ctx,{
     type:'line',
@@ -2063,6 +2064,8 @@ function renderChartDiario(vendas){
 }
 
 function renderChartCanal(vendas){
+  const ctx=document.getElementById('chart-canal');
+  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartCanal(vendas),100);return;}
   // Venda diária por canal — valor
   const porDataCanal={};
   const canais=new Set();
@@ -2084,7 +2087,6 @@ function renderChartCanal(vendas){
     backgroundColor:cores[i%cores.length]+'33',
     tension:0.3,fill:false,pointRadius:3
   }));
-  const ctx=document.getElementById('chart-canal');if(!ctx)return;
   if(_chartCanal){_chartCanal.destroy();}
   _chartCanal=new Chart(ctx,{
     type:'line',
@@ -2099,6 +2101,8 @@ function renderChartCanal(vendas){
 }
 
 function renderChartPizza(vendas){
+  const ctx=document.getElementById('chart-pizza');
+  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartPizza(vendas),100);return;}
   // Volume (qtd) por canal
   const porCanal={};
   vendas.forEach(v=>{
@@ -2109,7 +2113,6 @@ function renderChartPizza(vendas){
   const labels=Object.keys(porCanal).sort();
   const data=labels.map(c=>porCanal[c]);
   const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c'];
-  const ctx=document.getElementById('chart-pizza');if(!ctx)return;
   if(_chartPizza){_chartPizza.destroy();}
   _chartPizza=new Chart(ctx,{
     type:'pie',
@@ -2449,6 +2452,62 @@ async function loadVendas(){
   }catch(e){
     document.getElementById('ven-table').innerHTML='<div class="empty">Erro: '+e.message+'</div>';
   }
+}
+
+function mostrarLoginEmpresa(){
+  document.getElementById('login-escolha').style.display='none';
+  document.getElementById('login-faccao').style.display='none';
+  document.getElementById('login-empresa').style.display='';
+  document.getElementById('login-email')?.focus();
+}
+function mostrarLoginFaccao(){
+  document.getElementById('login-escolha').style.display='none';
+  document.getElementById('login-empresa').style.display='none';
+  document.getElementById('login-faccao').style.display='';
+  document.getElementById('fac-email')?.focus();
+}
+function voltarEscolha(){
+  document.getElementById('login-empresa').style.display='none';
+  document.getElementById('login-faccao').style.display='none';
+  document.getElementById('login-escolha').style.display='';
+}
+async function loginFaccao(){
+  const email=document.getElementById('fac-email').value.trim();
+  const senha=document.getElementById('fac-senha').value;
+  const err=document.getElementById('fac-err');
+  err.textContent='';
+  if(!email||!senha){err.textContent='Preencha e-mail e senha';return;}
+  try{
+    const r=await fetch(SB_URL+'/auth/v1/token?grant_type=password',{
+      method:'POST',
+      headers:{apikey:SB_ANON,'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:senha})
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
+    // Verificar se é terceiro
+    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome,empresa_id',{
+      headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
+    });
+    const tercs=await rTerc.json();
+    if(!tercs.length)throw new Error('Usuário não é uma facção cadastrada');
+    FACCAO_LOGADO={...tercs[0],token:d.access_token,refresh:d.refresh_token,expires_at:d.expires_at};
+    localStorage.setItem('lume_faccao',JSON.stringify(FACCAO_LOGADO));
+    await iniciarFaccaoView();
+  }catch(e){err.textContent=e.message;}
+}
+async function iniciarFaccaoView(){
+  if(!FACCAO_LOGADO)return;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='none';
+  const fv=document.getElementById('faccao-view');
+  if(fv)fv.style.display='flex';
+  await carregarOPsFaccao();
+}
+function logoutFaccao(){
+  FACCAO_LOGADO=null;
+  localStorage.removeItem('lume_faccao');
+  mostrarLogin();
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
