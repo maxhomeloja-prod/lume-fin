@@ -678,8 +678,8 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fven-de" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fven-ate" onchange="loadVendas()"></div>
-        <div class="filter-group"><span class="filter-label">Canal</span><input type="text" class="filter-control" id="fven-canal" placeholder="Todos" style="width:130px" oninput="loadVendas()"></div>
-        <div class="filter-group"><span class="filter-label">SKU</span><input type="text" class="filter-control" id="fven-sku" placeholder="Buscar" style="width:150px" oninput="loadVendas()"></div>
+        <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fven-canal" onchange="loadVendas()"><option value="">Todos</option></select></div>
+        <div class="filter-group"><span class="filter-label">SKU</span><select class="filter-control" id="fven-sku" onchange="loadVendas()"><option value="">Todos</option></select></div>
       </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="ven-rec">—</div></div>
@@ -703,7 +703,8 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fabc-de" onchange="loadABC()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fabc-ate" onchange="loadABC()"></div>
-        <div class="filter-group"><span class="filter-label">Canal</span><input type="text" class="filter-control" id="fabc-canal" placeholder="Todos" style="width:130px" oninput="loadABC()"></div>
+        <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fabc-canal" onchange="loadABC()"><option value="">Todos</option></select></div>
+        <div class="filter-group"><span class="filter-label">SKU</span><input type="text" class="filter-control" id="fabc-sku" placeholder="Buscar SKU..." style="width:150px" oninput="loadABC()"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadABC()">Aplicar</button>
       </div>
       <div class="grid-3 mb16">
@@ -785,6 +786,7 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">A Receber</div><div class="kpi-value green" id="lan-receber">—</div></div>
         <div class="kpi"><div class="kpi-label">Saldo</div><div class="kpi-value" id="lan-saldo">—</div></div>
       </div>
+      <div id="lan-resumo-cat" style="margin-bottom:16px"></div>
       <div class="card"><div class="tbl-wrap" id="lan-wrap"></div></div>
     </div>
 
@@ -1070,9 +1072,10 @@ async function iniciarApp(){
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
+  const fim=new Date(hoje.getFullYear(),hoje.getMonth()+1,0); // último dia do mês
   const fd=d=>d.toISOString().split('T')[0];
   ['fcat-de','fbal-de','flan-de','fven-de','fabc-de'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(ini);});
-  ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(hoje);});
+  ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(fim);});
   document.getElementById('sai-data').value=fd(hoje);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
@@ -1852,11 +1855,12 @@ async function loadVendas(){
   if(!EMPRESA_ID){semEmpresaMsg('ven-table');return;}
   const de=document.getElementById('fven-de')?.value;
   const ate=document.getElementById('fven-ate')?.value;
-  const canal=document.getElementById('fven-canal')?.value.trim();
-  const sku=document.getElementById('fven-sku')?.value.trim().toUpperCase();
+  const canal=document.getElementById('fven-canal')?.value;
+  const sku=document.getElementById('fven-sku')?.value;
   let q=`?empresa_id=eq.${EMPRESA_ID}&order=data_venda.desc&limit=500`;
   if(de)q+=`&data_venda=gte.${de}`;if(ate)q+=`&data_venda=lte.${ate}`;
-  if(canal)q+=`&canal_venda=ilike.*${canal}*`;if(sku)q+=`&sku=ilike.*${sku}*`;
+  if(canal)q+=`&canal_venda=eq.${canal}`;
+  if(skuFiltro)q+=`&sku=ilike.*${skuFiltro}*`;if(sku)q+=`&sku=ilike.*${sku}*`;
   document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     _vendas=await sbGet('vendas',q);
@@ -2006,7 +2010,8 @@ async function salvarBOM(){
 async function loadABC(){
   if(!EMPRESA_ID){semEmpresaMsg('abc-tbody');return;}
   const de=document.getElementById('fabc-de')?.value;const ate=document.getElementById('fabc-ate')?.value;
-  const canal=document.getElementById('fabc-canal')?.value.trim();
+  const canal=document.getElementById('fabc-canal')?.value;
+  const skuFiltro=document.getElementById('fabc-sku')?.value.trim().toUpperCase();
   let q=`?empresa_id=eq.${EMPRESA_ID}&limit=10000`;
   if(de)q+=`&data_venda=gte.${de}`;if(ate)q+=`&data_venda=lte.${ate}`;if(canal)q+=`&canal_venda=ilike.*${canal}*`;
   try{
@@ -2230,7 +2235,11 @@ async function loadLancamentos(){
   if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
   const tipo=document.getElementById('flan-tipo')?.value;const sit=document.getElementById('flan-sit')?.value;
   const de=document.getElementById('flan-de')?.value;const ate=document.getElementById('flan-ate')?.value;
+  const cat=document.getElementById('flan-cat')?.value;
   const empQL=buildEmpresaQuery('flan-empresa');
+  // Popular select de categorias
+  const selCat=document.getElementById('flan-cat');
+  if(selCat&&CATEGORIAS.length){const v=selCat.value;selCat.innerHTML='<option value="">Todas</option>'+CATEGORIAS.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');selCat.value=v;}
   let q=`?${empQL}&order=data_vencimento.asc`;
   if(tipo)q+=`&tipo_lancamento=eq.${tipo}`;if(sit)q+=`&situacao=eq.${sit}`;
   if(de)q+=`&data_vencimento=gte.${de}`;if(ate)q+=`&data_vencimento=lte.${ate}`;
@@ -2289,11 +2298,23 @@ function switchCaixa(tab,el){
   document.getElementById('cx-ent-panel').style.display=tab==='entradas'?'':'none';
   document.getElementById('cx-sai-panel').style.display=tab==='saidas'?'':'none';
 }
+function atualizarTotaisCaixa(){
+  const totalEnt=_caixaEntradas.reduce((s,e)=>s+(parseFloat(e.valor_original)||0),0);
+  const totalSai=_caixaSaidas.reduce((s,s2)=>s+(parseFloat(s2.valor_total)||0),0);
+  const saldo=totalEnt-totalSai;
+  const elE=document.getElementById('cx-total-ent');if(elE)elE.textContent=fBRL(totalEnt);
+  const elS=document.getElementById('cx-total-sai');if(elS)elS.textContent=fBRL(totalSai);
+  const elSaldo=document.getElementById('cx-total-saldo');
+  if(elSaldo){elSaldo.textContent=fBRL(saldo);elSaldo.className='kpi-value '+(saldo>=0?'green':'red');}
+}
+
 function renderCaixaEnt(){
+  atualizarTotaisCaixa();
   if(!_caixaEntradas.length){document.getElementById('cx-ent-wrap').innerHTML='<div class="empty"><div class="empty-icon">💵</div><div class="empty-title">Nenhuma entrada</div></div>';return;}
   document.getElementById('cx-ent-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Disponível</th><th></th></tr></thead><tbody>'+_caixaEntradas.map(e=>`<tr class="caixa-entrada"><td>${fDate(e.criado_em?.split('T')[0])}</td><td>${e.cliente||'—'}</td><td><span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></td><td style="color:var(--text3)">${getNomeCat(e.categoria_id)}</td><td style="text-align:right">${fBRL(e.valor_original)}</td><td style="text-align:right;color:var(--green)">${fBRL(e.valor_disponivel)}</td><td><button class="btn btn-danger btn-sm" onclick="excluirEntrada('${e.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
 }
 function renderCaixaSai(){
+  atualizarTotaisCaixa();
   if(!_caixaSaidas.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
   document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_caixaSaidas.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
 }
@@ -2750,6 +2771,33 @@ function getEmpresaFiltro(selId){
 function buildEmpresaQuery(selId){
   const v=getEmpresaFiltro(selId);
   return v?`empresa_id=eq.${v}`:`empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})`;
+}
+
+function renderResumoCategorias(lancamentos){
+  const el=document.getElementById('lan-resumo-cat');if(!el)return;
+  if(!lancamentos||!lancamentos.length){el.innerHTML='';return;}
+  // Agrupar por categoria
+  const grupos={};
+  lancamentos.forEach(l=>{
+    const catId=l.categoria_id||'sem-cat';
+    const catNome=getNomeCat(l.categoria_id)||'Sem categoria';
+    const v=l.tipo==='PAGAR'?-Math.abs(parseFloat(l.valor)||0):Math.abs(parseFloat(l.valor)||0);
+    if(!grupos[catId])grupos[catId]={nome:catNome,total:0,count:0};
+    grupos[catId].total+=v;
+    grupos[catId].count++;
+  });
+  const itens=Object.values(grupos).sort((a,b)=>a.total-b.total);
+  el.innerHTML='<div class="card" style="padding:0;overflow:hidden"><table style="width:100%"><thead><tr>'
+    +'<th style="padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--text3)">Categoria</th>'
+    +'<th style="padding:10px 16px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--text3)">Lançamentos</th>'
+    +'<th style="padding:10px 16px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--text3)">Total</th>'
+    +'</tr></thead><tbody>'
+    +itens.map(i=>`<tr style="border-top:1px solid var(--border)">`
+      +`<td style="padding:10px 16px;font-size:13px">${i.nome}</td>`
+      +`<td style="padding:10px 16px;text-align:right;color:var(--text3);font-size:13px">${i.count}</td>`
+      +`<td style="padding:10px 16px;text-align:right;font-weight:500;color:${i.total>=0?'var(--green)':'var(--red)'};font-size:13px">${fBRL(i.total)}</td>`
+      +`</tr>`).join('')
+    +'</tbody></table></div>';
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
