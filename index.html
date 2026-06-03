@@ -417,66 +417,6 @@ tr:hover td{background:var(--surface2);}
       <button class="btn btn-secondary" onclick="fecharModal('modal-fac-confirmar')">Cancelar</button>
       <button class="btn btn-primary" id="btn-conf-fac" onclick="confirmarEntregaFaccao()">Confirmar e Gerar PDF</button>
     </div>
-  
-
-<!-- VIEW FACÇÃO (substitui o app inteiro para terceiros) -->
-<div id="faccao-view" style="display:none;min-height:100vh;background:var(--bg);flex-direction:column">
-  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between">
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--accent2)">LUME <span style="color:var(--text3);font-size:13px;font-weight:400">· Facção</span></div>
-    <div style="display:flex;align-items:center;gap:12px">
-      <span style="font-size:12px;color:var(--text2)" id="fac-nome-display">—</span>
-      <button class="btn btn-ghost btn-sm" onclick="logoutFaccao()">Sair</button>
-    </div>
-  </div>
-  <div style="padding:20px;flex:1">
-    <!-- Busca SKU -->
-    <div class="card mb16">
-      <div class="card-title">Registrar Entrega</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div class="form-group" style="flex:1;min-width:200px;margin:0">
-          <label class="form-label">Buscar SKU ou OP</label>
-          <input class="form-control" type="text" id="fac-busca" placeholder="Digite o SKU ou número da OP..." oninput="faccaoBuscar()">
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="faccaoSemOP()">+ Entrega sem OP</button>
-      </div>
-      <div id="fac-resultados" style="margin-top:12px"></div>
-    </div>
-
-    <!-- Carrinho -->
-    <div class="card mb16" id="fac-carrinho-card" style="display:none">
-      <div class="card-title">Carrinho de Entrega</div>
-      <div id="fac-carrinho"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border);margin-top:8px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-total">R$ 0,00</div>
-        <button class="btn btn-primary" onclick="abrirConfirmacaoFaccao()">Confirmar Entrega →</button>
-      </div>
-    </div>
-
-    <!-- OPs do terceiro -->
-    <div class="card">
-      <div class="card-title">Minhas Ordens de Produção</div>
-      <div id="fac-ops"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal confirmação entrega facção -->
-<div class="modal-overlay" id="modal-fac-confirmar">
-  <div class="modal">
-    <div class="modal-title">Confirmar Entrega</div>
-    <div class="modal-sub">Revise os itens antes de confirmar</div>
-    <div id="fac-conf-itens" style="margin-bottom:16px"></div>
-    <div class="form-group">
-      <label class="form-label">Observação</label>
-      <input class="form-control" type="text" id="fac-conf-obs" placeholder="Opcional">
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
-      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-conf-total">R$ 0,00</span>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="fecharModal('modal-fac-confirmar')">Cancelar</button>
-      <button class="btn btn-primary" id="btn-conf-fac" onclick="confirmarEntregaFaccao()">Confirmar e Gerar PDF</button>
-    </div>
   </div>
 </div>
 
