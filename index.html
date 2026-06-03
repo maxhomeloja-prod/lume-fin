@@ -1282,16 +1282,29 @@ async function abrirConectarBanco(){
     const d=await r.json();
     if(!d.accessToken)throw new Error('Token não gerado');
     await carregarPluggyScript();
-    const pluggy=new PluggyConnect({connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}});
-    pluggy.open();
+    // PluggyConnect pode estar em window.PluggyConnect ou window.window.PluggyConnect (UMD)
+    const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
+    if(!PC)throw new Error('Pluggy Connect não carregou corretamente');
+    const pluggy=new PC({connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}});
+    if(pluggy.open)pluggy.open();
+    else if(pluggy.init)pluggy.init();
+    else throw new Error('Método de abertura não encontrado');
   }catch(e){alert('Erro ao conectar: '+e.message);}
 }
 async function carregarPluggyScript(){
   return new Promise((resolve,reject)=>{
-    if(window.PluggyConnect)return resolve();
+    const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
+    if(PC)return resolve();
     const s=document.createElement('script');
     s.src='https://cdn.pluggy.ai/pluggy-connect/v2.1.0/pluggy-connect.js';
-    s.onload=resolve;s.onerror=()=>reject(new Error('Erro ao carregar Pluggy'));
+    s.onload=()=>{
+      // Após carregar, expor globalmente se necessário
+      if(!window.PluggyConnect&&window.window&&window.window.PluggyConnect){
+        window.PluggyConnect=window.window.PluggyConnect;
+      }
+      resolve();
+    };
+    s.onerror=()=>reject(new Error('Erro ao carregar Pluggy'));
     document.head.appendChild(s);
   });
 }
@@ -1307,8 +1320,10 @@ async function reconectarBanco(itemId){
     const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:EMPRESA_ID})});
     const d=await r.json();
     await carregarPluggyScript();
-    const pluggy=new PluggyConnect({connectToken:d.accessToken,updateItem:itemId,onSuccess:()=>loadContas(),onError:e=>console.error(e),onClose:()=>{}});
-    pluggy.open();
+    const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
+    if(!PC)throw new Error('Pluggy Connect não carregou');
+    const pluggy=new PC({connectToken:d.accessToken,updateItem:itemId,onSuccess:()=>loadContas(),onError:e=>console.error(e),onClose:()=>{}});
+    if(pluggy.open)pluggy.open();else if(pluggy.init)pluggy.init();
   }catch(e){alert('Erro: '+e.message);}
 }
 async function desativarConta(id){
