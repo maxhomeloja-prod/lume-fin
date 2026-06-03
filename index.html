@@ -731,8 +731,7 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Categorização</div><div class="page-sub">Transações bancárias pendentes</div></div>
         <div style="display:flex;gap:8px">
-          <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fsync-empresa" onchange="()"><option value="">Todas</option></select></div>
-        <button class="btn btn-primary btn-sm" id="btn-sync" onclick="sincronizarBanco()">⚡ Sincronizar Banco</button>
+          
           <button class="btn btn-secondary btn-sm" onclick="loadCategorizacao()">↻ Atualizar</button>
         </div>
       </div>
@@ -1111,7 +1110,7 @@ function atualizarEmpresaUI(){
   const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'—';
   // Preencher selects de empresa nas abas financeiras
   const opts='<option value="">Todas</option>'+EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  ['fcat-empresa','fbal-empresa','flan-empresa','fsync-empresa','fcontas-empresa'].forEach(id=>{
+  ['fcat-empresa','fbal-empresa','flan-empresa','fcontas-empresa'].forEach(id=>{
     const sel=document.getElementById(id);if(sel)sel.innerHTML=opts;
   });
 }
@@ -2027,17 +2026,6 @@ function renderABCChart(){
 }
 
 // ── FINANCEIRO ────────────────────────────────────────────────
-async function sincronizarBanco(){
-  const btn=document.getElementById('btn-sync');btn.textContent='⏳ Sincronizando...';btn.disabled=true;
-  try{
-    const syncEmp=document.getElementById('fsync-empresa')?.value||EMPRESA_ID;
-    const r=await fetch(`${WORKER}/sync?empresa_id=${syncEmp}`);
-    const d=await r.json();const novas=d.total_novas||0;
-    btn.textContent=`✓ ${novas} novas`;
-    setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},3000);
-    if(novas>0)await loadCategorizacao();
-  }catch(e){btn.textContent='⚠ Erro';btn.disabled=false;}
-}
 
 async function loadCategorizacao(){
   if(!EMPRESA_ID){semEmpresaMsg('cat-wrap');return;}
