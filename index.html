@@ -730,11 +730,13 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Categorização</div><div class="page-sub">Transações bancárias pendentes</div></div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" id="btn-sync" onclick="sincronizarBanco()">⚡ Sincronizar Banco</button>
+          <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fsync-empresa" onchange="()"><option value="">Todas</option></select></div>
+        <button class="btn btn-primary btn-sm" id="btn-sync" onclick="sincronizarBanco()">⚡ Sincronizar Banco</button>
           <button class="btn btn-secondary btn-sm" onclick="loadCategorizacao()">↻ Atualizar</button>
         </div>
       </div>
       <div class="filters">
+        <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fcat-empresa" onchange="loadCategorizacao()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">Tipo</span><select class="filter-control" id="fcat-tipo" onchange="renderCategorizacao()"><option value="">Todos</option><option value="CREDIT">Crédito</option><option value="DEBIT">Débito</option></select></div>
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fcat-de" onchange="renderCategorizacao()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fcat-ate" onchange="renderCategorizacao()"></div>
@@ -750,6 +752,7 @@ tr:hover td{background:var(--surface2);}
         <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
       </div>
       <div class="filters">
+        <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fbal-empresa" onchange="loadBalancete()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fbal-de"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fbal-ate"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
@@ -771,6 +774,7 @@ tr:hover td{background:var(--surface2);}
         <button class="btn btn-primary btn-sm" onclick="abrirModalLancamento()">+ Novo Lançamento</button>
       </div>
       <div class="filters">
+        <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="flan-empresa" onchange="loadLancamentos()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">Tipo</span><select class="filter-control" id="flan-tipo" onchange="loadLancamentos()"><option value="">Todos</option><option value="PAGAR">A Pagar</option><option value="RECEBER">A Receber</option></select></div>
         <div class="filter-group"><span class="filter-label">Situação</span><select class="filter-control" id="flan-sit" onchange="loadLancamentos()"><option value="EM_ABERTO">Em Aberto</option><option value="">Todos</option><option value="PAGO_RECEBIDO">Pago</option></select></div>
         <div class="filter-group"><span class="filter-label">Vencimento de</span><input type="date" class="filter-control" id="flan-de" onchange="loadLancamentos()"></div>
@@ -1104,6 +1108,11 @@ async function carregarBase(){
 function atualizarEmpresaUI(){
   const emp=EMPRESAS.find(e=>e.id===EMPRESA_ID);
   const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'—';
+  // Preencher selects de empresa nas abas financeiras
+  const opts='<option value="">Todas</option>'+EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  ['fcat-empresa','fbal-empresa','flan-empresa','fsync-empresa'].forEach(id=>{
+    const sel=document.getElementById(id);if(sel)sel.innerHTML=opts;
+  });
 }
 
 async function trocarEmpresa(id){
@@ -2018,7 +2027,8 @@ function renderABCChart(){
 async function sincronizarBanco(){
   const btn=document.getElementById('btn-sync');btn.textContent='⏳ Sincronizando...';btn.disabled=true;
   try{
-    const r=await fetch(`${WORKER}/sync?empresa_id=${EMPRESA_ID}`);
+    const syncEmp=document.getElementById('fsync-empresa')?.value||EMPRESA_ID;
+    const r=await fetch(`${WORKER}/sync?empresa_id=${syncEmp}`);
     const d=await r.json();const novas=d.total_novas||0;
     btn.textContent=`✓ ${novas} novas`;
     setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},3000);
@@ -2032,7 +2042,8 @@ async function loadCategorizacao(){
   if(!wrap)return;
   wrap.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    const result=await sbGet('transacoes',`?empresa_id=eq.${EMPRESA_ID}&status=eq.PENDENTE&order=data.desc&limit=200`);
+    const empQ=buildEmpresaQuery('fcat-empresa');
+    const result=await sbGet('transacoes',`?${empQ}&status=eq.PENDENTE&order=data.desc&limit=200`);
     _transacoesPendentes=Array.isArray(result)?result:[];
     renderCategorizacao();
     const badge=document.getElementById('badge-cat');
@@ -2079,12 +2090,13 @@ async function loadBalancete(){
   const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    let qT=`?empresa_id=eq.${EMPRESA_ID}&status=eq.CONFIRMADA`;
+    const empQB=buildEmpresaQuery('fbal-empresa');
+    let qT=`?${empQB}&status=eq.CONFIRMADA`;
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
-      sbGet('caixa_entradas',`?empresa_id=eq.${EMPRESA_ID}&limit=500`),
-      sbGet('caixa_saidas',`?empresa_id=eq.${EMPRESA_ID}&limit=500`)
+      sbGet('caixa_entradas',`?${empQB.replace('&status=eq.CONFIRMADA','')}&limit=500`),
+      sbGet('caixa_saidas',`?${empQB.replace('&status=eq.CONFIRMADA','')}&limit=500`)
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
@@ -2092,7 +2104,8 @@ async function loadBalancete(){
       ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
-    const saldos=await sbGet('saldos_conta',`?empresa_id=eq.${EMPRESA_ID}&select=saldo_atual,contas_bancarias(banco,nome_conta,tipo)`);
+    const empQBSaldo=buildEmpresaQuery('fbal-empresa');
+    const saldos=await sbGet('saldos_conta',`?${empQBSaldo}&select=saldo_atual,contas_bancarias(banco,nome_conta,tipo)`);
     const cxFis=caixaEnt.reduce((s,e)=>s+e.valor_disponivel,0);
     const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
     document.getElementById('bal-saldos').innerHTML=[
@@ -2129,7 +2142,8 @@ async function loadLancamentos(){
   if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
   const tipo=document.getElementById('flan-tipo')?.value;const sit=document.getElementById('flan-sit')?.value;
   const de=document.getElementById('flan-de')?.value;const ate=document.getElementById('flan-ate')?.value;
-  let q=`?empresa_id=eq.${EMPRESA_ID}&order=data_vencimento.asc`;
+  const empQL=buildEmpresaQuery('flan-empresa');
+  let q=`?${empQL}&order=data_vencimento.asc`;
   if(tipo)q+=`&tipo_lancamento=eq.${tipo}`;if(sit)q+=`&situacao=eq.${sit}`;
   if(de)q+=`&data_vencimento=gte.${de}`;if(ate)q+=`&data_vencimento=lte.${ate}`;
   document.getElementById('lan-wrap').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
@@ -2632,6 +2646,15 @@ function imprimirOP(){
   win.document.close();
 }
 
+
+function getEmpresaFiltro(selId){
+  const val=document.getElementById(selId)?.value;
+  return val||null; // null = todas
+}
+function buildEmpresaQuery(selId){
+  const v=getEmpresaFiltro(selId);
+  return v?`empresa_id=eq.${v}`:`empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})`;
+}
 
 // ── BOOT ──────────────────────────────────────────────────────
 function mostrarLogin(){
