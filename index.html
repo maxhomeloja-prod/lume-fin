@@ -1102,13 +1102,13 @@ async function criarConta(){
 }
 function abrirCadastro(){document.getElementById('login-screen').style.display='none';const el=document.getElementById('modal-cadastro');el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';}
 function fecharCadastro(){document.getElementById('modal-cadastro').style.display='none';document.getElementById('login-screen').style.display='flex';}
-function logout(){localStorage.removeItem('lume_session');SESSION=null;document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
+function logout(){localStorage.removeItem('lume_session');SESSION=null;mostrarLogin();}
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
   try{
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='flex';
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
@@ -1119,13 +1119,12 @@ async function iniciarApp(){
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
-  await carregarBase();
-  await loadDashboard();
+    await carregarBase();
+    await loadDashboard();
   }catch(e){
     console.error('iniciarApp erro:',e);
     localStorage.removeItem('lume_session');
-    document.getElementById('app').style.display='none';
-    document.getElementById('login-screen').style.display='flex';
+    mostrarLogin();
   }
 }
 
@@ -2634,6 +2633,12 @@ function imprimirOP(){
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
+function mostrarLogin(){
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('faccao-view').style.display='none';
+}
+
 window.addEventListener('DOMContentLoaded', async()=>{
   document.getElementById('login-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
   document.getElementById('login-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
@@ -2645,26 +2650,56 @@ window.addEventListener('DOMContentLoaded', async()=>{
   if(savedFac){
     try{
       FACCAO_LOGADO=JSON.parse(savedFac);
-      iniciarFaccaoView();
+      await iniciarFaccaoView();
       return;
-    }catch(e){localStorage.removeItem('lume_faccao');}
+    }catch(e){
+      console.error('Sessão facção inválida:',e);
+      localStorage.removeItem('lume_faccao');
+    }
   }
 
-  // Verificar sessão de empresa
+  // Verificar sessão de empresa — validar token com Supabase antes de usar
   const saved=localStorage.getItem('lume_session');
   if(saved){
     try{
       const sess=JSON.parse(saved);
-      if(sess.expires_at&&Date.now()/1000<sess.expires_at){
-        SESSION=sess;
-        iniciarApp();
+      const agora=Date.now()/1000;
+      // Token expirado — tentar renovar
+      if(sess.expires_at && agora >= sess.expires_at - 60){
+        // Tentar refresh
+        if(sess.refresh_token){
+          const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`,{
+            method:'POST',
+            headers:{apikey:SB_ANON,'Content-Type':'application/json'},
+            body:JSON.stringify({refresh_token:sess.refresh_token})
+          });
+          if(r.ok){
+            const nova=await r.json();
+            SESSION=nova;
+            localStorage.setItem('lume_session',JSON.stringify(nova));
+            await iniciarApp();
+            return;
+          }
+        }
+        // Refresh falhou — limpar e mostrar login
+        localStorage.removeItem('lume_session');
+        mostrarLogin();
         return;
       }
-    }catch(e){}
-    localStorage.removeItem('lume_session');
+      // Token ainda válido
+      if(sess.expires_at && agora < sess.expires_at){
+        SESSION=sess;
+        await iniciarApp();
+        return;
+      }
+    }catch(e){
+      console.error('Sessão inválida:',e);
+      localStorage.removeItem('lume_session');
+    }
   }
-  // Garantir que login está visível
-  document.getElementById('login-screen').style.display='flex';
+
+  // Sem sessão válida — mostrar login
+  mostrarLogin();
 });
 
 
