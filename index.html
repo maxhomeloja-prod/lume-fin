@@ -497,11 +497,8 @@ tr:hover td{background:var(--surface2);}
 
     </nav>
     <div class="topbar-right">
-      <div style="text-align:right">
-        <div class="topbar-user" id="tb-user">—</div>
-        <div class="topbar-empresa" id="tb-empresa">—</div>
-      </div>
-      <select id="sel-empresa" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:5px 8px;border-radius:var(--radius-sm);font-size:11px;outline:none;max-width:140px;" onchange="trocarEmpresa(this.value)"></select>
+      <div class="topbar-user" id="tb-user">—</div>
+      <select id="sel-empresa" style="display:none"></select>
       <button class="btn-logout" onclick="logout()">Sair</button>
     </div>
   </header>
