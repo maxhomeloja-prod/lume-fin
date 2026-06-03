@@ -44,7 +44,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
 /* ── LOGIN ── */
-.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;pointer-events:all;}
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:48px 40px;width:400px;box-shadow:var(--shadow-md);}
 .login-logo{font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:700;color:var(--accent2);letter-spacing:2px;text-align:center;margin-bottom:4px;}
 .login-sub{font-size:12px;color:var(--text3);text-align:center;letter-spacing:1px;text-transform:uppercase;margin-bottom:36px;}
@@ -357,6 +357,66 @@ tr:hover td{background:var(--surface2);}
     <div class="login-link" style="margin-top:12px"><span style="cursor:pointer;color:var(--accent)" onclick="voltarEscolha()">← Voltar</span></div>
   </div>
 </div>
+
+<!-- VIEW FACÇÃO (substitui o app inteiro para terceiros) -->
+<div id="faccao-view" style="display:none;min-height:100vh;background:var(--bg);flex-direction:column">
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--accent2)">LUME <span style="color:var(--text3);font-size:13px;font-weight:400">· Facção</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:12px;color:var(--text2)" id="fac-nome-display">—</span>
+      <button class="btn btn-ghost btn-sm" onclick="logoutFaccao()">Sair</button>
+    </div>
+  </div>
+  <div style="padding:20px;flex:1">
+    <!-- Busca SKU -->
+    <div class="card mb16">
+      <div class="card-title">Registrar Entrega</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="flex:1;min-width:200px;margin:0">
+          <label class="form-label">Buscar SKU ou OP</label>
+          <input class="form-control" type="text" id="fac-busca" placeholder="Digite o SKU ou número da OP..." oninput="faccaoBuscar()">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="faccaoSemOP()">+ Entrega sem OP</button>
+      </div>
+      <div id="fac-resultados" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Carrinho -->
+    <div class="card mb16" id="fac-carrinho-card" style="display:none">
+      <div class="card-title">Carrinho de Entrega</div>
+      <div id="fac-carrinho"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid var(--border);margin-top:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-total">R$ 0,00</div>
+        <button class="btn btn-primary" onclick="abrirConfirmacaoFaccao()">Confirmar Entrega →</button>
+      </div>
+    </div>
+
+    <!-- OPs do terceiro -->
+    <div class="card">
+      <div class="card-title">Minhas Ordens de Produção</div>
+      <div id="fac-ops"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmação entrega facção -->
+<div class="modal-overlay" id="modal-fac-confirmar">
+  <div class="modal">
+    <div class="modal-title">Confirmar Entrega</div>
+    <div class="modal-sub">Revise os itens antes de confirmar</div>
+    <div id="fac-conf-itens" style="margin-bottom:16px"></div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <input class="form-control" type="text" id="fac-conf-obs" placeholder="Opcional">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-conf-total">R$ 0,00</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-fac-confirmar')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-conf-fac" onclick="confirmarEntregaFaccao()">Confirmar e Gerar PDF</button>
+    </div>
+  
 
 <!-- VIEW FACÇÃO (substitui o app inteiro para terceiros) -->
 <div id="faccao-view" style="display:none;min-height:100vh;background:var(--bg);flex-direction:column">
@@ -739,20 +799,7 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fbal-de"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fbal-ate"></div>
-        <div class="filter-group">
-          <span class="filter-label">Empresa / CNPJ</span>
-          <select class="filter-control" id="fbal-empresa" style="min-width:180px">
-            <option value="">Todas as empresas</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:8px;align-self:flex-end">
-          <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">⊞ Visão Semanal</button>
-          <button class="btn btn-primary btn-sm" onclick="loadBalancete()">Aplicar</button>
-        </div>
-      </div>
-      <div id="bal-semanal-wrap" style="display:none" class="card mb16">
-        <div class="card-title">Fluxo Semanal</div>
-        <div class="tbl-wrap" id="bal-semanal-table"></div>
+        <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
       </div>
       <div id="bal-saldos" class="saldo-cards"></div>
       <div class="kpi-grid">
@@ -775,8 +822,6 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Situação</span><select class="filter-control" id="flan-sit" onchange="loadLancamentos()"><option value="EM_ABERTO">Em Aberto</option><option value="">Todos</option><option value="PAGO_RECEBIDO">Pago</option></select></div>
         <div class="filter-group"><span class="filter-label">Vencimento de</span><input type="date" class="filter-control" id="flan-de" onchange="loadLancamentos()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="flan-ate" onchange="loadLancamentos()"></div>
-        <div class="filter-group"><span class="filter-label">Fornecedor / Cliente</span><input type="text" class="filter-control" id="flan-cf-filter" placeholder="Digite para filtrar" oninput="loadLancamentos()" style="min-width:160px"></div>
-        <div class="filter-group"><span class="filter-label">Categoria</span><select class="filter-control" id="flan-cat" onchange="loadLancamentos()" style="min-width:160px"><option value="">Todas</option></select></div>
       </div>
       <div class="grid-3 mb16">
         <div class="kpi"><div class="kpi-label">A Pagar</div><div class="kpi-value red" id="lan-pagar">—</div></div>
@@ -795,14 +840,9 @@ tr:hover td{background:var(--surface2);}
           <button class="btn btn-danger btn-sm" onclick="abrirModalSaida()">− Saída</button>
         </div>
       </div>
-      <div style="display:flex;gap:4px;margin-bottom:0;border-bottom:1px solid var(--border);padding-bottom:0">
+      <div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0">
         <button class="nav-group-btn active" id="tab-cx-ent" onclick="switchCaixa('entradas',this)" style="border-bottom:2px solid var(--accent);border-radius:0;color:var(--accent)">Entradas</button>
         <button class="nav-group-btn" id="tab-cx-sai" onclick="switchCaixa('saidas',this)" style="border-radius:0">Saídas</button>
-      </div>
-      <div class="filters" style="border-radius:0 0 var(--radius) var(--radius);margin-bottom:16px">
-        <div class="filter-group"><span class="filter-label">Tipo</span><select class="filter-control" id="fcx-tipo" onchange="renderCaixaFiltrado()"><option value="">Todos</option><option value="DINHEIRO">Dinheiro</option><option value="CHEQUE">Cheque</option></select></div>
-        <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fcx-de" onchange="renderCaixaFiltrado()"></div>
-        <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fcx-ate" onchange="renderCaixaFiltrado()"></div>
       </div>
       <div id="cx-ent-panel"><div class="card"><div class="tbl-wrap" id="cx-ent-wrap"></div></div></div>
       <div id="cx-sai-panel" style="display:none"><div class="card"><div class="tbl-wrap" id="cx-sai-wrap"></div></div></div>
@@ -985,11 +1025,8 @@ tr:hover td{background:var(--surface2);}
   </div>
 </div>
 
+<script>
 
-
-
-</body>
-</html<script>
 
 // ============================================================
 // CONFIG
@@ -2602,7 +2639,69 @@ window.addEventListener('DOMContentLoaded', async()=>{
   }
 });
 
+
 </script>
 
+
+
+<!-- ── MODAL DETALHE OP ── -->
+<div class="modal-overlay" id="modal-op-detalhe">
+  <div class="modal modal-lg">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+      <div>
+        <div class="modal-title" id="mod-op-num">OP-0000</div>
+        <div id="mod-op-badge" style="margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="imprimirOP()">Imprimir</button>
+        <button class="btn btn-primary btn-sm" id="btn-mod-entrega" onclick="abrirEntregaDaModal()">Registrar Entrega</button>
+        <button class="btn btn-ghost btn-sm" onclick="editarOPDaModal()">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="fecharModal('modal-op-detalhe')">X</button>
+      </div>
+    </div>
+    <div class="modal-sub" id="mod-op-desc">—</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Quantidade</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600" id="mod-op-qtd">—</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Entregue</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--green)" id="mod-op-entregue">—</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Em Aberto</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--amber)" id="mod-op-aberto">—</div>
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px">
+        <span>Progresso</span><span id="mod-op-pct">0%</span>
+      </div>
+      <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div id="mod-op-bar" style="height:100%;border-radius:4px;transition:width .5s;background:var(--green)"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Facção</div><div style="font-size:13px;color:var(--text2)" id="mod-op-faccao">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Preço Unitário</div><div style="font-size:13px;color:var(--accent)" id="mod-op-preco">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Abertura</div><div style="font-size:13px;color:var(--text2)" id="mod-op-abertura">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Previsão</div><div style="font-size:13px;color:var(--text2)" id="mod-op-prev-info">—</div></div>
+      <div style="grid-column:span 2"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Valor Total</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:600;color:var(--green)" id="mod-op-valor-total">—</div></div>
+      <div style="grid-column:span 2" id="mod-op-obs-wrap"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Observação</div><div style="font-size:12px;color:var(--text2)" id="mod-op-obs-txt">—</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border);align-items:center">
+      <span style="font-size:11px;color:var(--text3)">Alterar:</span>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('ABERTA')">Aberta</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
+      <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
+      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary btn-sm" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">Finalizar com Perda</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
