@@ -1106,6 +1106,7 @@ function logout(){localStorage.removeItem('lume_session');SESSION=null;document.
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
+  try{
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
@@ -1120,6 +1121,12 @@ async function iniciarApp(){
 
   await carregarBase();
   await loadDashboard();
+  }catch(e){
+    console.error('iniciarApp erro:',e);
+    localStorage.removeItem('lume_session');
+    document.getElementById('app').style.display='none';
+    document.getElementById('login-screen').style.display='flex';
+  }
 }
 
 async function carregarBase(){
@@ -2628,15 +2635,36 @@ function imprimirOP(){
 
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
-  ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
+  document.getElementById('login-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
+  document.getElementById('login-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
+  document.getElementById('fac-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
+  document.getElementById('fac-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
+
+  // Verificar sessão de facção
+  const savedFac=localStorage.getItem('lume_faccao');
+  if(savedFac){
+    try{
+      FACCAO_LOGADO=JSON.parse(savedFac);
+      iniciarFaccaoView();
+      return;
+    }catch(e){localStorage.removeItem('lume_faccao');}
+  }
+
+  // Verificar sessão de empresa
   const saved=localStorage.getItem('lume_session');
   if(saved){
     try{
       const sess=JSON.parse(saved);
-      if(sess.expires_at&&Date.now()/1000<sess.expires_at){SESSION=sess;iniciarApp();return;}
+      if(sess.expires_at&&Date.now()/1000<sess.expires_at){
+        SESSION=sess;
+        iniciarApp();
+        return;
+      }
     }catch(e){}
     localStorage.removeItem('lume_session');
   }
+  // Garantir que login está visível
+  document.getElementById('login-screen').style.display='flex';
 });
 
 
