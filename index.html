@@ -1480,7 +1480,7 @@ function renderOPs(){
       </div>`;
     }).join('')+'</div>';
   }else{
-    el.innerHTML='<div class="card"><div class="tbl-wrap"><table><thead><tr><th>Nº</th><th>SKU</th><th>Descrição</th><th>Situação</th><th>Terceiro</th><th style="text-align:right">Qtd</th><th style="text-align:right">Entregue</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_ops.map(op=>`<tr>
+    el.innerHTML='<div class="card"><div class="tbl-wrap"><table><thead><tr><th>Nº</th><th>SKU</th><th>Descrição</th><th>Situação</th><th>Terceiro</th><th style="text-align:right">Qtd</th><th style="text-align:right">Entregue</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_ops.map(op=>`<tr style="cursor:pointer" onclick="abrirDetalhesOP('${op.id}')"">
       <td style="font-weight:600;color:var(--accent)">${op.numero}</td>
       <td style="font-weight:500">${op.sku}</td>
       <td style="color:var(--text2);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${op.descricao||'—'}</td>
@@ -1489,7 +1489,7 @@ function renderOPs(){
       <td style="text-align:right">${fN(op.quantidade)}</td>
       <td style="text-align:right;color:var(--green)">${fN(op.quantidade_entregue)}</td>
       <td style="text-align:right">${op.preco_unitario?fBRL(op.quantidade*op.preco_unitario):'—'}</td>
-      <td style="display:flex;gap:4px;padding:8px 6px">
+      <td style="display:flex;gap:4px;padding:8px 6px" onclick="event.stopPropagation()">
         <button class="btn btn-primary btn-sm" onclick="abrirEntregaOP('${op.id}',event)">Entrega</button>
         <button class="btn btn-ghost btn-sm" onclick="abrirModalOP('${op.id}',event)">✎</button>
         <button class="btn btn-danger btn-sm" onclick="excluirOP('${op.id}',event)">✕</button>
@@ -1501,8 +1501,31 @@ function renderOPs(){
 function abrirDetalhesOP(id,e){
   if(e){e.stopPropagation();}
   const op=_ops.find(o=>o.id===id);if(!op)return;
-  // Mostrar modal de entrega
-  abrirEntregaOPDireto(op);
+  _opDetalheAtual=op;
+  const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
+  const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
+  const aberto=op.quantidade-op.quantidade_entregue;
+  const corSit={ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa',CONCLUIDA:'#00d4a0',CANCELADA:'#4a7a9b'};
+
+  document.getElementById('mod-op-num').textContent=op.numero;
+  document.getElementById('mod-op-badge').innerHTML=opBadge(op.situacao);
+  document.getElementById('mod-op-desc').textContent=op.sku+(op.descricao?' — '+op.descricao:'');
+  document.getElementById('mod-op-qtd').textContent=fN(op.quantidade);
+  document.getElementById('mod-op-entregue').textContent=fN(op.quantidade_entregue);
+  document.getElementById('mod-op-aberto').textContent=fN(aberto);
+  document.getElementById('mod-op-pct').textContent=pct+'%';
+  document.getElementById('mod-op-bar').style.width=pct+'%';
+  document.getElementById('mod-op-bar').style.background=corSit[op.situacao]||'var(--green)';
+  document.getElementById('mod-op-faccao').textContent=tercMap[op.terceiro_id]||'—';
+  document.getElementById('mod-op-preco').textContent=op.preco_unitario?fBRL(op.preco_unitario):'—';
+  document.getElementById('mod-op-abertura').textContent=fDate(op.data_abertura);
+  document.getElementById('mod-op-prev-info').textContent=fDate(op.data_previsao);
+  document.getElementById('mod-op-valor-total').textContent=op.preco_unitario?fBRL(op.quantidade*op.preco_unitario):'—';
+  const obsWrap=document.getElementById('mod-op-obs-wrap');
+  if(op.observacao){document.getElementById('mod-op-obs-txt').textContent=op.observacao;obsWrap.style.display='';}
+  else obsWrap.style.display='none';
+  document.getElementById('btn-mod-entrega').style.display=(op.situacao==='CONCLUIDA'||op.situacao==='CANCELADA')?'none':'';
+  abrirModal('modal-op-detalhe');
 }
 
 function abrirModalOP(id,e){
