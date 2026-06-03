@@ -1108,10 +1108,12 @@ function logout(){localStorage.removeItem('lume_session');SESSION=null;mostrarLo
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
-  if(!SESSION?.access_token){return;}
+  console.log('iniciarApp: início');
+  if(!SESSION?.access_token){console.log('iniciarApp: sem token');return;}
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
+  console.log('iniciarApp: app visível');
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
   const fd=d=>d.toISOString().split('T')[0];
@@ -1120,9 +1122,16 @@ async function iniciarApp(){
   document.getElementById('sai-data').value=fd(hoje);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
+  console.log('iniciarApp: datas setadas, chamando carregarBase...');
 
-  await carregarBase();
-  await loadDashboard();
+  try {
+    await carregarBase();
+    console.log('iniciarApp: carregarBase OK, EMPRESA_ID='+EMPRESA_ID);
+    await loadDashboard();
+    console.log('iniciarApp: loadDashboard OK');
+  } catch(e) {
+    console.error('iniciarApp ERRO:', e.message, e.stack);
+  }
 }
 
 async function carregarBase(){
