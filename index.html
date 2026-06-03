@@ -1090,7 +1090,7 @@ async function carregarBase(){
   if(EMPRESA_ID) sel.value=EMPRESA_ID;
   atualizarEmpresaUI();
 
-  try{CATEGORIAS=await sbGet('categorias','?ativa=eq.true&order=tipo,nome');}catch(e){console.error('categorias erro:',e);CATEGORIAS=[];}
+  try{CATEGORIAS=await sbGet('categorias','?ativa=eq.true&global=eq.true&order=tipo,nome');}catch(e){console.error('categorias erro:',e);CATEGORIAS=[];}
   CATEGORIAS.forEach(c=>{if(c.nome.includes('Transferência')||c.nome.includes('Outras'))CATS_ESPECIAIS.add(c.id);});
   preencherSelects();
 
