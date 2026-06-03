@@ -317,10 +317,10 @@ tr:hover td{background:var(--surface2);}
     <div class="login-logo">LUME</div>
     <div class="login-sub">Sistema de Gestão Empresarial</div>
     <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
-      <button class="login-btn" id="btn-ir-empresa">🏢 Entrar como Empresa</button>
-      <button class="login-btn" id="btn-ir-faccao" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2)">🧵 Entrar como Facção</button>
+      <button class="login-btn" onclick="mostrarLoginEmpresa()">🏢 Entrar como Empresa</button>
+      <button class="login-btn" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2)" onclick="mostrarLoginFaccao()">🧵 Entrar como Facção</button>
     </div>
-    <div class="login-link" style="margin-top:20px">Não tem conta? <span id="btn-criar-conta" style="cursor:pointer;color:var(--accent);text-decoration:underline">Criar conta gratuita</span></div>
+    <div class="login-link" style="margin-top:20px">Não tem conta? <span style="cursor:pointer;color:var(--accent);text-decoration:underline" onclick="abrirCadastro()">Criar conta gratuita</span></div>
   </div>
 
   <!-- Login empresa -->
@@ -335,9 +335,9 @@ tr:hover td{background:var(--surface2);}
       <label class="login-label">Senha</label>
       <input class="login-input" type="password" id="login-senha" placeholder="••••••••" autocomplete="current-password">
     </div>
-    <button class="login-btn" id="btn-login-empresa">Entrar</button>
+    <button class="login-btn" onclick="fazerLogin()">Entrar</button>
     <div class="login-err" id="login-err"></div>
-    <div class="login-link" style="margin-top:12px"><span id="btn-voltar-empresa" style="cursor:pointer;color:var(--accent)">← Voltar</span></div>
+    <div class="login-link" style="margin-top:12px"><span style="cursor:pointer;color:var(--accent)" onclick="voltarEscolha()">← Voltar</span></div>
   </div>
 
   <!-- Login facção -->
@@ -352,9 +352,9 @@ tr:hover td{background:var(--surface2);}
       <label class="login-label">Senha</label>
       <input class="login-input" type="password" id="fac-senha" placeholder="••••••••">
     </div>
-    <button class="login-btn" id="btn-login-faccao">Entrar</button>
+    <button class="login-btn" onclick="loginFaccao()">Entrar</button>
     <div class="login-err" id="fac-err"></div>
-    <div class="login-link" style="margin-top:12px"><span id="btn-voltar-faccao" style="cursor:pointer;color:var(--accent)">← Voltar</span></div>
+    <div class="login-link" style="margin-top:12px"><span style="cursor:pointer;color:var(--accent)" onclick="voltarEscolha()">← Voltar</span></div>
   </div>
 </div>
 
