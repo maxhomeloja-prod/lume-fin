@@ -2625,5 +2625,64 @@ window.addEventListener('DOMContentLoaded', async function(){
 
 
 
+<!-- ── MODAL DETALHE OP ── -->
+<div class="modal-overlay" id="modal-op-detalhe">
+  <div class="modal modal-lg">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+      <div>
+        <div class="modal-title" id="mod-op-num">OP-0000</div>
+        <div id="mod-op-badge" style="margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="imprimirOP()">🖨 Imprimir</button>
+        <button class="btn btn-primary btn-sm" id="btn-mod-entrega" onclick="abrirEntregaDaModal()">📦 Registrar Entrega</button>
+        <button class="btn btn-ghost btn-sm" onclick="editarOPDaModal()">✎ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="fecharModal('modal-op-detalhe')">✕</button>
+      </div>
+    </div>
+    <div class="modal-sub" id="mod-op-desc">—</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Quantidade</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600" id="mod-op-qtd">—</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Entregue</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--green)" id="mod-op-entregue">—</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Em Aberto</div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--amber)" id="mod-op-aberto">—</div>
+      </div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px">
+        <span>Progresso</span><span id="mod-op-pct">0%</span>
+      </div>
+      <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+        <div id="mod-op-bar" style="height:100%;border-radius:4px;transition:width .5s;background:var(--green)"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Facção</div><div style="font-size:13px;color:var(--text2)" id="mod-op-faccao">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Preço Unitário</div><div style="font-size:13px;color:var(--accent)" id="mod-op-preco">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Abertura</div><div style="font-size:13px;color:var(--text2)" id="mod-op-abertura">—</div></div>
+      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Previsão</div><div style="font-size:13px;color:var(--text2)" id="mod-op-prev-info">—</div></div>
+      <div style="grid-column:span 2"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Valor Total</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:600;color:var(--green)" id="mod-op-valor-total">—</div></div>
+      <div style="grid-column:span 2" id="mod-op-obs-wrap"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Observação</div><div style="font-size:12px;color:var(--text2)" id="mod-op-obs-txt">—</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border);align-items:center">
+      <span style="font-size:11px;color:var(--text3)">Alterar:</span>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('ABERTA')">Aberta</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
+      <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
+      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary btn-sm" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">✓ Finalizar com Perda</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
