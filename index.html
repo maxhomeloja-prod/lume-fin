@@ -44,7 +44,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
 /* ── LOGIN ── */
-.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;align-items:center;justify-content:center;}
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:48px 40px;width:400px;box-shadow:var(--shadow-md);}
 .login-logo{font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:700;color:var(--accent2);letter-spacing:2px;text-align:center;margin-bottom:4px;}
 .login-sub{font-size:12px;color:var(--text3);text-align:center;letter-spacing:1px;text-transform:uppercase;margin-bottom:36px;}
@@ -307,58 +307,7 @@ tr:hover td{background:var(--surface2);}
   .page{padding:14px;}
 }
 </style>
-<script>
-// Executar imediatamente — antes do DOM carregar
-(function(){
-  var loginEl = null;
-  function getLogin(){ return loginEl || (loginEl = document.getElementById('login-screen')); }
-  
-  // Aguardar DOM e então decidir
-  document.addEventListener('DOMContentLoaded', function(){
-    var loginScreen = document.getElementById('login-screen');
-    if(!loginScreen) return;
-    
-    // Verificar sessões salvas
-    var hasFaccao = false;
-    var hasEmpresa = false;
-    
-    try {
-      var savedFac = localStorage.getItem('lume_faccao');
-      if(savedFac){ JSON.parse(savedFac); hasFaccao = true; }
-    } catch(e){ localStorage.removeItem('lume_faccao'); }
-    
-    try {
-      var saved = localStorage.getItem('lume_session');
-      if(saved){
-        var sess = JSON.parse(saved);
-        if(sess.expires_at && Date.now()/1000 < sess.expires_at){ hasEmpresa = true; }
-        else { localStorage.removeItem('lume_session'); }
-      }
-    } catch(e){ localStorage.removeItem('lume_session'); }
-    
-    // Se não tem sessão válida, mostrar login imediatamente
-    if(!hasFaccao && !hasEmpresa){
-      loginScreen.style.display = 'flex';
-    }
-    // Se tem sessão, o boot principal vai cuidar — mas garantir visibilidade em 2s
-    // caso o boot falhe
-    else {
-      setTimeout(function(){
-        var app = document.getElementById('app');
-        var faccao = document.getElementById('faccao-view');
-        var appVis = app && app.style.display === 'flex';
-        var facVis = faccao && faccao.style.display === 'flex';
-        if(!appVis && !facVis){
-          // Boot falhou — mostrar login
-          localStorage.removeItem('lume_session');
-          localStorage.removeItem('lume_faccao');
-          loginScreen.style.display = 'flex';
-        }
-      }, 3000); // aguarda 3s para o boot terminar
-    }
-  });
-})();
-</script>
+
 </head>
 <body>
 
@@ -532,7 +481,7 @@ tr:hover td{background:var(--surface2);}
 </div>
 
 <!-- APP -->
-<div class="app" id="app">
+<div class="app" id="app" style="display:none">
 
   <!-- TOPBAR -->
   <header class="topbar">
@@ -1080,6 +1029,7 @@ tr:hover td{background:var(--surface2);}
 <script>
 
 
+
 // ============================================================
 // CONFIG
 // ============================================================
@@ -1158,12 +1108,9 @@ function logout(){localStorage.removeItem('lume_session');SESSION=null;mostrarLo
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
-  // Primeiro verificar se a sessão é válida antes de esconder o login
-  if(!SESSION?.access_token){mostrarLogin();return;}
-
+  if(!SESSION?.access_token){return;}
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
-  document.getElementById('faccao-view').style.display='none';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
@@ -2682,6 +2629,7 @@ function imprimirOP(){
   win.document.close();
 }
 
+
 // ── BOOT ──────────────────────────────────────────────────────
 function mostrarLogin(){
   document.getElementById('login-screen').style.display='flex';
@@ -2689,132 +2637,44 @@ function mostrarLogin(){
   document.getElementById('faccao-view').style.display='none';
 }
 
-window.addEventListener('DOMContentLoaded', async()=>{
+window.addEventListener('DOMContentLoaded', async function(){
   document.getElementById('login-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
   document.getElementById('login-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
   document.getElementById('fac-email')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
   document.getElementById('fac-senha')?.addEventListener('keydown',e=>{if(e.key==='Enter')loginFaccao();});
 
   // Verificar sessão de facção
-  const savedFac=localStorage.getItem('lume_faccao');
-  if(savedFac){
-    try{
+  try{
+    const savedFac=localStorage.getItem('lume_faccao');
+    if(savedFac){
       FACCAO_LOGADO=JSON.parse(savedFac);
       await iniciarFaccaoView();
       return;
-    }catch(e){
-      console.error('Sessão facção inválida:',e);
-      localStorage.removeItem('lume_faccao');
     }
-  }
+  }catch(e){localStorage.removeItem('lume_faccao');}
 
-  // Verificar sessão de empresa — validar token com Supabase antes de usar
-  const saved=localStorage.getItem('lume_session');
-  if(saved){
-    try{
+  // Verificar sessão de empresa
+  try{
+    const saved=localStorage.getItem('lume_session');
+    if(saved){
       const sess=JSON.parse(saved);
-      const agora=Date.now()/1000;
-      // Token expirado — tentar renovar
-      if(sess.expires_at && agora >= sess.expires_at - 60){
-        // Tentar refresh
-        if(sess.refresh_token){
-          const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`,{
-            method:'POST',
-            headers:{apikey:SB_ANON,'Content-Type':'application/json'},
-            body:JSON.stringify({refresh_token:sess.refresh_token})
-          });
-          if(r.ok){
-            const nova=await r.json();
-            SESSION=nova;
-            localStorage.setItem('lume_session',JSON.stringify(nova));
-            await iniciarApp();
-            return;
-          }
-        }
-        // Refresh falhou — limpar e mostrar login
-        localStorage.removeItem('lume_session');
-        mostrarLogin();
-        return;
-      }
-      // Token ainda válido
-      if(sess.expires_at && agora < sess.expires_at){
+      if(sess.expires_at && Date.now()/1000 < sess.expires_at){
         SESSION=sess;
         await iniciarApp();
         return;
       }
-    }catch(e){
-      console.error('Sessão inválida:',e);
       localStorage.removeItem('lume_session');
     }
-  }
+  }catch(e){localStorage.removeItem('lume_session');}
 
-  // Sem sessão válida — mostrar login
+  // Sem sessão — mostrar login
   mostrarLogin();
 });
-
 
 </script>
 
 
 
-<!-- ── MODAL DETALHE OP ── -->
-<div class="modal-overlay" id="modal-op-detalhe">
-  <div class="modal modal-lg">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
-      <div>
-        <div class="modal-title" id="mod-op-num">OP-0000</div>
-        <div id="mod-op-badge" style="margin-top:4px"></div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" onclick="imprimirOP()">Imprimir</button>
-        <button class="btn btn-primary btn-sm" id="btn-mod-entrega" onclick="abrirEntregaDaModal()">Registrar Entrega</button>
-        <button class="btn btn-ghost btn-sm" onclick="editarOPDaModal()">Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="fecharModal('modal-op-detalhe')">X</button>
-      </div>
-    </div>
-    <div class="modal-sub" id="mod-op-desc">—</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
-      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Quantidade</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600" id="mod-op-qtd">—</div>
-      </div>
-      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Entregue</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--green)" id="mod-op-entregue">—</div>
-      </div>
-      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:4px">Em Aberto</div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;color:var(--amber)" id="mod-op-aberto">—</div>
-      </div>
-    </div>
-    <div style="margin-bottom:20px">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px">
-        <span>Progresso</span><span id="mod-op-pct">0%</span>
-      </div>
-      <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
-        <div id="mod-op-bar" style="height:100%;border-radius:4px;transition:width .5s;background:var(--green)"></div>
-      </div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
-      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Facção</div><div style="font-size:13px;color:var(--text2)" id="mod-op-faccao">—</div></div>
-      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Preço Unitário</div><div style="font-size:13px;color:var(--accent)" id="mod-op-preco">—</div></div>
-      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Abertura</div><div style="font-size:13px;color:var(--text2)" id="mod-op-abertura">—</div></div>
-      <div><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Previsão</div><div style="font-size:13px;color:var(--text2)" id="mod-op-prev-info">—</div></div>
-      <div style="grid-column:span 2"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Valor Total</div><div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:600;color:var(--green)" id="mod-op-valor-total">—</div></div>
-      <div style="grid-column:span 2" id="mod-op-obs-wrap"><div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:3px">Observação</div><div style="font-size:12px;color:var(--text2)" id="mod-op-obs-txt">—</div></div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--border);align-items:center">
-      <span style="font-size:11px;color:var(--text3)">Alterar:</span>
-      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('ABERTA')">Aberta</button>
-      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
-      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
-      <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
-      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
-      <div style="margin-left:auto">
-        <button class="btn btn-primary btn-sm" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">Finalizar com Perda</button>
-      </div>
-    </div>
-  </div>
-</div>
+
 </body>
 </html>
