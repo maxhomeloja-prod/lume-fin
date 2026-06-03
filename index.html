@@ -1106,9 +1106,12 @@ function logout(){localStorage.removeItem('lume_session');SESSION=null;mostrarLo
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
-  try{
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').style.display='flex';
+  // Primeiro verificar se a sessão é válida antes de esconder o login
+  if(!SESSION?.access_token){mostrarLogin();return;}
+
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('faccao-view').style.display='none';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
@@ -1119,13 +1122,8 @@ async function iniciarApp(){
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
-    await carregarBase();
-    await loadDashboard();
-  }catch(e){
-    console.error('iniciarApp erro:',e);
-    localStorage.removeItem('lume_session');
-    mostrarLogin();
-  }
+  await carregarBase();
+  await loadDashboard();
 }
 
 async function carregarBase(){
