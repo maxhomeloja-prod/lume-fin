@@ -2128,8 +2128,9 @@ function renderBalancete(){
     const cat=CATEGORIAS.find(c=>c.id===catId);let nomeFinal,tipoFinal,key;
     if(ehEsp){key='ESP::'+catId;nomeFinal=cat?.nome||'Outros';tipoFinal=cat?.tipo||(t.valor>=0?'RECEITA':'DESPESA');}
     else{if(cat?.categoria_pai_id){const pai=CATEGORIAS.find(c=>c.id===cat.categoria_pai_id);nomeFinal=pai?.nome||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=cat?.nome||'(Sem categoria)';tipoFinal=cat?.tipo||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
-    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp};
+    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,trans:[]};
     agrupado[key].total+=t.valor;
+    agrupado[key].trans.push(t);
     if(!ehEsp){countT++;if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=Math.abs(t.valor);}
   });
   const saldo=totalRec-totalDesp;
@@ -2137,12 +2138,93 @@ function renderBalancete(){
   document.getElementById('bal-desp').textContent=fBRL(totalDesp);
   document.getElementById('bal-count').textContent=fN(countT);
   const sEl=document.getElementById('bal-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
-  const desp=Object.values(agrupado).filter(g=>g.tipo==='DESPESA'&&!g.especial).sort((a,b)=>a.total-b.total);
-  const rec=Object.values(agrupado).filter(g=>g.tipo==='RECEITA'&&!g.especial).sort((a,b)=>b.total-a.total);
-  const esp=Object.values(agrupado).filter(g=>g.especial);
-  function secao(titulo,itens,cls){if(!itens.length)return'';const sub=itens.reduce((s,i)=>s+Math.abs(i.total),0);return`<div class="bal-section"><div class="bal-section-title">${titulo}</div><div class="bal-table">${itens.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val ${cls}">${fBRL(i.total)}</span></div>`).join('')}<div class="bal-row bal-subtotal"><span class="bal-row-name">Total ${titulo}</span><span class="bal-row-val ${cls}">${fBRL(sub)}</span></div></div></div>`;}
-  document.getElementById('bal-corpo').innerHTML=secao('Receitas',rec,'recei')+secao('Despesas',desp,'desp')+(esp.length?`<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transferências e Outros</div><div class="bal-table">${esp.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val" style="color:var(--text2)">${fBRL(i.total)}</span></div>`).join('')}</div></div>`:'');
+  const desp=Object.entries(agrupado).filter(([,g])=>g.tipo==='DESPESA'&&!g.especial).sort((a,b)=>a[1].total-b[1].total);
+  const rec=Object.entries(agrupado).filter(([,g])=>g.tipo==='RECEITA'&&!g.especial).sort((a,b)=>b[1].total-a[1].total);
+  const esp=Object.entries(agrupado).filter(([,g])=>g.especial);
+
+  function buildTransRows(trans){
+    return trans.map(t=>`<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2)">
+      <span>${fDate(t.data)} · ${t.descricao||'—'}</span>
+      <span style="color:${t.valor>=0?'var(--green)':'var(--red)'}">${fBRL(t.valor)}</span>
+    </div>`).join('');
+  }
+
+  function secaoHTML(titulo,pares,cls){
+    if(!pares.length)return'';
+    const sub=pares.reduce((s,[,g])=>s+Math.abs(g.total),0);
+    const linhas=pares.map(([key,g])=>{
+      const rowId='bal-row-'+btoa(key).replace(/[^a-zA-Z0-9]/g,'').slice(0,12);
+      return`<div class="bal-row" style="cursor:pointer" onclick="toggleBalRow('${rowId}')">
+        <span class="bal-row-name">▶ ${g.nome}</span>
+        <span class="bal-row-val ${cls}">${fBRL(g.total)}</span>
+      </div>
+      <div id="${rowId}" style="display:none">${buildTransRows(g.trans)}</div>`;
+    }).join('');
+    return`<div class="bal-section"><div class="bal-section-title">${titulo}</div><div class="bal-table">${linhas}<div class="bal-row bal-subtotal"><span class="bal-row-name">Total ${titulo}</span><span class="bal-row-val ${cls}">${fBRL(sub)}</span></div></div></div>`;
+  }
+
+  if(_balSemanal){
+    renderBalanceteSemanal(agrupado);
+    return;
+  }
+
+  document.getElementById('bal-corpo').innerHTML=
+    secaoHTML('Receitas',rec,'recei')+
+    secaoHTML('Despesas',desp,'desp')+
+    (esp.length?`<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transferências e Outros</div><div class="bal-table">${esp.map(([key,g])=>`<div class="bal-row"><span class="bal-row-name">${g.nome}</span><span class="bal-row-val" style="color:var(--text2)">${fBRL(g.total)}</span></div>`).join('')}</div></div>`:'');
 }
+
+function toggleBalRow(id){
+  const el=document.getElementById(id);if(!el)return;
+  const visivel=el.style.display!=='none';
+  el.style.display=visivel?'none':'';
+  // Atualizar seta
+  const row=el.previousElementSibling;
+  if(row){const nome=row.querySelector('.bal-row-name');if(nome)nome.textContent=nome.textContent.replace(visivel?'▼':'▶',visivel?'▶':'▼');}
+}
+
+let _balSemanal=false;
+function toggleBalSemanal(){
+  _balSemanal=!_balSemanal;
+  const btn=document.getElementById('btn-bal-semanal');
+  if(btn){btn.textContent=_balSemanal?'📋 Visão Agrupada':'📅 Visão Semanal';btn.style.borderColor=_balSemanal?'var(--accent)':'';}
+  renderBalancete();
+}
+
+function renderBalanceteSemanal(agrupado){
+  // Agrupar transações por semana
+  const semanas={};
+  _balTransacoes.forEach(t=>{
+    if(!t.data)return;
+    const d=new Date(t.data+'T12:00:00');
+    const dow=d.getDay();
+    const seg=new Date(d);seg.setDate(d.getDate()-(dow===0?6:dow-1));
+    const key=seg.toISOString().split('T')[0];
+    if(!semanas[key])semanas[key]={rec:0,desp:0,trans:[]};
+    const ehEsp=CATS_ESPECIAIS.has(t.categoria_id);
+    if(!ehEsp){if(t.valor>=0)semanas[key].rec+=t.valor;else semanas[key].desp+=Math.abs(t.valor);}
+    semanas[key].trans.push(t);
+  });
+  const semOrdenadas=Object.entries(semanas).sort((a,b)=>a[0].localeCompare(b[0]));
+  let html='<div class="bal-section"><div class="bal-section-title">Semanas</div><div class="bal-table">';
+  semOrdenadas.forEach(([seg,s])=>{
+    const fim=new Date(seg+'T12:00:00');fim.setDate(fim.getDate()+6);
+    const label=fDate(seg)+' – '+fDate(fim.toISOString().split('T')[0]);
+    const saldo=s.rec-s.desp;
+    const rowId='sem-'+seg.replace(/-/g,'');
+    html+=`<div class="bal-row" style="cursor:pointer" onclick="toggleBalRow('${rowId}')">
+      <span class="bal-row-name">▶ ${label}</span>
+      <span class="bal-row-val" style="color:${saldo>=0?'var(--green)':'var(--red)'}">Rec: ${fBRL(s.rec)} | Desp: ${fBRL(s.desp)} | Saldo: ${fBRL(saldo)}</span>
+    </div>
+    <div id="${rowId}" style="display:none">${s.trans.map(t=>`<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2)">
+      <span>${fDate(t.data)} · ${t.descricao||'—'}</span>
+      <span style="color:${t.valor>=0?'var(--green)':'var(--red)'}">${fBRL(t.valor)}</span>
+    </div>`).join('')}</div>`;
+  });
+  html+='</div></div>';
+  document.getElementById('bal-corpo').innerHTML=html;
+}
+
 
 async function loadLancamentos(){
   if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
@@ -2292,6 +2374,7 @@ async function loadPerfil(){
 }
 async function salvarPerfil(){
   const body={
+    id:SESSION.user.id,
     nome:document.getElementById('pf-nome')?.value.trim(),
     telefone:document.getElementById('pf-tel')?.value.trim(),
     razao_social:document.getElementById('pf-rs')?.value.trim(),
@@ -2308,14 +2391,21 @@ async function salvarPerfil(){
   const completo=!!(body.razao_social&&body.cnpj&&body.cidade);
   body.cadastro_completo=completo;
   try{
-    await sbPatch('profiles',`id=eq.${SESSION.user.id}`,body);
+    // UPSERT — cria se não existe, atualiza se existe
+    const r=await fetch(`${SB_URL}/rest/v1/profiles`,{
+      method:'POST',
+      headers:{
+        apikey:SB_ANON,
+        Authorization:`Bearer ${SESSION.access_token}`,
+        'Content-Type':'application/json',
+        'Prefer':'resolution=merge-duplicates,return=minimal'
+      },
+      body:JSON.stringify(body)
+    });
+    if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
     alert('Perfil salvo!');
     document.getElementById('banner-incomplete').style.display=completo?'none':'flex';
-  }catch(e){
-    // Se não existir, criar
-    try{await sbPost('profiles',{id:SESSION.user.id,...body});alert('Perfil criado!');}
-    catch(e2){alert('Erro: '+e2.message);}
-  }
+  }catch(e){alert('Erro ao salvar perfil: '+e.message);}
 }
 
 
