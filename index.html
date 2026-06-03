@@ -44,7 +44,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
 /* ── LOGIN ── */
-.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;}
+.login-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;align-items:center;justify-content:center;}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:48px 40px;width:400px;box-shadow:var(--shadow-md);}
 .login-logo{font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:700;color:var(--accent2);letter-spacing:2px;text-align:center;margin-bottom:4px;}
 .login-sub{font-size:12px;color:var(--text3);text-align:center;letter-spacing:1px;text-transform:uppercase;margin-bottom:36px;}
@@ -307,6 +307,58 @@ tr:hover td{background:var(--surface2);}
   .page{padding:14px;}
 }
 </style>
+<script>
+// Executar imediatamente — antes do DOM carregar
+(function(){
+  var loginEl = null;
+  function getLogin(){ return loginEl || (loginEl = document.getElementById('login-screen')); }
+  
+  // Aguardar DOM e então decidir
+  document.addEventListener('DOMContentLoaded', function(){
+    var loginScreen = document.getElementById('login-screen');
+    if(!loginScreen) return;
+    
+    // Verificar sessões salvas
+    var hasFaccao = false;
+    var hasEmpresa = false;
+    
+    try {
+      var savedFac = localStorage.getItem('lume_faccao');
+      if(savedFac){ JSON.parse(savedFac); hasFaccao = true; }
+    } catch(e){ localStorage.removeItem('lume_faccao'); }
+    
+    try {
+      var saved = localStorage.getItem('lume_session');
+      if(saved){
+        var sess = JSON.parse(saved);
+        if(sess.expires_at && Date.now()/1000 < sess.expires_at){ hasEmpresa = true; }
+        else { localStorage.removeItem('lume_session'); }
+      }
+    } catch(e){ localStorage.removeItem('lume_session'); }
+    
+    // Se não tem sessão válida, mostrar login imediatamente
+    if(!hasFaccao && !hasEmpresa){
+      loginScreen.style.display = 'flex';
+    }
+    // Se tem sessão, o boot principal vai cuidar — mas garantir visibilidade em 2s
+    // caso o boot falhe
+    else {
+      setTimeout(function(){
+        var app = document.getElementById('app');
+        var faccao = document.getElementById('faccao-view');
+        var appVis = app && app.style.display === 'flex';
+        var facVis = faccao && faccao.style.display === 'flex';
+        if(!appVis && !facVis){
+          // Boot falhou — mostrar login
+          localStorage.removeItem('lume_session');
+          localStorage.removeItem('lume_faccao');
+          loginScreen.style.display = 'flex';
+        }
+      }, 3000); // aguarda 3s para o boot terminar
+    }
+  });
+})();
+</script>
 </head>
 <body>
 
