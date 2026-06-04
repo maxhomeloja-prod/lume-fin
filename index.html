@@ -1359,7 +1359,7 @@ async function loadDashboard(){
       sbGet('vendas',`?empresa_id=eq.${EMPRESA_ID}&data_venda=gte.${fd(ini)}&select=valor_total`),
       sbGet('ordens_producao',`?empresa_id=eq.${EMPRESA_ID}&situacao=neq.CANCELADA&select=situacao,quantidade`),
       sbGet('lancamentos_externos',`?empresa_id=eq.${EMPRESA_ID}&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&select=valor`),
-      sbGet('saldos_conta',`?empresa_id=eq.${EMPRESA_ID}&select=saldo_atual,contas_bancarias(tipo)`)
+      sbGet('saldos_conta','?empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')'+'&select=saldo_atual,contas_bancarias(tipo)')
     ]);
     const rec=vendas.reduce((s,v)=>s+(v.valor_total||0),0);
     const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').length;
@@ -2311,12 +2311,13 @@ async function loadBalancete(){
   const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    let qT=`?empresa_id=eq.${EMPRESA_ID}&status=eq.CONFIRMADA`;
+    const empQB=buildEmpresaQuery('fbal-empresa');
+    let qT='?'+empQB+'&status=eq.CONFIRMADA';
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
-      sbGet('caixa_entradas',`?empresa_id=eq.${EMPRESA_ID}&limit=500`),
-      sbGet('caixa_saidas',`?empresa_id=eq.${EMPRESA_ID}&limit=500`)
+      sbGet('caixa_entradas','?'+empQB.replace('&status=eq.CONFIRMADA','')+'&limit=500'),
+      sbGet('caixa_saidas','?'+empQB.replace('&status=eq.CONFIRMADA','')+'&limit=500')
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
@@ -2324,7 +2325,8 @@ async function loadBalancete(){
       ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
-    const saldos=await sbGet('saldos_conta',`?empresa_id=eq.${EMPRESA_ID}&select=saldo_atual,contas_bancarias(banco,nome_conta,tipo)`);
+    const _empIdsB=EMPRESAS.map(e=>e.id).join(',');
+    const saldos=await sbGet('saldos_conta','?empresa_id=in.('+_empIdsB+')&select=saldo_atual,contas_bancarias(banco,nome_conta,tipo)');
     const cxFis=caixaEnt.reduce((s,e)=>s+e.valor_disponivel,0);
     const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
     document.getElementById('bal-saldos').innerHTML=[
