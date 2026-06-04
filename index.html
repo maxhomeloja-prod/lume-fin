@@ -2039,7 +2039,7 @@ function renderChartDiario(vendas){
   const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa'];
   const datasets=catList.map((cat,i)=>({
     label:cat,
-    data:datas.map(d=>porDataCat[d]?.(cat)?.qtd||0),
+    data:datas.map(d=>(porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].qtd:0)),
     borderColor:cores[i%cores.length],
     backgroundColor:cores[i%cores.length]+'33',
     tension:0.3,fill:false,pointRadius:3
@@ -2047,7 +2047,7 @@ function renderChartDiario(vendas){
   // Y2: valor total por dia (todas categorias somadas)
   const valTotal={
     label:'Valor (R$)',
-    data:datas.map(d=>Object.values(porDataCat[d]||{}).reduce((s,v)=>s+v.val,0)),
+    data:datas.map(d=>Object.values(porDataCat[d]||{}).reduce((s,v)=>s+(v.val||0),0)),
     borderColor:'#e11d48',backgroundColor:'#e11d4822',
     tension:0.3,fill:false,yAxisID:'y2',pointRadius:2,borderDash:[4,4]
   };
