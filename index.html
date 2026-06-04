@@ -1258,7 +1258,7 @@ const PAL=['#1e9be8','#00d4a0','#a78bfa','#ffb020','#ff4d6a','#00c4ff','#f472b6'
 function abrirModal(id){document.getElementById(id).classList.add('open');}
 function fecharModal(id){document.getElementById(id).classList.remove('open');}
 function getNomeCat(id){if(!id)return '—';const c=CATEGORIAS.find(x=>x.id===id);if(!c)return'—';if(c.categoria_pai_id){const p=CATEGORIAS.find(x=>x.id===c.categoria_pai_id);return p?p.nome:c.nome;}return c.nome;}
-function estimarCategoria(sku){const s=sku.toUpperCase();if(s.includes('TRAVESSEIRO')||s.includes('TRAVAS')||s.includes('TRAV_'))return'Travesseiros';if(s.includes('LENÇOL')||s.includes('LENCOL')||s.includes('JOGO')||s.startsWith('L00'))return'Lençóis';if(s.includes('CORTINA')||s.includes('BLACKOUT')||s.startsWith('M2_')||s.startsWith('M1_')||s.startsWith('M3_')||s.startsWith('M9_')||s.startsWith('M10_'))return'Cortinas';if(s.includes('MANTA'))return'Mantas';if(s.includes('PROTETOR'))return'Protetores';if(s.includes('FRONHA')||s.startsWith('F00'))return'Fronhas';if(s.includes('COLCHAO')||s.includes('CAPA'))return'Capas de Colchão';if(s.includes('TAPETE'))return'Tapetes';if(s.includes('TOALHA'))return'Toalhas';if(s.includes('KIT')||s.includes('COMBO'))return'Kits';return'Outros';}
+function estimarCategoria(sku){const s=sku.toUpperCase();if(s.includes('REFIL')||s.includes('RECARGA'))return'Refis';if(s.includes('TRAVESSEIRO')||s.includes('TRAVAS')||s.includes('TRAV_'))return'Travesseiros';if(s.includes('LENÇOL')||s.includes('LENCOL')||s.includes('JOGO')||s.startsWith('L00'))return'Lençóis';if(s.includes('CORTINA')||s.includes('BLACKOUT')||s.startsWith('M2_')||s.startsWith('M1_')||s.startsWith('M3_')||s.startsWith('M9_')||s.startsWith('M10_'))return'Cortinas';if(s.includes('MANTA'))return'Mantas';if(s.includes('PROTETOR'))return'Protetores';if(s.includes('FRONHA')||s.startsWith('F00'))return'Fronhas';if(s.includes('COLCHAO')||s.includes('CAPA'))return'Capas de Colchão';if(s.includes('TAPETE'))return'Tapetes';if(s.includes('TOALHA'))return'Toalhas';if(s.includes('KIT')||s.includes('COMBO'))return'Kits';return'Outros';}
 function opBadge(sit){const m={ABERTA:'blue',EM_PRODUCAO:'amber',PARCIAL:'purple',CONCLUIDA:'green',CANCELADA:'gray'};return`<span class="badge badge-${m[sit]||'gray'}">${sit.replace('_',' ')}</span>`;}
 function semEmpresaMsg(id){const el=document.getElementById(id);if(el)el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Configure uma empresa primeiro</div></div>';}
 
@@ -2070,7 +2070,7 @@ function renderChartDiario(vendas){
     data:{labels:datas.map(d=>fDate(d)),datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
+      interaction:{mode:'nearest',axis:'x',intersect:false},
       plugins:{
         legend:{position:'top',labels:{font:{size:11}}},
         tooltip:{callbacks:{
@@ -2126,7 +2126,7 @@ function renderChartCanal(vendas){
     data:{labels:datas.map(d=>fDate(d)),datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
+      interaction:{mode:'nearest',axis:'x',intersect:false},
       plugins:{legend:{position:'top',labels:{font:{size:11}}}},
       scales:{x:{ticks:{font:{size:10},maxRotation:45}},y:{title:{display:true,text:'Valor (R$)'}}}
     }
@@ -2593,7 +2593,7 @@ function renderChartMensal(vendas){
     data:{labels,datasets:[...datasets,valTotal]},
     options:{
       responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
+      interaction:{mode:'nearest',axis:'x',intersect:false},
       plugins:{legend:{position:'top',labels:{font:{size:11}}}},
       scales:{
         x:{stacked:false,ticks:{font:{size:11}}},
