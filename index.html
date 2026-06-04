@@ -896,16 +896,16 @@ tr:hover td{background:var(--surface2);}
       </div>
       <!-- Gráficos de categorias -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
-        <div class="card">
+        <div class="card" style="min-height:0">
           <div class="card-title">Distribuição por Categoria</div>
-          <div style="position:relative;height:260px"><canvas id="lan-chart-pizza"></canvas></div>
+          <div style="position:relative;height:220px"><canvas id="lan-chart-pizza"></canvas></div>
         </div>
-        <div class="card">
+        <div class="card" style="min-height:0">
           <div class="card-title">Categorias × Valor Total</div>
-          <div style="position:relative;height:260px"><canvas id="lan-chart-barras"></canvas></div>
+          <div style="position:relative;height:220px"><canvas id="lan-chart-barras"></canvas></div>
         </div>
       </div>
-      <div id="lan-resumo-cat" style="margin-bottom:16px"></div>
+
       <div class="card"><div class="tbl-wrap" id="lan-wrap"></div></div>
     </div>
 
@@ -2467,7 +2467,6 @@ async function loadLancamentos(){
     const hoje=new Date().toISOString().split('T')[0];
     if(!_lancamentos.length){document.getElementById('lan-wrap').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum lançamento encontrado</div></div>';return;}
     document.getElementById('lan-wrap').innerHTML='<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornec./Cliente</th><th>Categoria</th><th>Meio</th><th style="text-align:right">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+_lancamentos.map(l=>`<tr style="${l.situacao==='EM_ABERTO'&&l.data_vencimento<hoje?'background:var(--red-bg)':''}"><td>${fDate(l.data_vencimento)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.descricao}</td><td style="color:var(--text2)">${l.fornecedor||l.cliente||'—'}</td><td style="color:var(--text3)">${getNomeCat(l.categoria_id)}</td><td style="font-size:11px">${l.meio_pagamento||'—'}</td><td style="text-align:right;color:${l.tipo_lancamento==='RECEBER'?'var(--green)':'var(--red)'}">${fBRL(l.valor)}</td><td><span class="badge ${l.situacao==='EM_ABERTO'?'badge-amber':'badge-green'}">${l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO'}</span></td><td style="display:flex;gap:4px;padding:8px 4px">${l.situacao==='EM_ABERTO'?`<button class="btn btn-success btn-sm" onclick="darBaixa('${l.id}')">✓</button>`:''}<button class="btn btn-ghost btn-sm" onclick="abrirModalLancamento('${l.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirLancamento('${l.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
-    renderResumoCategorias(_lancamentos);
     renderLanCharts(_lancamentos);
   }catch(e){document.getElementById('lan-wrap').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
@@ -3209,7 +3208,7 @@ function renderLanCharts(lancamentos){
       options:{
         responsive:true,maintainAspectRatio:false,
         plugins:{
-          legend:{position:'right',labels:{font:{size:11},boxWidth:12}},
+          legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},
           tooltip:{callbacks:{label:function(ctx){
             const pct=(ctx.parsed/_chartLanPizza.data.datasets[0].data.reduce(function(a,b){return a+b;},0)*100).toFixed(1);
             return ' '+ctx.label+': '+fBRL(ctx.parsed)+' ('+pct+'%)';
@@ -3390,30 +3389,6 @@ function atualizarTotaisCaixa(){
   if(elSaldo){elSaldo.textContent=fBRL(saldo);elSaldo.className='kpi-value '+(saldo>=0?'green':'red');}
 }
 
-function renderResumoCategorias(lancamentos){
-  const el=document.getElementById('lan-resumo-cat');if(!el)return;
-  if(!lancamentos||!lancamentos.length){el.innerHTML='';return;}
-  const grupos={};
-  lancamentos.forEach(l=>{
-    const catId=l.categoria_id||'sem-cat';
-    const catNome=getNomeCat(l.categoria_id)||'Sem categoria';
-    const v=l.tipo==='PAGAR'?-Math.abs(parseFloat(l.valor)||0):Math.abs(parseFloat(l.valor)||0);
-    if(!grupos[catId])grupos[catId]={nome:catNome,total:0,count:0};
-    grupos[catId].total+=v;grupos[catId].count++;
-  });
-  const itens=Object.values(grupos).sort((a,b)=>a.total-b.total);
-  el.innerHTML='<div class="card" style="padding:0;overflow:hidden"><table style="width:100%"><thead><tr>'
-    +'<th style="padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;color:var(--text3)">Categoria</th>'
-    +'<th style="padding:10px 16px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--text3)">Lançamentos</th>'
-    +'<th style="padding:10px 16px;text-align:right;font-size:11px;text-transform:uppercase;color:var(--text3)">Total</th>'
-    +'</tr></thead><tbody>'
-    +itens.map(i=>'<tr style="border-top:1px solid var(--border)">'
-      +'<td style="padding:10px 16px;font-size:13px">'+i.nome+'</td>'
-      +'<td style="padding:10px 16px;text-align:right;color:var(--text3);font-size:13px">'+i.count+'</td>'
-      +'<td style="padding:10px 16px;text-align:right;font-weight:500;color:'+(i.total>=0?'var(--green)':'var(--red)')+';font-size:13px">'+fBRL(i.total)+'</td>'
-      +'</tr>').join('')
-    +'</tbody></table></div>';
-}
 
 // Balancete expandível
 function toggleBalRow(id){
