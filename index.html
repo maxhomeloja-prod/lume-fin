@@ -697,6 +697,59 @@ tr:hover td{background:var(--surface2);}
       <div id="bom-cadastrados"></div>
     </div>
 
+    <!-- ESTOQUE MODELO -->
+    <div id="page-estoque" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Estoque Modelo</div><div class="page-sub">Projeção de matéria-prima para 30 dias</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-success btn-sm" onclick="exportarEstoqueMPXLS()">⬇ Exportar MP</button>
+          <button class="btn btn-success btn-sm" onclick="exportarEstoqueSKUXLS()">⬇ Exportar SKU</button>
+          <button class="btn btn-primary btn-sm" onclick="calcularEstoqueModelo()">Calcular</button>
+        </div>
+      </div>
+      <div class="filters">
+        <div class="filter-group"><span class="filter-label">Base De</span><input type="date" class="filter-control" id="fest-de"></div>
+        <div class="filter-group"><span class="filter-label">Base Até</span><input type="date" class="filter-control" id="fest-ate"></div>
+        <div class="filter-group"><span class="filter-label">Projeção (dias)</span><input type="number" class="filter-control" id="fest-dias" value="30" min="1" max="365" style="width:80px"></div>
+        <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="calcularEstoqueModelo()">Calcular</button>
+      </div>
+      <div id="est-resultado"></div>
+    </div>
+
+    <!-- CALCULADORA DE PREÇOS -->
+    <div id="page-calc" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Calculadora de Preços</div><div class="page-sub">Simule preços e margens para novos produtos</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <!-- Coluna esquerda: produto e materiais -->
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-title">Produto</div>
+            <div class="form-group"><label class="form-label">Nome do Produto</label><input class="form-control" id="calc-nome" placeholder="Ex: Lençol Casal 3 Peças"></div>
+            <div class="card-title" style="margin-top:16px">Materiais</div>
+            <div id="calc-materiais-lista"></div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="addCalcMaterial()">+ Adicionar Material</button>
+          </div>
+        </div>
+        <!-- Coluna direita: política de venda -->
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-title">Política de Venda</div>
+            <div class="form-group"><label class="form-label">Comissão de Representante (%)</label><input class="form-control" type="number" id="calc-comissao" value="0" step="0.1" min="0" oninput="calcularPreco()"></div>
+            <div class="form-group"><label class="form-label">Valor Fixo por Venda (R$)</label><input class="form-control" type="number" id="calc-fixo" value="0" step="0.01" min="0" oninput="calcularPreco()"></div>
+            <div class="form-group"><label class="form-label">Imposto (%)</label><input class="form-control" type="number" id="calc-imposto" value="0" step="0.1" min="0" oninput="calcularPreco()"></div>
+            <div class="form-group"><label class="form-label">Perda / Retrabalho (%)</label><input class="form-control" type="number" id="calc-perda" value="0" step="0.1" min="0" oninput="calcularPreco()"></div>
+            <div class="form-group"><label class="form-label">Margem Líquida Desejada (%)</label><input class="form-control" type="number" id="calc-margem" value="30" step="0.1" min="0" oninput="calcularPreco()"></div>
+          </div>
+          <div class="card" id="calc-resultado" style="background:var(--surface2)">
+            <div class="card-title">Resultado</div>
+            <div id="calc-res-content" style="color:var(--text3);font-size:13px">Preencha os materiais e a política de venda</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ABC -->
     <div id="page-abc" class="page">
       <div class="page-header"><div><div class="page-title">Curva ABC</div><div class="page-sub">Análise de Pareto por SKU</div></div></div>
@@ -1245,7 +1298,8 @@ function irPara(pagina){
     'abc':loadABC,'categorizacao':loadCategorizacao,'balancete':loadBalancete,
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
-    'perfil':loadPerfil,'plano':()=>{}
+    'perfil':loadPerfil,'plano':()=>{},
+    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();}
   };
   if(loaders[pagina])loaders[pagina]();
 }
@@ -1934,7 +1988,9 @@ async function loadBOM(){
   if(cad.length){
     const estruturas=await sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&order=sku`).catch(()=>[]);
     const porSku={};estruturas.forEach(e=>{if(!porSku[e.sku])porSku[e.sku]=[];porSku[e.sku].push(e);});
-    document.getElementById('bom-cadastrados').innerHTML='<div class="card"><div class="card-title">Estruturas Cadastradas</div>'+cad.map(sku=>`<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden"><div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2)"><div><span style="font-weight:600">${sku}</span><span class="badge badge-gray" style="margin-left:8px">${estimarCategoria(sku)}</span></div><button class="btn btn-secondary btn-sm" onclick="abrirModalBOM('${sku}',true)">✎ Editar</button></div><table style="width:100%"><thead><tr><th>Material</th><th style="text-align:right">Qtd</th><th>Un</th><th style="text-align:right">Preço</th><th style="text-align:right">Custo</th></tr></thead><tbody>${(porSku[sku]||[]).map(m=>`<tr><td>${m.material_nome}</td><td style="text-align:right">${m.quantidade}</td><td style="color:var(--text3)">${m.unidade}</td><td style="text-align:right">${m.preco_unitario?fBRL(m.preco_unitario):'—'}</td><td style="text-align:right;color:var(--green)">${m.preco_unitario?fBRL(m.quantidade*m.preco_unitario):'—'}</td></tr>`).join('')}</tbody></table></div>`).join('')+'</div>';
+    document.getElementById('bom-cadastrados').innerHTML='<div class="card"><div class="card-title">Estruturas Cadastradas</div>'+cad.map(sku=>`<div data-sku="${sku}" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden"><div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2)"><div><span style="font-weight:600">${sku}</span><span class="badge badge-gray" style="margin-left:8px">${estimarCategoria(sku)}</span></div><button class="btn btn-secondary btn-sm" onclick="abrirModalBOM('${sku}',true)">✎ Editar</button></div>
+<div style="font-size:11px;color:var(--text3);margin-bottom:4px;padding:0 4px">Custo base: <strong style="color:var(--green)">${(()=>{const cb=(porSku[sku]||[]).reduce((s,m)=>s+(m.preco_unitario?m.quantidade*m.preco_unitario:0),0);return cb?fBRL(cb):'—';})()}</strong></div>
+<table style="width:100%"><thead><tr><th>Material</th><th style="text-align:right">Qtd</th><th>Un</th><th style="text-align:right">Preço</th><th style="text-align:right">Custo</th><th style="text-align:right">% Custo</th></tr></thead><tbody>${(()=>{const mts=porSku[sku]||[];const cb=mts.reduce((s,m)=>s+(m.preco_unitario?m.quantidade*m.preco_unitario:0),0);return mts.map(m=>{const c=m.preco_unitario?m.quantidade*m.preco_unitario:0;const p=cb>0&&c>0?(c/cb*100).toFixed(1)+'%':'—';return `<tr><td>${m.material_nome}</td><td style="text-align:right">${m.quantidade}</td><td style="color:var(--text3)">${m.unidade}</td><td style="text-align:right">${m.preco_unitario?fBRL(m.preco_unitario):'—'}</td><td style="text-align:right;color:var(--green)">${c?fBRL(c):'—'}</td><td style="text-align:right;color:var(--text3)">${p}</td></tr>`;}).join('');})()}</tbody></table></div>`).join('')+'</div>';
   }else document.getElementById('bom-cadastrados').innerHTML='';
 }
 async function verificarBOMPendencias(){
@@ -2592,6 +2648,200 @@ function renderChartMensal(vendas){
       }
     }
   });
+}
+
+function renderBOMFiltrado(){
+  const filtro=(document.getElementById('fbom-sku')?.value||'').trim().toUpperCase();
+  const cards=document.querySelectorAll('#bom-cadastrados [data-sku]');
+  cards.forEach(card=>{
+    const sku=card.getAttribute('data-sku').toUpperCase();
+    card.style.display=(!filtro||sku.includes(filtro))?'':'none';
+  });
+}
+
+// ── ESTOQUE MODELO ────────────────────────────────────────────
+let _estoqueMP = [], _estoqueSKU = [];
+
+async function calcularEstoqueModelo(){
+  if(!EMPRESA_ID){return;}
+  const de=document.getElementById('fest-de')?.value;
+  const ate=document.getElementById('fest-ate')?.value;
+  const dias=parseInt(document.getElementById('fest-dias')?.value)||30;
+  if(!de||!ate){alert('Preencha o período base');return;}
+  const el=document.getElementById('est-resultado');
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Calculando...</div>';
+  try{
+    // Buscar vendas do período base
+    const vendas=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&data_venda=gte.'+de+'&data_venda=lte.'+ate+'&limit=10000');
+    if(!vendas.length){el.innerHTML='<div class="empty">Nenhuma venda no período base</div>';return;}
+    // Calcular dias no período
+    const d1=new Date(de+'T12:00:00'), d2=new Date(ate+'T12:00:00');
+    const diasBase=Math.max(1,Math.round((d2-d1)/(1000*60*60*24))+1);
+    // Média diária por SKU
+    const porSku={};
+    vendas.forEach(v=>{
+      if(!porSku[v.sku])porSku[v.sku]={qtd:0,val:0};
+      porSku[v.sku].qtd+=v.quantidade||0;
+      porSku[v.sku].val+=(v.valor_total||v.preco_unitario*v.quantidade||0);
+    });
+    // Projeção para N dias
+    const projecaoSKU=Object.entries(porSku).map(([sku,v])=>({
+      sku,
+      qtdDia:v.qtd/diasBase,
+      qtdProj:Math.ceil(v.qtd/diasBase*dias),
+      valDia:v.val/diasBase,
+      valProj:v.val/diasBase*dias
+    })).sort((a,b)=>b.valProj-a.valProj);
+    _estoqueSKU=projecaoSKU;
+    // Buscar BOM de todos os SKUs
+    const skusUnicos=[...new Set(projecaoSKU.map(s=>s.sku))];
+    const bom=await sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&limit=10000');
+    const bomPorSku={};
+    bom.forEach(b=>{if(!bomPorSku[b.sku])bomPorSku[b.sku]=[];bomPorSku[b.sku].push(b);});
+    // Calcular necessidade de MP
+    const mp={};
+    projecaoSKU.forEach(s=>{
+      const mats=bomPorSku[s.sku]||[];
+      mats.forEach(m=>{
+        const k=m.material_nome+'|'+m.unidade;
+        if(!mp[k])mp[k]={nome:m.material_nome,unidade:m.unidade,qtd:0,val:0,preco:m.preco_unitario||0};
+        mp[k].qtd+=m.quantidade*s.qtdProj;
+        mp[k].val+=(m.preco_unitario||0)*m.quantidade*s.qtdProj;
+      });
+    });
+    _estoqueMP=Object.values(mp).sort((a,b)=>b.val-a.val);
+    // Renderizar
+    const totalValMP=_estoqueMP.reduce((s,m)=>s+m.val,0);
+    const totalValSKU=projecaoSKU.reduce((s,s2)=>s+s2.valProj,0);
+    const totalQtdSKU=projecaoSKU.reduce((s,s2)=>s+s2.qtdProj,0);
+    el.innerHTML=
+      '<div class="card mb16">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+      '<div class="card-title" style="margin:0">Matéria-Prima Necessária — '+dias+' dias</div></div>'+
+      '<div class="tbl-wrap"><table style="width:100%"><thead><tr>'+
+      '<th>Material</th><th>Un.</th><th style="text-align:right">Quantidade</th><th style="text-align:right">Valor Est.</th></tr></thead><tbody>'+
+      _estoqueMP.map(m=>'<tr><td>'+m.nome+'</td><td style="color:var(--text3)">'+m.unidade+'</td>'+
+        '<td style="text-align:right">'+fN(Math.ceil(m.qtd))+'</td>'+
+        '<td style="text-align:right;color:var(--green)">'+(m.val?fBRL(m.val):'—')+'</td></tr>').join('')+
+      '<tr style="border-top:2px solid var(--border);font-weight:700">'+
+      '<td colspan="2">TOTAL</td>'+
+      '<td style="text-align:right">—</td>'+
+      '<td style="text-align:right;color:var(--green)">'+fBRL(totalValMP)+'</td></tr>'+
+      '</tbody></table></div></div>'+
+      '<div class="card">'+
+      '<div class="card-title">Projeção por SKU — '+dias+' dias</div>'+
+      '<div class="tbl-wrap"><table style="width:100%"><thead><tr>'+
+      '<th>SKU</th><th style="text-align:right">Qtd/dia</th><th style="text-align:right">Qtd Proj.</th><th style="text-align:right">Valor Est.</th></tr></thead><tbody>'+
+      projecaoSKU.map(s=>'<tr><td style="font-weight:500">'+s.sku+'</td>'+
+        '<td style="text-align:right;color:var(--text3)">'+s.qtdDia.toFixed(2)+'</td>'+
+        '<td style="text-align:right">'+fN(s.qtdProj)+'</td>'+
+        '<td style="text-align:right;color:var(--green)">'+fBRL(s.valProj)+'</td></tr>').join('')+
+      '<tr style="border-top:2px solid var(--border);font-weight:700">'+
+      '<td>TOTAL</td><td></td>'+
+      '<td style="text-align:right">'+fN(totalQtdSKU)+'</td>'+
+      '<td style="text-align:right;color:var(--green)">'+fBRL(totalValSKU)+'</td></tr>'+
+      '</tbody></table></div></div>';
+  }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+function exportarEstoqueMPXLS(){
+  if(!_estoqueMP.length){alert('Calcule o estoque primeiro');return;}
+  let csv='Material,Unidade,Quantidade,Valor Estimado\n';
+  _estoqueMP.forEach(m=>{csv+='"'+m.nome+'","'+m.unidade+'",'+Math.ceil(m.qtd)+','+m.val.toFixed(2)+'\n';});
+  const total=_estoqueMP.reduce((s,m)=>s+m.val,0);
+  csv+='"TOTAL","—","—",'+total.toFixed(2)+'\n';
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='estoque_mp.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportarEstoqueSKUXLS(){
+  if(!_estoqueSKU.length){alert('Calcule o estoque primeiro');return;}
+  let csv='SKU,Qtd/dia,Qtd Projetada,Valor Estimado\n';
+  _estoqueSKU.forEach(s=>{csv+='"'+s.sku+'",'+s.qtdDia.toFixed(2)+','+s.qtdProj+','+s.valProj.toFixed(2)+'\n';});
+  const totalQ=_estoqueSKU.reduce((s,x)=>s+x.qtdProj,0);
+  const totalV=_estoqueSKU.reduce((s,x)=>s+x.valProj,0);
+  csv+='"TOTAL","—",'+totalQ+','+totalV.toFixed(2)+'\n';
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='estoque_sku.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── CALCULADORA DE PREÇOS ─────────────────────────────────────
+let _calcLinhas=0;
+
+function addCalcMaterial(d=null){
+  _calcLinhas++;const n=_calcLinhas;
+  const div=document.createElement('div');
+  div.id='calc-l-'+n;
+  div.style.cssText='display:grid;grid-template-columns:1fr 70px 70px 90px auto;gap:6px;margin-bottom:6px;align-items:end';
+  div.innerHTML=(n===1?'<label class="form-label">Material</label>':'<div></div>')+
+    (n===1?'<label class="form-label">Qtd</label>':'<div></div>')+
+    (n===1?'<label class="form-label">Un.</label>':'<div></div>')+
+    (n===1?'<label class="form-label">Preço</label>':'<div></div>')+
+    '<div></div>'+
+    '<input class="form-control" id="calc-m-'+n+'" placeholder="Material..." value="'+(d?.nome||'')+'" oninput="calcularPreco()">'+
+    '<input class="form-control" type="number" id="calc-mq-'+n+'" step="0.01" value="'+(d?.qtd||'')+'" oninput="calcularPreco()">'+
+    '<select class="form-control" id="calc-mu-'+n+'" onchange="calcularPreco()">'+
+    '<option value="un"'+(d?.un==='un'?' selected':'')+'>un</option>'+
+    '<option value="m"'+(d?.un==='m'?' selected':'')+'>m</option>'+
+    '<option value="kg"'+(d?.un==='kg'?' selected':'')+'>kg</option>'+
+    '</select>'+
+    '<input class="form-control" type="number" id="calc-mp-'+n+'" step="0.01" value="'+(d?.preco||'')+'" oninput="calcularPreco()">'+
+    '<button class="btn btn-danger btn-sm" onclick="document.getElementById(\'calc-l-'+n+'\').remove();calcularPreco()">✕</button>';
+  document.getElementById('calc-materiais-lista').appendChild(div);
+  calcularPreco();
+}
+
+function calcularPreco(){
+  const linhas=document.getElementById('calc-materiais-lista').querySelectorAll('[id^=calc-m-]');
+  let custoMP=0;
+  const materiais=[];
+  linhas.forEach(el=>{
+    const n=el.id.split('-').pop();
+    const nome=el.value.trim();
+    const qtd=parseFloat(document.getElementById('calc-mq-'+n)?.value)||0;
+    const preco=parseFloat(document.getElementById('calc-mp-'+n)?.value)||0;
+    const custo=qtd*preco;
+    if(nome&&qtd&&preco){custoMP+=custo;materiais.push({nome,qtd,preco,custo});}
+  });
+  const comissao=(parseFloat(document.getElementById('calc-comissao')?.value)||0)/100;
+  const fixo=parseFloat(document.getElementById('calc-fixo')?.value)||0;
+  const imposto=(parseFloat(document.getElementById('calc-imposto')?.value)||0)/100;
+  const perda=(parseFloat(document.getElementById('calc-perda')?.value)||0)/100;
+  const margem=(parseFloat(document.getElementById('calc-margem')?.value)||0)/100;
+  const custoComPerda=custoMP/(1-perda);
+  // Preço mínimo = (custo + fixo) / (1 - comissao - imposto - margem)
+  const denominador=1-comissao-imposto-margem;
+  if(denominador<=0){
+    document.getElementById('calc-res-content').innerHTML='<div style="color:var(--red)">⚠ Soma de comissão + imposto + margem >= 100%. Impossível calcular.</div>';
+    return;
+  }
+  const precoSugerido=(custoComPerda+fixo)/denominador;
+  const lucroLiq=precoSugerido*margem;
+  const margemBruta=precoSugerido-custoComPerda-fixo;
+  const el=document.getElementById('calc-res-content');
+  el.innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
+    '<div style="background:var(--surface);border-radius:var(--radius);padding:12px">'+
+    '<div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Custo MP</div>'+
+    '<div style="font-size:20px;font-weight:700">'+fBRL(custoMP)+'</div></div>'+
+    '<div style="background:var(--surface);border-radius:var(--radius);padding:12px">'+
+    '<div style="font-size:10px;text-transform:uppercase;color:var(--text3);margin-bottom:4px">Custo c/ Perda</div>'+
+    '<div style="font-size:20px;font-weight:700">'+fBRL(custoComPerda)+'</div></div>'+
+    '<div style="background:var(--green);border-radius:var(--radius);padding:12px;grid-column:span 2">'+
+    '<div style="font-size:10px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:4px">Preço Sugerido</div>'+
+    '<div style="font-size:28px;font-weight:700;color:#fff">'+fBRL(precoSugerido)+'</div></div>'+
+    '</div>'+
+    '<table style="width:100%;font-size:12px"><tbody>'+
+    '<tr><td style="color:var(--text3)">Custo MP</td><td style="text-align:right">'+fBRL(custoMP)+'</td><td style="text-align:right;color:var(--text3)">'+(precoSugerido?(custoMP/precoSugerido*100).toFixed(1)+'%':'—')+'</td></tr>'+
+    (fixo?'<tr><td style="color:var(--text3)">Custo fixo/venda</td><td style="text-align:right">'+fBRL(fixo)+'</td><td style="text-align:right;color:var(--text3)">'+(fixo/precoSugerido*100).toFixed(1)+'%</td></tr>':'')+
+    (comissao?'<tr><td style="color:var(--text3)">Comissão</td><td style="text-align:right">'+fBRL(precoSugerido*comissao)+'</td><td style="text-align:right;color:var(--text3)">'+(comissao*100).toFixed(1)+'%</td></tr>':'')+
+    (imposto?'<tr><td style="color:var(--text3)">Imposto</td><td style="text-align:right">'+fBRL(precoSugerido*imposto)+'</td><td style="text-align:right;color:var(--text3)">'+(imposto*100).toFixed(1)+'%</td></tr>':'')+
+    '<tr style="border-top:1px solid var(--border);font-weight:600"><td>Lucro Líquido</td><td style="text-align:right;color:var(--green)">'+fBRL(lucroLiq)+'</td><td style="text-align:right;color:var(--green)">'+(margem*100).toFixed(1)+'%</td></tr>'+
+    '</tbody></table>';
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
