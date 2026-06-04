@@ -681,7 +681,7 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fven-de" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fven-ate" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fven-canal" onchange="loadVendas()"><option value="">Todos</option></select></div>
-        <div class="filter-group"><span class="filter-label">SKU</span><select class="filter-control" id="fven-sku" onchange="loadVendas()"><option value="">Todos</option></select></div>
+        <div class="filter-group"><span class="filter-label">SKU</span><input class="filter-control" type="text" id="fven-sku" placeholder="Buscar SKU..." style="width:160px" oninput="loadVendas()"><option value="">Todos</option></select></div>
       </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="ven-rec">—</div></div>
@@ -694,7 +694,10 @@ tr:hover td{background:var(--surface2);}
 
     <!-- BOM -->
     <div id="page-bom" class="page">
-      <div class="page-header"><div><div class="page-title">Estrutura de Materiais</div><div class="page-sub">Bill of Materials por SKU</div></div><button class="btn btn-secondary btn-sm" onclick="loadBOM()">↻ Atualizar</button></div>
+      <div class="page-header"><div><div class="page-title">Estrutura de Materiais</div><div class="page-sub">Bill of Materials por SKU</div></div><div style="display:flex;gap:8px;align-items:center">
+          <input class="filter-control" type="text" id="fbom-sku" placeholder="Buscar SKU..." style="width:180px" oninput="renderBOMFiltrado()">
+          <button class="btn btn-secondary btn-sm" onclick="loadBOM()">↻ Atualizar</button>
+        </div></div>
       <div id="bom-pendencias" class="mb16"></div>
       <div id="bom-cadastrados"></div>
     </div>
@@ -722,6 +725,20 @@ tr:hover td{background:var(--surface2);}
     <div id="page-calc" class="page">
       <div class="page-header">
         <div><div class="page-title">Calculadora de Preços</div><div class="page-sub">Simule preços e margens para novos produtos</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="salvarSimulacao()">💾 Salvar Simulação</button>
+          <button class="btn btn-ghost btn-sm" onclick="limparCalculadora()">✕ Limpar</button>
+        </div>
+      </div>
+      <!-- Histórico de simulações -->
+      <div id="calc-historico-wrap" style="margin-bottom:16px;display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="card-title" style="margin:0">Simulações Salvas</div>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('calc-historico-wrap').style.display='none'">✕</button>
+          </div>
+          <div id="calc-historico-lista"></div>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
         <!-- Coluna esquerda: produto e materiais -->
@@ -1301,7 +1318,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();}
+    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();}
   };
   if(loaders[pagina])loaders[pagina]();
 }
@@ -2501,7 +2518,7 @@ async function loadVendas(){
     if(selSku){const sv=selSku.value;selSku.innerHTML='<option value="">Todos</option>'+skus.map(s=>'<option value="'+s+'">'+s+'</option>').join('');selSku.value=sv;}
     _vendas=todasVendas.filter(v=>{
       if(canal&&v.canal_venda!==canal)return false;
-      if(sku&&v.sku!==sku)return false;
+      if(sku&&!(v.sku||'').toUpperCase().includes(sku.toUpperCase()))return false;
       return true;
     });
     const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.preco_unitario*v.quantidade||0),0);
@@ -2844,6 +2861,108 @@ function calcularPreco(){
     (imposto?'<tr><td style="color:var(--text3)">Imposto</td><td style="text-align:right">'+fBRL(precoSugerido*imposto)+'</td><td style="text-align:right;color:var(--text3)">'+(imposto*100).toFixed(1)+'%</td></tr>':'')+
     '<tr style="border-top:1px solid var(--border);font-weight:600"><td>Lucro Líquido</td><td style="text-align:right;color:var(--green)">'+fBRL(lucroLiq)+'</td><td style="text-align:right;color:var(--green)">'+(margem*100).toFixed(1)+'%</td></tr>'+
     '</tbody></table>';
+}
+
+function limparCalculadora(){
+  document.getElementById('calc-nome').value='';
+  document.getElementById('calc-comissao').value='0';
+  document.getElementById('calc-fixo').value='0';
+  document.getElementById('calc-imposto').value='0';
+  document.getElementById('calc-perda').value='0';
+  document.getElementById('calc-margem').value='30';
+  document.getElementById('calc-materiais-lista').innerHTML='';
+  _calcLinhas=0;
+  addCalcMaterial();
+  document.getElementById('calc-res-content').innerHTML='<span style="color:var(--text3)">Preencha os materiais e a política de venda</span>';
+}
+
+async function salvarSimulacao(){
+  if(!EMPRESA_ID){alert('Configure uma empresa primeiro');return;}
+  const nome=document.getElementById('calc-nome').value.trim()||'Simulação';
+  const res=document.getElementById('calc-res-content').innerHTML;
+  if(!res||res.includes('Preencha')){alert('Calcule primeiro');return;}
+  const mats=[];
+  document.getElementById('calc-materiais-lista').querySelectorAll('[id^=calc-m-]').forEach(el=>{
+    const n=el.id.split('-').pop();
+    const m=el.value.trim();
+    const q=document.getElementById('calc-mq-'+n)?.value;
+    const p=document.getElementById('calc-mp-'+n)?.value;
+    if(m&&q&&p)mats.push({nome:m,qtd:parseFloat(q),preco:parseFloat(p)});
+  });
+  const politica={
+    comissao:parseFloat(document.getElementById('calc-comissao').value)||0,
+    fixo:parseFloat(document.getElementById('calc-fixo').value)||0,
+    imposto:parseFloat(document.getElementById('calc-imposto').value)||0,
+    perda:parseFloat(document.getElementById('calc-perda').value)||0,
+    margem:parseFloat(document.getElementById('calc-margem').value)||0
+  };
+  try{
+    await sbPost('calc_simulacoes',{
+      empresa_id:EMPRESA_ID,
+      nome,
+      materiais:mats,
+      politica,
+      resultado:{html:res}
+    });
+    await renderHistoricoCalc();
+    alert('Simulação "'+nome+'" salva!');
+  }catch(e){alert('Erro ao salvar: '+e.message);}
+}
+
+async function renderHistoricoCalc(){
+  const el=document.getElementById('calc-historico-lista');
+  if(!el||!EMPRESA_ID)return;
+  try{
+    const sims=await sbGet('calc_simulacoes','?empresa_id=eq.'+EMPRESA_ID+'&order=criado_em.desc&limit=20');
+    if(!sims.length){
+      el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Nenhuma simulação salva</div>';
+      document.getElementById('calc-historico-wrap').style.display='none';
+      return;
+    }
+    el.innerHTML=sims.map(s=>{
+      const pol=s.politica||{};
+      const data=s.criado_em?s.criado_em.split('T')[0].split('-').reverse().join('/'):'';
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div>'+
+        '<div style="font-weight:600">'+s.nome+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+data+
+        ' · Comissão: '+(pol.comissao||0)+'% · Imposto: '+(pol.imposto||0)+'% · Margem: '+(pol.margem||0)+'%</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:6px">'+
+        '<button class="btn btn-secondary btn-sm" onclick="carregarSimulacao(this.dataset.id)" data-id="'+s.id+'">Carregar</button>'+
+        '<button class="btn btn-danger btn-sm" onclick="excluirSimulacao(this.dataset.id)" data-id="'+s.id+'">✕</button>'+
+        '</div></div>'+
+        '</div>';
+    }).join('');
+    document.getElementById('calc-historico-wrap').style.display='';
+  }catch(e){console.error('renderHistoricoCalc:',e);}
+}
+
+async function carregarSimulacao(id_or_el){const id=typeof id_or_el==="string"?id_or_el:id_or_el;
+  try{
+    const sims=await sbGet('calc_simulacoes','?id=eq.'+id);
+    const sim=sims[0];if(!sim)return;
+    document.getElementById('calc-nome').value=sim.nome;
+    const pol=sim.politica||{};
+    document.getElementById('calc-comissao').value=pol.comissao||0;
+    document.getElementById('calc-fixo').value=pol.fixo||0;
+    document.getElementById('calc-imposto').value=pol.imposto||0;
+    document.getElementById('calc-perda').value=pol.perda||0;
+    document.getElementById('calc-margem').value=pol.margem||30;
+    document.getElementById('calc-materiais-lista').innerHTML='';
+    _calcLinhas=0;
+    (sim.materiais||[]).forEach(m=>addCalcMaterial({nome:m.nome,qtd:m.qtd,preco:m.preco}));
+    calcularPreco();
+  }catch(e){alert('Erro ao carregar: '+e.message);}
+}
+
+async function excluirSimulacao(id){
+  if(!confirm('Excluir simulação?'))return;
+  try{
+    await sbDelete('calc_simulacoes','id=eq.'+id);
+    await renderHistoricoCalc();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
