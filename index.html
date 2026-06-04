@@ -712,6 +712,11 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">SKUs</div><div class="kpi-value" id="abc-skus">—</div></div>
         <div class="kpi"><div class="kpi-label">Unidades</div><div class="kpi-value" id="abc-uni">—</div></div>
       </div>
+      <!-- Gráfico 0: Venda Mensal por Categoria (full width) -->
+      <div class="card mb16">
+        <div class="card-title">Venda Mensal por Categoria</div>
+        <div style="position:relative;height:320px"><canvas id="chart-mensal"></canvas></div>
+      </div>
       <!-- Gráfico 1: Venda Diária por Categoria (full width) -->
       <div class="card mb16">
         <div class="card-title">Venda Diária por Categoria</div>
@@ -1253,7 +1258,7 @@ const PAL=['#1e9be8','#00d4a0','#a78bfa','#ffb020','#ff4d6a','#00c4ff','#f472b6'
 function abrirModal(id){document.getElementById(id).classList.add('open');}
 function fecharModal(id){document.getElementById(id).classList.remove('open');}
 function getNomeCat(id){if(!id)return '—';const c=CATEGORIAS.find(x=>x.id===id);if(!c)return'—';if(c.categoria_pai_id){const p=CATEGORIAS.find(x=>x.id===c.categoria_pai_id);return p?p.nome:c.nome;}return c.nome;}
-function estimarCategoria(sku){const s=sku.toUpperCase();if(s.includes('LENÇOL')||s.includes('LENCOL')||s.includes('JOGO'))return'Lençóis';if(s.includes('CORTINA')||s.includes('BLACKOUT'))return'Cortinas';if(s.includes('MANTA'))return'Mantas';if(s.includes('PROTETOR'))return'Protetores';if(s.includes('FRONHA'))return'Fronhas';if(s.includes('TAPETE'))return'Tapetes';if(s.includes('TOALHA'))return'Toalhas';return'Outros';}
+function estimarCategoria(sku){const s=sku.toUpperCase();if(s.includes('TRAVESSEIRO')||s.includes('TRAVAS')||s.includes('TRAV_'))return'Travesseiros';if(s.includes('LENÇOL')||s.includes('LENCOL')||s.includes('JOGO')||s.startsWith('L00'))return'Lençóis';if(s.includes('CORTINA')||s.includes('BLACKOUT')||s.startsWith('M2_')||s.startsWith('M1_')||s.startsWith('M3_')||s.startsWith('M9_')||s.startsWith('M10_'))return'Cortinas';if(s.includes('MANTA'))return'Mantas';if(s.includes('PROTETOR'))return'Protetores';if(s.includes('FRONHA')||s.startsWith('F00'))return'Fronhas';if(s.includes('COLCHAO')||s.includes('CAPA'))return'Capas de Colchão';if(s.includes('TAPETE'))return'Tapetes';if(s.includes('TOALHA'))return'Toalhas';if(s.includes('KIT')||s.includes('COMBO'))return'Kits';return'Outros';}
 function opBadge(sit){const m={ABERTA:'blue',EM_PRODUCAO:'amber',PARCIAL:'purple',CONCLUIDA:'green',CANCELADA:'gray'};return`<span class="badge badge-${m[sit]||'gray'}">${sit.replace('_',' ')}</span>`;}
 function semEmpresaMsg(id){const el=document.getElementById(id);if(el)el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Configure uma empresa primeiro</div></div>';}
 
@@ -2013,6 +2018,7 @@ async function loadABC(){
     });
     renderABCTabela('all');
     renderABCChart();
+    renderChartMensal(vendas);
     renderChartDiario(vendas);
     renderChartCanal(vendas);
     renderChartPizza(vendas);
@@ -2022,7 +2028,6 @@ async function loadABC(){
 function renderChartDiario(vendas){
   const ctx=document.getElementById('chart-daily');
   if(!ctx)return;
-  // Agrupar por data e categoria
   const porDataCat={};
   const cats=new Set();
   vendas.forEach(v=>{
@@ -2037,36 +2042,59 @@ function renderChartDiario(vendas){
   const datas=Object.keys(porDataCat).sort();
   const catList=[...cats].sort();
   const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa'];
+  // Datasets de quantidade por categoria (Y1)
   const datasets=catList.map((cat,i)=>({
     label:cat,
     data:datas.map(d=>(porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].qtd:0)),
     borderColor:cores[i%cores.length],
     backgroundColor:cores[i%cores.length]+'33',
-    tension:0.3,fill:false,pointRadius:3
+    tension:0.3,fill:false,pointRadius:3,yAxisID:'y'
   }));
-  // Y2: valor total por dia (todas categorias somadas)
-  const valTotal={
-    label:'Valor (R$)',
-    data:datas.map(d=>Object.values(porDataCat[d]||{}).reduce((s,v)=>s+(v.val||0),0)),
-    borderColor:'#e11d48',backgroundColor:'#e11d4822',
-    tension:0.3,fill:false,yAxisID:'y2',pointRadius:2,borderDash:[4,4]
-  };
+  // Linha de tendência geral (média móvel 7 dias)
+  const totalDia=datas.map(d=>Object.values(porDataCat[d]||{}).reduce((s,v)=>s+(v.qtd||0),0));
+  const janela=7;
+  const tendencia=totalDia.map((_,i)=>{
+    const slice=totalDia.slice(Math.max(0,i-janela+1),i+1);
+    return slice.reduce((a,b)=>a+b,0)/slice.length;
+  });
+  datasets.push({
+    label:'Tendência (7d)',
+    data:tendencia,
+    borderColor:'#64748b',backgroundColor:'transparent',
+    borderDash:[6,3],borderWidth:2,pointRadius:0,
+    tension:0.4,fill:false,yAxisID:'y'
+  });
   if(_chartDaily){_chartDaily.destroy();}
   _chartDaily=new Chart(ctx,{
     type:'line',
-    data:{labels:datas.map(d=>fDate(d)),datasets:[...datasets,valTotal]},
+    data:{labels:datas.map(d=>fDate(d)),datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
-      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      plugins:{
+        legend:{position:'top',labels:{font:{size:11}}},
+        tooltip:{callbacks:{
+          footer:(items)=>{
+            const idx=items[0].dataIndex;
+            const d=datas[idx];
+            if(!d)return '';
+            const linhas=catList.map(cat=>{
+              const val=porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].val:0;
+              const qtd=porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].qtd:0;
+              return val>0?cat+': '+fN(qtd)+' un | '+fBRL(val):'';
+            }).filter(Boolean);
+            return linhas.join('\n');
+          }
+        }}
+      },
       scales:{
         x:{ticks:{font:{size:10},maxRotation:45}},
-        y:{title:{display:true,text:'Unidades'},position:'left'},
-        y2:{title:{display:true,text:'Valor (R$)'},position:'right',grid:{drawOnChartArea:false}}
+        y:{title:{display:true,text:'Unidades'},position:'left'}
       }
     }
   });
 }
+
 
 function renderChartCanal(vendas){
   const ctx=document.getElementById('chart-canal');
@@ -2108,12 +2136,12 @@ function renderChartCanal(vendas){
 function renderChartPizza(vendas){
   const ctx=document.getElementById('chart-pizza');
   if(!ctx)return;
-  // Volume (qtd) por canal
+  // Volume MONETÁRIO por canal
   const porCanal={};
   vendas.forEach(v=>{
     const c=v.canal_venda||'Sem canal';
     if(!porCanal[c])porCanal[c]=0;
-    porCanal[c]+=v.quantidade||0;
+    porCanal[c]+=(v.valor_total||v.preco_unitario*v.quantidade||0);
   });
   const labels=Object.keys(porCanal).sort();
   const data=labels.map(c=>porCanal[c]);
@@ -2126,7 +2154,7 @@ function renderChartPizza(vendas){
       responsive:true,maintainAspectRatio:false,
       plugins:{
         legend:{position:'right',labels:{font:{size:11}}},
-        tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+fN(ctx.raw)+' un.'}}
+        tooltip:{callbacks:{label:function(ctx){return ' '+ctx.label+': '+fBRL(ctx.raw);}}}
       }
     }
   });
@@ -2513,6 +2541,67 @@ function logoutFaccao(){
   FACCAO_LOGADO=null;
   localStorage.removeItem('lume_faccao');
   mostrarLogin();
+}
+
+let _chartMensal=null;
+function renderChartMensal(vendas){
+  const ctx=document.getElementById('chart-mensal');
+  if(!ctx)return;
+  // Agrupar por mês e categoria
+  const porMesCat={};
+  const cats=new Set();
+  const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  vendas.forEach(v=>{
+    if(!v.data_venda)return;
+    const d=new Date(v.data_venda+'T12:00:00');
+    const mes=d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
+    const cat=estimarCategoria(v.sku);
+    cats.add(cat);
+    if(!porMesCat[mes])porMesCat[mes]={};
+    if(!porMesCat[mes][cat])porMesCat[mes][cat]={qtd:0,val:0};
+    porMesCat[mes][cat].qtd+=v.quantidade||0;
+    porMesCat[mes][cat].val+=(v.valor_total||v.preco_unitario*v.quantidade||0);
+  });
+  const meses=Object.keys(porMesCat).sort();
+  const catList=[...cats].sort();
+  const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa'];
+  // Datasets de quantidade (Y1 — barras agrupadas)
+  const datasets=catList.map((cat,i)=>({
+    label:cat,
+    data:meses.map(m=>(porMesCat[m]&&porMesCat[m][cat]?porMesCat[m][cat].qtd:0)),
+    backgroundColor:cores[i%cores.length]+'cc',
+    borderColor:cores[i%cores.length],
+    borderWidth:1,
+    yAxisID:'y'
+  }));
+  // Linha de valor total (Y2)
+  const valTotal={
+    label:'Valor Total (R$)',
+    type:'line',
+    data:meses.map(m=>Object.values(porMesCat[m]||{}).reduce((s,v)=>s+(v.val||0),0)),
+    borderColor:'#e11d48',backgroundColor:'#e11d4822',
+    tension:0.3,fill:false,pointRadius:4,borderWidth:2,
+    yAxisID:'y2'
+  };
+  const labels=meses.map(m=>{
+    const [ano,mes]=m.split('-');
+    return MESES[parseInt(mes)-1]+'/'+ano.slice(2);
+  });
+  if(_chartMensal){_chartMensal.destroy();}
+  _chartMensal=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[...datasets,valTotal]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      scales:{
+        x:{stacked:false,ticks:{font:{size:11}}},
+        y:{title:{display:true,text:'Unidades'},position:'left',stacked:false},
+        y2:{title:{display:true,text:'Valor (R$)'},position:'right',grid:{drawOnChartArea:false}}
+      }
+    }
+  });
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
