@@ -738,6 +738,11 @@ tr:hover td{background:var(--surface2);}
         </div>
         <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Classe</th><th>SKU</th><th>Categoria</th><th style="text-align:right">Qtd</th><th style="text-align:right">Receita</th><th style="text-align:right">%</th><th style="text-align:right">% Acum.</th></tr></thead><tbody id="abc-tbody"></tbody></table></div>
       </div>
+      <!-- Pareto abaixo da tabela -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">Pareto — Top 40 SKUs</div>
+        <div style="position:relative;height:280px"><canvas id="abc-chart"></canvas></div>
+      </div>
     </div>
 
     <!-- CATEGORIZAÇÃO -->
@@ -2016,7 +2021,7 @@ async function loadABC(){
 
 function renderChartDiario(vendas){
   const ctx=document.getElementById('chart-daily');
-  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartDiario(vendas),100);return;}
+  if(!ctx)return;
   // Agrupar por data e categoria
   const porDataCat={};
   const cats=new Set();
@@ -2065,7 +2070,7 @@ function renderChartDiario(vendas){
 
 function renderChartCanal(vendas){
   const ctx=document.getElementById('chart-canal');
-  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartCanal(vendas),100);return;}
+  if(!ctx)return;
   // Venda diária por canal — valor
   const porDataCanal={};
   const canais=new Set();
@@ -2102,7 +2107,7 @@ function renderChartCanal(vendas){
 
 function renderChartPizza(vendas){
   const ctx=document.getElementById('chart-pizza');
-  if(!ctx||ctx.offsetWidth===0){setTimeout(()=>renderChartPizza(vendas),100);return;}
+  if(!ctx)return;
   // Volume (qtd) por canal
   const porCanal={};
   vendas.forEach(v=>{
