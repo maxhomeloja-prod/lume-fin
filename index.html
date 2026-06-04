@@ -846,7 +846,10 @@ tr:hover td{background:var(--surface2);}
     <div id="page-balancete" class="page">
       <div class="page-header">
         <div><div class="page-title">Balancete</div><div class="page-sub">Receitas e despesas realizadas</div></div>
-        <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">📅 Visão Semanal</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
+        </div>
       </div>
       <div class="filters">
         <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fbal-empresa" onchange="loadBalancete()"><option value="">Todas</option></select></div>
