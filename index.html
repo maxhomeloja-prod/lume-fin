@@ -1242,7 +1242,7 @@ async function iniciarApp(){
 }
 
 async function carregarBase(){
-  try{EMPRESAS=await sbGet('empresas','?ativa=eq.true&order=nome');}catch(e){EMPRESAS=[];}
+  try{EMPRESAS=await sbGet('empresas','?ativa=eq.true&owner_id=eq.'+SESSION.user.id+'&order=nome');}catch(e){EMPRESAS=[];}
   const saved=localStorage.getItem('lume_empresa_id');
   EMPRESA_ID=(saved&&EMPRESAS.find(e=>e.id===saved))?saved:EMPRESAS[0]?.id;
   const sel=document.getElementById('sel-empresa');
@@ -1386,7 +1386,7 @@ function renderDashCharts(ops){
 async function loadEmpresas(){
   if(!SESSION)return;
   try{
-    const emps=await sbGet('empresas','?ativa=eq.true&order=nome');
+    const emps=await sbGet('empresas','?ativa=eq.true&owner_id=eq.'+SESSION.user.id+'&order=nome');
     const el=document.getElementById('empresas-lista');
     if(!emps.length){el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Nenhuma empresa cadastrada</div><button class="btn btn-primary btn-sm" onclick="abrirModalEmpresa()" style="margin-top:12px">Criar Empresa</button></div>';return;}
     el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">'+emps.map(e=>`<div class="card"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:600;color:var(--text)">${e.nome}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">CNPJ: ${e.cnpj||'—'}</div></div><span class="badge ${e.ativa?'badge-green':'badge-gray'}">${e.ativa?'ATIVA':'INATIVA'}</span></div><button class="btn btn-secondary btn-sm" onclick="abrirModalEmpresa('${e.id}')">✎ Editar</button></div>`).join('')+'</div>';
@@ -1407,7 +1407,7 @@ async function salvarEmpresa(){
     if(id){await sbPatch('empresas',`id=eq.${id}`,{nome,cnpj});}
     else{await sbPost('empresas',{nome,cnpj,ativa:true,owner_id:SESSION.user.id});}
     fecharModal('modal-empresa');
-    EMPRESAS=await sbGet('empresas','?ativa=eq.true&order=nome');
+    EMPRESAS=await sbGet('empresas','?ativa=eq.true&owner_id=eq.'+SESSION.user.id+'&order=nome');
     if(!EMPRESA_ID&&EMPRESAS.length>0){EMPRESA_ID=EMPRESAS[0].id;localStorage.setItem('lume_empresa_id',EMPRESA_ID);await carregarBase();}
     const sel=document.getElementById('sel-empresa');
     sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
@@ -2330,25 +2330,61 @@ async function loadBalancete(){
 }
 function renderBalancete(){
   const agrupado={};let totalRec=0,totalDesp=0,countT=0;
-  _balTransacoes.forEach(t=>{
-    const catId=t.categoria_id;const ehEsp=CATS_ESPECIAIS.has(catId);
-    const cat=CATEGORIAS.find(c=>c.id===catId);let nomeFinal,tipoFinal,key;
-    if(ehEsp){key='ESP::'+catId;nomeFinal=cat?.nome||'Outros';tipoFinal=cat?.tipo||(t.valor>=0?'RECEITA':'DESPESA');}
-    else{if(cat?.categoria_pai_id){const pai=CATEGORIAS.find(c=>c.id===cat.categoria_pai_id);nomeFinal=pai?.nome||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=cat?.nome||'(Sem categoria)';tipoFinal=cat?.tipo||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
-    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp};
+  _balTransacoes.forEach(function(t){
+    var catId=t.categoria_id;var ehEsp=CATS_ESPECIAIS.has(catId);
+    var cat=CATEGORIAS.find(function(c){return c.id===catId;});var nomeFinal,tipoFinal,key;
+    if(ehEsp){key='ESP::'+catId;nomeFinal=(cat&&cat.nome)||'Outros';tipoFinal=(cat&&cat.tipo)||(t.valor>=0?'RECEITA':'DESPESA');}
+    else{if(cat&&cat.categoria_pai_id){var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});nomeFinal=(pai&&pai.nome)||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=(cat&&cat.nome)||'(Sem categoria)';tipoFinal=(cat&&cat.tipo)||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
+    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,trans:[]};
     agrupado[key].total+=t.valor;
+    agrupado[key].trans.push(t);
     if(!ehEsp){countT++;if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=Math.abs(t.valor);}
   });
-  const saldo=totalRec-totalDesp;
+  var saldo=totalRec-totalDesp;
   document.getElementById('bal-rec').textContent=fBRL(totalRec);
   document.getElementById('bal-desp').textContent=fBRL(totalDesp);
   document.getElementById('bal-count').textContent=fN(countT);
-  const sEl=document.getElementById('bal-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
-  const desp=Object.values(agrupado).filter(g=>g.tipo==='DESPESA'&&!g.especial).sort((a,b)=>a.total-b.total);
-  const rec=Object.values(agrupado).filter(g=>g.tipo==='RECEITA'&&!g.especial).sort((a,b)=>b.total-a.total);
-  const esp=Object.values(agrupado).filter(g=>g.especial);
-  function secao(titulo,itens,cls){if(!itens.length)return'';const sub=itens.reduce((s,i)=>s+Math.abs(i.total),0);return`<div class="bal-section"><div class="bal-section-title">${titulo}</div><div class="bal-table">${itens.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val ${cls}">${fBRL(i.total)}</span></div>`).join('')}<div class="bal-row bal-subtotal"><span class="bal-row-name">Total ${titulo}</span><span class="bal-row-val ${cls}">${fBRL(sub)}</span></div></div></div>`;}
-  document.getElementById('bal-corpo').innerHTML=secao('Receitas',rec,'recei')+secao('Despesas',desp,'desp')+(esp.length?`<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transferências e Outros</div><div class="bal-table">${esp.map(i=>`<div class="bal-row"><span class="bal-row-name">${i.nome}</span><span class="bal-row-val" style="color:var(--text2)">${fBRL(i.total)}</span></div>`).join('')}</div></div>`:'');
+  var sEl=document.getElementById('bal-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
+
+  if(_balSemanal){renderBalanceteSemanal(agrupado);return;}
+
+  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){return a.total-b.total;});
+  var rec=Object.values(agrupado).filter(function(g){return g.tipo==='RECEITA'&&!g.especial;}).sort(function(a,b){return b.total-a.total;});
+  var esp=Object.values(agrupado).filter(function(g){return g.especial;});
+
+  function buildDetalhes(trans,rowId){
+    var rows=trans.map(function(t){
+      return '<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2);display:flex;justify-content:space-between">'+
+        '<span>'+fDate(t.data)+' \u00b7 '+(t.descricao||'\u2014')+'</span>'+
+        '<span style="color:'+(t.valor>=0?'var(--green)':'var(--red)')+'">'+fBRL(t.valor)+'</span>'+
+        '</div>';
+    }).join('');
+    return '<div id="'+rowId+'" style="display:none">'+rows+'</div>';
+  }
+
+  function secao(titulo,itens,cls){
+    if(!itens.length)return'';
+    var sub=itens.reduce(function(s,i){return s+Math.abs(i.total);},0);
+    var linhas=itens.map(function(item,idx){
+      var rowId='balr'+idx+''+titulo.charCodeAt(0);
+      var header='<div class="bal-row" style="cursor:pointer;display:flex;justify-content:space-between" onclick="toggleBalRow(\''+rowId+'\')">'+
+        '<span class="bal-row-name">\u25b6 '+item.nome+'</span>'+
+        '<span class="bal-row-val '+cls+'">'+fBRL(item.total)+'</span>'+
+        '</div>';
+      return header+buildDetalhes(item.trans,rowId);
+    }).join('');
+    return '<div class="bal-section"><div class="bal-section-title">'+titulo+'</div>'+
+      '<div class="bal-table">'+linhas+
+      '<div class="bal-row bal-subtotal"><span class="bal-row-name">Total '+titulo+'</span>'+
+      '<span class="bal-row-val '+cls+'">'+fBRL(sub)+'</span></div></div></div>';
+  }
+
+  document.getElementById('bal-corpo').innerHTML=
+    secao('Receitas',rec,'recei')+
+    secao('Despesas',desp,'desp')+
+    (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div><div class="bal-table">'+
+      esp.map(function(i){return '<div class="bal-row"><span class="bal-row-name">'+i.nome+'</span><span class="bal-row-val" style="color:var(--text2)">'+fBRL(i.total)+'</span></div>';}).join('')+
+      '</div></div>':'');
 }
 
 async function loadLancamentos(){
