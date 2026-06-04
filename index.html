@@ -1259,7 +1259,7 @@ async function carregarBase(){
   preencherSelects();
 
   if(EMPRESA_ID){
-    try{CONTAS=await sbGet('contas_bancarias',`?empresa_id=eq.${EMPRESA_ID}&ativa=eq.true&order=banco`);}catch(e){CONTAS=[];}
+    try{const _empIds=EMPRESAS.map(e=>e.id).join(',');CONTAS=await sbGet('contas_bancarias',`?empresa_id=in.(${_empIds})&ativa=eq.true&order=banco`);}catch(e){CONTAS=[];}
     const sel2=document.getElementById('fcat-conta');
     sel2.innerHTML='<option value="">Todas</option>'+CONTAS.map(c=>`<option value="${c.id}">${c.banco} · ${c.nome_conta}</option>`).join('');
     try{_terceiros=await sbGet('terceiros',`?empresa_id=eq.${EMPRESA_ID}&ativo=eq.true&order=nome`);}catch(e){_terceiros=[];}
@@ -1425,10 +1425,12 @@ async function salvarEmpresa(){
 async function loadContas(){
   if(!EMPRESA_ID){semEmpresaMsg('contas-lista');return;}
   try{
-    const contas=await sbGet('contas_bancarias',`?empresa_id=eq.${EMPRESA_ID}&order=banco`);
+    const empQ=buildEmpresaQuery('fcontas-empresa');
+    const contas=await sbGet('contas_bancarias','?'+empQ+'&order=banco');
     const el=document.getElementById('contas-lista');
     if(!contas.length){el.innerHTML='<div class="empty"><div class="empty-icon">🏦</div><div class="empty-title">Nenhuma conta conectada</div><button class="btn btn-primary btn-sm" onclick="abrirConectarBanco()" style="margin-top:12px">Conectar Banco</button></div>';return;}
-    el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">'+contas.map(c=>`<div class="card" style="border-left:3px solid ${c.tipo==='BANK'?'var(--green)':'var(--accent)'}"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:15px;font-weight:600;color:var(--text)">${c.banco}</div><div style="font-size:11px;color:var(--text2)">${c.nome_conta}</div></div><span class="badge ${c.ativa?'badge-green':'badge-gray'}">${c.ativa?'ATIVA':'INATIVA'}</span></div><div style="font-size:10px;color:var(--text3);margin-bottom:12px">Tipo: ${c.tipo} · ID: ${c.pluggy_account_id?.slice(0,8)||'—'}...</div><div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="reconectarBanco('${c.pluggy_item_id}')">↻ Reconectar</button><button class="btn btn-danger btn-sm" onclick="desativarConta('${c.id}')">Desativar</button></div></div>`).join('')+'</div>';
+    const empNomes={};EMPRESAS.forEach(e=>{empNomes[e.id]=e.nome;});
+    el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">'+contas.map(c=>`<div class="card" style="border-left:3px solid ${c.tipo==='BANK'?'var(--green)':'var(--accent)'}"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:15px;font-weight:600;color:var(--text)">${c.banco}</div><div style="font-size:11px;color:var(--text2)">${c.nome_conta}</div><div style="font-size:10px;color:var(--text3);margin-top:2px">${empNomes[c.empresa_id]||'—'}</div></div><span class="badge ${c.ativa?'badge-green':'badge-gray'}">${c.ativa?'ATIVA':'INATIVA'}</span></div><div style="font-size:10px;color:var(--text3);margin-bottom:12px">Tipo: ${c.tipo} · ID: ${c.pluggy_account_id?.slice(0,8)||'—'}...</div><div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="reconectarBanco('${c.pluggy_item_id}')">↻ Reconectar</button><button class="btn btn-danger btn-sm" onclick="desativarConta('${c.id}')">Desativar</button></div></div>`).join('')+'</div>';
   }catch(e){document.getElementById('contas-lista').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
 async function abrirConectarBanco(){
