@@ -2035,34 +2035,31 @@ function renderChartDiario(vendas){
     const cat=estimarCategoria(v.sku);
     cats.add(cat);
     if(!porDataCat[d])porDataCat[d]={};
-    if(!porDataCat[d][cat])porDataCat[d][cat]={qtd:0,val:0};
-    porDataCat[d][cat].qtd+=v.quantidade||0;
-    porDataCat[d][cat].val+=(v.valor_total||v.preco_unitario*v.quantidade||0);
+    if(!porDataCat[d][cat])porDataCat[d][cat]=0;
+    porDataCat[d][cat]+=v.quantidade||0;
   });
   const datas=Object.keys(porDataCat).sort();
   const catList=[...cats].sort();
   const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa'];
-  // Datasets de quantidade por categoria (Y1)
   const datasets=catList.map((cat,i)=>({
     label:cat,
-    data:datas.map(d=>(porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].qtd:0)),
+    data:datas.map(d=>porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat]:0),
     borderColor:cores[i%cores.length],
     backgroundColor:cores[i%cores.length]+'33',
-    tension:0.3,fill:false,pointRadius:3,yAxisID:'y'
+    tension:0.3,fill:false,pointRadius:3
   }));
-  // Linha de tendência geral (média móvel 7 dias)
-  const totalDia=datas.map(d=>Object.values(porDataCat[d]||{}).reduce((s,v)=>s+(v.qtd||0),0));
+  // Linha de tendência geral
+  const totalDia=datas.map(d=>Object.values(porDataCat[d]||{}).reduce((a,b)=>a+b,0));
   const janela=7;
   const tendencia=totalDia.map((_,i)=>{
     const slice=totalDia.slice(Math.max(0,i-janela+1),i+1);
-    return slice.reduce((a,b)=>a+b,0)/slice.length;
+    return Math.round(slice.reduce((a,b)=>a+b,0)/slice.length*10)/10;
   });
   datasets.push({
     label:'Tendência (7d)',
     data:tendencia,
     borderColor:'#64748b',backgroundColor:'transparent',
-    borderDash:[6,3],borderWidth:2,pointRadius:0,
-    tension:0.4,fill:false,yAxisID:'y'
+    borderDash:[6,3],borderWidth:2,pointRadius:0,tension:0.4,fill:false
   });
   if(_chartDaily){_chartDaily.destroy();}
   _chartDaily=new Chart(ctx,{
@@ -2070,22 +2067,15 @@ function renderChartDiario(vendas){
     data:{labels:datas.map(d=>fDate(d)),datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'nearest',axis:'x',intersect:false},
+      interaction:{mode:'nearest',intersect:true},
       plugins:{
         legend:{position:'top',labels:{font:{size:11}}},
-        tooltip:{callbacks:{
-          footer:(items)=>{
-            const idx=items[0].dataIndex;
-            const d=datas[idx];
-            if(!d)return '';
-            const linhas=catList.map(cat=>{
-              const val=porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].val:0;
-              const qtd=porDataCat[d]&&porDataCat[d][cat]?porDataCat[d][cat].qtd:0;
-              return val>0?cat+': '+fN(qtd)+' un | '+fBRL(val):'';
-            }).filter(Boolean);
-            return linhas.join('\n');
+        tooltip:{
+          callbacks:{
+            title:function(items){return items[0].label;},
+            label:function(item){return item.dataset.label+': '+fN(item.raw)+' unidades';}
           }
-        }}
+        }
       },
       scales:{
         x:{ticks:{font:{size:10},maxRotation:45}},
