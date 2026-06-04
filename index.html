@@ -307,6 +307,13 @@ tr:hover td{background:var(--surface2);}
   .topbar-nav{overflow-x:auto;}
   .page{padding:14px;}
 }
+.ac-wrap{position:relative;width:100%}
+.ac-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:9999;max-height:200px;overflow-y:auto;display:none}
+.ac-list.open{display:block}
+.ac-item{padding:9px 14px;font-size:13px;cursor:pointer;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-item:hover,.ac-item.active{background:var(--surface2)}
+.ac-empty{padding:9px 14px;font-size:12px;color:var(--text3);font-style:italic}
+
 </style>
 
 </head>
@@ -1053,7 +1060,7 @@ tr:hover td{background:var(--surface2);}
     </div>
     <div class="form-group"><label class="form-label">Descrição</label><input class="form-control" type="text" id="lan-desc"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label" id="lan-cf-label">Fornecedor</label><input class="form-control" type="text" id="lan-cf" list="lan-cf-list"><datalist id="lan-cf-list"></datalist></div>
+      <div class="form-group"><label class="form-label" id="lan-cf-label">Fornecedor</label><input class="form-control" type="text" id="lan-cf"></div>
       <div class="form-group"><label class="form-label">Categoria</label><select class="form-control" id="lan-cat"></select></div>
     </div>
     <div class="form-row">
@@ -1225,24 +1232,47 @@ async function criarConta(){
 }
 function abrirCadastro(){document.getElementById('login-screen').style.display='none';const el=document.getElementById('modal-cadastro');el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';}
 function fecharCadastro(){document.getElementById('modal-cadastro').style.display='none';document.getElementById('login-screen').style.display='flex';}
-function logout(){localStorage.removeItem('lume_session');SESSION=null;document.getElementById('app').style.display='none';document.getElementById('login-screen').style.display='flex';}
+function logout(){
+  localStorage.removeItem('lume_session');
+  SESSION=null;EMPRESA_ID=null;EMPRESAS=[];CATEGORIAS=[];CONTAS=[];
+  _ops=[];_terceiros=[];_precosOp={};_vendas=[];_lancamentos=[];
+  _balTransacoes=[];_transacoesPendentes=[];_caixaEntradas=[];_caixaSaidas=[];
+  _abcData=[];FACCAO_LOGADO=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-escolha').style.display='';
+  document.getElementById('login-empresa').style.display='none';
+  document.getElementById('login-faccao').style.display='none';
+  // Limpar campos de login
+  document.getElementById('login-email').value='';
+  document.getElementById('login-senha').value='';
+}
 
 // ── Init ─────────────────────────────────────────────────────
 async function iniciarApp(){
+  // Limpar TODOS os dados do usuário anterior antes de carregar novo
+  EMPRESA_ID=null;EMPRESAS=[];CATEGORIAS=[];CONTAS=[];
+  _ops=[];_terceiros=[];_precosOp={};_vendas=[];_lancamentos=[];
+  _balTransacoes=[];_transacoesPendentes=[];_caixaEntradas=[];_caixaSaidas=[];
+  _abcData=[];_estoqueMP=[];_estoqueSKU=[];FACCAO_LOGADO=null;
+
+  // Limpar toda a UI — mostrar estado vazio enquanto carrega
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('tb-user').textContent=SESSION.user?.email||'';
 
   const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
+  const fim=new Date(hoje.getFullYear(),hoje.getMonth()+1,0);
   const fd=d=>d.toISOString().split('T')[0];
   ['fcat-de','fbal-de','flan-de','fven-de','fabc-de'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(ini);});
-  ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(hoje);});
+  ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(fim);});
   document.getElementById('sai-data').value=fd(hoje);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
   await carregarBase();
-  await loadDashboard();
+  irPara('dashboard');
 }
 
 async function carregarBase(){
@@ -2030,7 +2060,7 @@ async function verificarBOMPendencias(){
 async function abrirModalBOM(sku,editar=false){
   document.getElementById('modal-bom-sku').textContent=sku;
   document.getElementById('bom-sku-val').value=sku;
-  _bomLinhas=0;document.getElementById('bom-linhas').innerHTML='';
+  _bomLinhas=0;document.getElementById('bom-linhas').innerHTML='';popularDatalistMateriais();
   if(editar){const e=await sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&sku=eq.${encodeURIComponent(sku)}`).catch(()=>[]);e.forEach(x=>addLinhaBOM(x));}
   else addLinhaBOM();
   abrirModal('modal-bom');
@@ -2041,6 +2071,7 @@ function addLinhaBOM(d=null){
   div.id=`bom-l-${n}`;div.style.cssText='display:grid;grid-template-columns:1fr 80px 80px 100px auto;gap:8px;margin-bottom:8px;align-items:end';
   div.innerHTML=`<div>${n===1?'<label class="form-label">Material</label>':''}<input class="form-control" id="bom-m-${n}" placeholder="Nome do material" value="${d?.material_nome||''}"></div><div>${n===1?'<label class="form-label">Qtd</label>':''}<input class="form-control" type="number" id="bom-q-${n}" step="0.01" value="${d?.quantidade||''}"></div><div>${n===1?'<label class="form-label">Un.</label>':''}<select class="form-control" id="bom-u-${n}"><option value="un" ${d?.unidade==='un'?'selected':''}>un</option><option value="m" ${d?.unidade==='m'?'selected':''}>m</option><option value="kg" ${d?.unidade==='kg'?'selected':''}>kg</option><option value="g" ${d?.unidade==='g'?'selected':''}>g</option></select></div><div>${n===1?'<label class="form-label">Preço</label>':''}<input class="form-control" type="number" id="bom-p-${n}" step="0.01" value="${d?.preco_unitario||''}"></div><button class="btn btn-danger btn-sm" style="margin-bottom:0" onclick="document.getElementById('bom-l-${n}').remove()">✕</button>`;
   document.getElementById('bom-linhas').appendChild(div);
+  acInit('bom-m-'+n,acFetchMateriais);
 }
 async function salvarBOM(){
   const sku=document.getElementById('bom-sku-val').value;
@@ -2397,11 +2428,22 @@ function renderBalancete(){
 
 async function loadLancamentos(){
   if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
-  const tipo=document.getElementById('flan-tipo')?.value;const sit=document.getElementById('flan-sit')?.value;
-  const de=document.getElementById('flan-de')?.value;const ate=document.getElementById('flan-ate')?.value;
-  let q=`?empresa_id=eq.${EMPRESA_ID}&order=data_vencimento.asc`;
-  if(tipo)q+=`&tipo_lancamento=eq.${tipo}`;if(sit)q+=`&situacao=eq.${sit}`;
-  if(de)q+=`&data_vencimento=gte.${de}`;if(ate)q+=`&data_vencimento=lte.${ate}`;
+  const tipo=document.getElementById('flan-tipo')?.value;
+  const sit=document.getElementById('flan-sit')?.value;
+  const de=document.getElementById('flan-de')?.value;
+  const ate=document.getElementById('flan-ate')?.value;
+  const cat=document.getElementById('flan-cat')?.value;
+  const fc=document.getElementById('flan-fc')?.value.trim();
+  const empQL=buildEmpresaQuery('flan-empresa');
+  // Popular select de categorias
+  const selCat=document.getElementById('flan-cat');
+  if(selCat&&CATEGORIAS.length){const v=selCat.value;selCat.innerHTML='<option value="">Todas</option>'+CATEGORIAS.map(c=>'<option value="'+c.id+'">'+c.nome+'</option>').join('');selCat.value=v;}
+  let q='?'+empQL+'&order=data_vencimento.asc';
+  if(tipo)q+='&tipo_lancamento=eq.'+tipo;
+  if(sit)q+='&situacao=eq.'+sit;
+  if(de)q+='&data_vencimento=gte.'+de;
+  if(ate)q+='&data_vencimento=lte.'+ate;
+  if(cat)q+='&categoria_id=eq.'+cat;
   document.getElementById('lan-wrap').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     _lancamentos=await sbGet('lancamentos_externos',q+'&limit=500');
@@ -2430,7 +2472,7 @@ function abrirModalLancamento(id){
   document.getElementById('lan-valor').value=l?.valor||'';
   document.getElementById('lan-venc').value=l?.data_vencimento||new Date().toISOString().split('T')[0];
   document.getElementById('lan-obs').value=l?.observacao||'';
-  toggleLanFields();abrirModal('modal-lancamento');
+  toggleLanFields();abrirModal('modal-lancamento');acInit('lan-cf',acFetchFornClientes);
 }
 function toggleLanFields(){const tipo=document.getElementById('lan-tipo')?.value;const el=document.getElementById('lan-cf-label');if(el)el.textContent=tipo==='PAGAR'?'Fornecedor':'Cliente';}
 async function salvarLancamento(){
@@ -2465,7 +2507,7 @@ function renderCaixaSai(){
   if(!_caixaSaidas.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
   document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_caixaSaidas.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
 }
-function abrirModalEntrada(){toggleEntFields();abrirModal('modal-entrada');}
+function abrirModalEntrada(){toggleEntFields();abrirModal('modal-entrada');acInit('ent-cliente',acFetchClientes);}
 function toggleEntFields(){const t=document.getElementById('ent-tipo')?.value;const f=document.getElementById('ent-cheque-fields');if(f)f.style.display=t==='CHEQUE'?'':'none';}
 async function salvarEntrada(){
   const tipo=document.getElementById('ent-tipo').value;const valor=parseFloat(document.getElementById('ent-valor').value);
@@ -2474,6 +2516,7 @@ async function salvarEntrada(){
 async function excluirEntrada(id){if(!confirm('Excluir?'))return;await sbDelete('caixa_entradas',`id=eq.${id}`);loadCaixa();}
 function abrirModalSaida(){
   abrirModal('modal-saida');
+  acInit('sai-forn',acFetchFornecedores);
   const disp=_caixaEntradas.filter(e=>e.valor_disponivel>0);
   document.getElementById('sai-entradas').innerHTML=disp.length?disp.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><input type="checkbox" id="sc-${e.id}" onchange="calcSaidaCobertura()"><div style="flex:1"><div>${e.cliente||'—'} · <span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></div><div style="color:var(--text3);font-size:11px">Disponível: ${fBRL(e.valor_disponivel)}</div></div>${e.tipo==='DINHEIRO'?`<input type="number" id="sv-${e.id}" class="form-control" style="width:90px;padding:4px 8px;font-size:12px" value="${e.valor_disponivel}" max="${e.valor_disponivel}" oninput="calcSaidaCobertura()">`:fBRL(e.valor_disponivel)}</div>`).join(''):'<div class="empty" style="padding:16px">Nenhuma entrada disponível</div>';
   document.getElementById('sai-total-sel').textContent=fBRL(0);document.getElementById('sai-cob-msg').textContent='';
@@ -3009,6 +3052,105 @@ async function excluirSimulacao(id){
   }catch(e){alert('Erro: '+e.message);}
 }
 
+
+
+
+
+
+
+// ── AUTOCOMPLETE CUSTOMIZADO ──────────────────────────────────
+function acInit(inputId, fetchFn){
+  const inp=document.getElementById(inputId);
+  if(!inp)return;
+  // Envolver o input num wrapper se ainda não foi
+  if(!inp.parentElement.classList.contains('ac-wrap')){
+    const wrap=document.createElement('div');
+    wrap.className='ac-wrap';
+    inp.parentNode.insertBefore(wrap,inp);
+    wrap.appendChild(inp);
+    const list=document.createElement('div');
+    list.className='ac-list';
+    list.id='ac-list-'+inputId;
+    wrap.appendChild(list);
+  }
+  const list=document.getElementById('ac-list-'+inputId);
+  let items=[], timer=null;
+
+  async function carregar(){
+    try{items=await fetchFn(inp.value.trim());}catch(e){items=[];}
+    renderizar();
+  }
+
+  function renderizar(){
+    const q=inp.value.trim().toLowerCase();
+    const filtrados=q?items.filter(i=>i.toLowerCase().includes(q)):items;
+    if(!filtrados.length){
+      list.innerHTML='<div class="ac-empty">Nenhum resultado</div>';
+    } else {
+      list.innerHTML=filtrados.slice(0,12).map((i,idx)=>
+        '<div class="ac-item" data-val="'+i.replace(/"/g,'&quot;')+'" onmousedown="acSelect(\''+inputId+'\',this)">'+
+        (q?i.replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<strong>$1</strong>'):i)+
+        '</div>'
+      ).join('');
+    }
+    list.classList.add('open');
+  }
+
+  inp.addEventListener('focus',()=>{if(items.length===0)carregar();else renderizar();});
+  inp.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>carregar(),200);});
+  inp.addEventListener('blur',()=>{setTimeout(()=>list.classList.remove('open'),150);});
+  inp.addEventListener('keydown',function(e){
+    const its=list.querySelectorAll('.ac-item');
+    const cur=list.querySelector('.ac-item.active');
+    if(e.key==='ArrowDown'){e.preventDefault();
+      const next=cur?cur.nextElementSibling:its[0];
+      if(cur)cur.classList.remove('active');
+      if(next)next.classList.add('active');
+    } else if(e.key==='ArrowUp'){e.preventDefault();
+      const prev=cur?cur.previousElementSibling:its[its.length-1];
+      if(cur)cur.classList.remove('active');
+      if(prev)prev.classList.add('active');
+    } else if(e.key==='Enter'&&cur){
+      e.preventDefault();inp.value=cur.getAttribute('data-val');
+      list.classList.remove('open');
+    } else if(e.key==='Escape'){list.classList.remove('open');}
+  });
+}
+
+function acSelect(inputId, el){
+  const inp=document.getElementById(inputId);
+  if(inp){inp.value=el.getAttribute('data-val');inp.dispatchEvent(new Event('input'));}
+  document.getElementById('ac-list-'+inputId)?.classList.remove('open');
+}
+
+// Funções de fetch para cada contexto
+async function acFetchFornecedores(q){
+  if(!EMPRESA_ID)return[];
+  const rows=await sbGet('lancamentos_externos','?empresa_id=eq.'+EMPRESA_ID+'&select=fornecedor&not.fornecedor.is.null&limit=200');
+  return[...new Set(rows.map(r=>r.fornecedor).filter(Boolean))].sort();
+}
+async function acFetchClientes(q){
+  if(!EMPRESA_ID)return[];
+  const rows=await sbGet('caixa_entradas','?empresa_id=eq.'+EMPRESA_ID+'&select=cliente&not.cliente.is.null&limit=200');
+  return[...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
+}
+async function acFetchMateriais(q){
+  if(!EMPRESA_ID)return[];
+  const rows=await sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&select=material_nome&limit=500');
+  return[...new Set(rows.map(r=>r.material_nome).filter(Boolean))].sort();
+}
+async function acFetchFornClientes(q){
+  if(!EMPRESA_ID)return[];
+  const [lans,caixaE]=await Promise.all([
+    sbGet('lancamentos_externos','?empresa_id=eq.'+EMPRESA_ID+'&select=fornecedor,cliente&limit=300'),
+    sbGet('caixa_entradas','?empresa_id=eq.'+EMPRESA_ID+'&select=cliente&limit=200')
+  ]);
+  const set=new Set();
+  lans.forEach(l=>{if(l.fornecedor)set.add(l.fornecedor);if(l.cliente)set.add(l.cliente);});
+  caixaE.forEach(e=>{if(e.cliente)set.add(e.cliente);});
+  return[...set].sort();
+}
+
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
@@ -3268,5 +3410,6 @@ function atualizarEmpresaUI(){
 }
 
 </script>
+<datalist id="bom-materiais-list"></datalist>
 </body>
 </html>
