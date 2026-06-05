@@ -2086,29 +2086,50 @@ async function uploadVendas(input){
   const prog=document.getElementById('prog-vendas');
   const txt=document.getElementById('prog-vendas-txt');
   const bar=document.getElementById('prog-vendas-bar');
-  prog.style.display='';bar.style.width='5%';
+  prog.style.display='';bar.style.width='2%';
+  txt.textContent='Lendo arquivo...';
   const text=await file.text();
   const linhas=text.trim().split('\n');
   const header=linhas[0].toLowerCase().split(',').map(h=>h.trim().replace(/"/g,''));
   const iData=header.indexOf('data_venda'),iCanal=header.indexOf('canal_venda'),iSku=header.indexOf('sku'),iCli=header.indexOf('cliente'),iQtd=header.indexOf('quantidade'),iPreco=header.indexOf('preco_unitario');
   if(iSku<0||iQtd<0||iPreco<0){alert('Planilha inválida. Use o modelo fornecido.');prog.style.display='none';return;}
   const regs=linhas.slice(1).filter(l=>l.trim());
+  txt.textContent='Preparando '+regs.length+' registros...';
+  // Montar todos os registros primeiro
   let ok=0,erros=0;
+  const batch=[];
+  const hoje=new Date().toISOString().split('T')[0];
   for(let i=0;i<regs.length;i++){
     const cols=regs[i].split(',').map(c=>c.trim().replace(/"/g,''));
-    const sku=cols[iSku]?.toUpperCase();const qtd=parseInt(cols[iQtd]);const preco=parseFloat(cols[iPreco]?.replace(',','.'));
-    if(!sku||!qtd||!preco){erros++;continue;}
-    try{
-      const prod=await garantirProduto(sku,sku);
-      const cliNome=iCli>=0?cols[iCli]:'';const cliId=await garantirCliente(cliNome);
-      const dataVenda=iData>=0&&cols[iData]?cols[iData]:new Date().toISOString().split('T')[0];
-      await sbPost('vendas',{empresa_id:EMPRESA_ID,data_venda:dataVenda,canal_venda:iCanal>=0&&cols[iCanal]?cols[iCanal]:null,produto_id:prod.id,sku,cliente_id:cliId,cliente_nome:cliNome||null,quantidade:qtd,preco_unitario:preco});
-      ok++;
-    }catch(e){erros++;}
-    bar.style.width=Math.round((i+1)/regs.length*100)+'%';
-    txt.textContent=`Processando ${i+1}/${regs.length} — ${ok} inseridas${erros?', '+erros+' erros':''}`;
+    const sku=cols[iSku]?.toUpperCase();
+    const qtd=parseInt(cols[iQtd]);
+    const preco=parseFloat(cols[iPreco]?.replace(',','.'));
+    if(!sku||!qtd||isNaN(preco)||preco<=0){erros++;continue;}
+    const cliNome=iCli>=0?cols[iCli]?.trim():'';
+    const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
+    const canal=iCanal>=0&&cols[iCanal]?.trim()?cols[iCanal].trim():null;
+    batch.push({empresa_id:EMPRESA_ID,data_venda:dataVenda,canal_venda:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,preco_unitario:preco,valor_total:qtd*preco});
   }
-  txt.textContent=`✅ ${ok} vendas importadas${erros?', '+erros+' erros':''}`;
+  // Inserir em lotes de 500
+  const LOTE=500;
+  const total=batch.length;
+  for(let i=0;i<total;i+=LOTE){
+    const lote=batch.slice(i,i+LOTE);
+    try{
+      await sbPost('vendas',lote);
+      ok+=lote.length;
+    }catch(e){
+      // Tentar linha a linha se o lote falhar
+      for(const row of lote){
+        try{await sbPost('vendas',row);ok++;}
+        catch(e2){erros++;}
+      }
+    }
+    bar.style.width=Math.round((i+LOTE)/total*100)+'%';
+    txt.textContent='Inserindo... '+Math.min(i+LOTE,total)+'/'+total+' — '+ok+' ok'+(erros?', '+erros+' erros':'');
+    await new Promise(r=>setTimeout(r,50)); // respirar o browser
+  }
+  txt.textContent='✅ '+ok+' vendas importadas'+(erros?', '+erros+' erros com dados inválidos':'');
   setTimeout(()=>{prog.style.display='none';loadVendas();verificarBOMPendencias();},3000);
 }
 
