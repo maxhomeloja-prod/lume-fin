@@ -1480,8 +1480,12 @@ async function abrirConectarBanco(){
     const d=await r.json();
     if(!d.accessToken)throw new Error('Token não gerado');
     await carregarPluggyScript();
-    const pluggy=new PluggyConnect({connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}});
-    pluggy.open();
+    const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
+    if(!PC)throw new Error('Pluggy Connect não carregou');
+    const pluggy=new PC({connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}});
+    if(typeof pluggy.open==='function')pluggy.open();
+    else if(typeof pluggy.init==='function')pluggy.init();
+    else throw new Error('Método de abertura não encontrado');
   }catch(e){alert('Erro ao conectar: '+e.message);}
 }
 async function carregarPluggyScript(){
