@@ -1493,7 +1493,7 @@ async function carregarPluggyScript(){
     const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
     if(PC)return resolve();
     const s=document.createElement('script');
-    s.src='https://cdn.pluggy.ai/pluggy-connect/v2.1.0/pluggy-connect.js';
+    s.src='https://cdn.pluggy.ai/pluggy-connect/v2.5.0/pluggy-connect.js';
     s.onload=()=>{
       if(!window.PluggyConnect&&window.window&&window.window.PluggyConnect)
         window.PluggyConnect=window.window.PluggyConnect;
