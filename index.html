@@ -1508,7 +1508,7 @@ async function processarConexaoBanco(item){
 }
 async function reconectarBanco(itemId){
   try{
-    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:EMPRESA_ID})});
+    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:EMPRESA_ID,itemId})});
     const d=await r.json();
     if(!d.accessToken)throw new Error('Token não gerado');
     await carregarPluggyScript();
