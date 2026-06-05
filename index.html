@@ -2384,7 +2384,8 @@ async function loadCategorizacao(){
   if(!wrap)return;
   wrap.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    const result=await sbGet('transacoes',`?empresa_id=eq.${EMPRESA_ID}&status=eq.PENDENTE&order=data.desc&limit=200`);
+    const empQC=buildEmpresaQuery('fcat-empresa');
+    const result=await sbGet('transacoes','?'+empQC+'&status=eq.PENDENTE&order=data.desc&limit=500');
     _transacoesPendentes=Array.isArray(result)?result:[];
     renderCategorizacao();
     const badge=document.getElementById('badge-cat');
