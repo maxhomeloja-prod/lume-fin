@@ -2475,6 +2475,15 @@ async function loadLancamentos(){
     document.getElementById('lan-pagar').textContent=fBRL(pagar);
     document.getElementById('lan-receber').textContent=fBRL(receber);
     const sEl=document.getElementById('lan-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
+    // Filtrar por fornecedor/cliente localmente
+    if(fc){
+      _lancamentos=_lancamentos.filter(l=>{
+        const fc_lower=fc.toLowerCase();
+        return (l.fornecedor||'').toLowerCase().includes(fc_lower)||
+               (l.cliente||'').toLowerCase().includes(fc_lower)||
+               (l.descricao||'').toLowerCase().includes(fc_lower);
+      });
+    }
     const hoje=new Date().toISOString().split('T')[0];
     if(!_lancamentos.length){document.getElementById('lan-wrap').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum lançamento encontrado</div></div>';return;}
     document.getElementById('lan-wrap').innerHTML='<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornec./Cliente</th><th>Categoria</th><th>Meio</th><th style="text-align:right">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+_lancamentos.map(l=>`<tr style="${l.situacao==='EM_ABERTO'&&l.data_vencimento<hoje?'background:var(--red-bg)':''}"><td>${fDate(l.data_vencimento)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.descricao}</td><td style="color:var(--text2)">${l.fornecedor||l.cliente||'—'}</td><td style="color:var(--text3)">${getNomeCat(l.categoria_id)}</td><td style="font-size:11px">${l.meio_pagamento||'—'}</td><td style="text-align:right;color:${l.tipo_lancamento==='RECEBER'?'var(--green)':'var(--red)'}">${fBRL(l.valor)}</td><td><span class="badge ${l.situacao==='EM_ABERTO'?'badge-amber':'badge-green'}">${l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO'}</span></td><td style="display:flex;gap:4px;padding:8px 4px">${l.situacao==='EM_ABERTO'?`<button class="btn btn-success btn-sm" onclick="darBaixa('${l.id}')">✓</button>`:''}<button class="btn btn-ghost btn-sm" onclick="abrirModalLancamento('${l.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirLancamento('${l.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
@@ -3284,7 +3293,12 @@ function getEmpresaFiltro(selId){
 }
 function buildEmpresaQuery(selId){
   const v=getEmpresaFiltro(selId);
-  return v?'empresa_id=eq.'+v:'empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')';
+  if(v)return 'empresa_id=eq.'+v;
+  // Sem filtro — usar todas as empresas do usuário
+  const ids=EMPRESAS.map(e=>e.id).filter(Boolean);
+  if(!ids.length)return 'empresa_id=eq.'+EMPRESA_ID; // fallback se EMPRESAS vazio
+  if(ids.length===1)return 'empresa_id=eq.'+ids[0];  // evitar in() com 1 item
+  return 'empresa_id=in.('+ids.join(',')+')';
 }
 
 let _opDetalheAtual=null;
