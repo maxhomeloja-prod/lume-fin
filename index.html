@@ -1109,6 +1109,24 @@ tr:hover td{background:var(--surface2);}
 </div>
 
 
+<!-- ── MODAL VINCULAR EMPRESA CONTA ── -->
+<div class="modal-overlay" id="modal-vincular-empresa-conta">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">Vincular Conta Bancária</div>
+    <div class="modal-sub" id="mvc-banco-nome" style="margin-bottom:16px"></div>
+    <div class="form-group">
+      <label class="form-label">A qual empresa pertence esta conta?</label>
+      <select class="form-control" id="mvc-empresa-sel">
+        <option value="">Selecione...</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-vincular-empresa-conta')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarVincularConta()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL DETALHE OP ── -->
 <div class="modal-overlay" id="modal-op-detalhe">
   <div class="modal modal-lg">
@@ -1503,10 +1521,55 @@ async function carregarPluggyScript(){
     document.head.appendChild(s);
   });
 }
+let _itemConectadoPendente = null;
+
 async function processarConexaoBanco(item){
+  // Guardar item e abrir modal para escolher empresa
+  _itemConectadoPendente = item;
+  const sel = document.getElementById('mvc-empresa-sel');
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    EMPRESAS.map(e => '<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  // Pré-selecionar empresa atual
+  if(EMPRESA_ID) sel.value = EMPRESA_ID;
+  document.getElementById('mvc-banco-nome').textContent =
+    (item.connector?.name || 'Banco') + ' — ' + (item.accounts?.[0]?.name || 'Nova conta');
+  abrirModal('modal-vincular-empresa-conta');
+}
+
+async function confirmarVincularConta(){
+  const empresaId = document.getElementById('mvc-empresa-sel').value;
+  if(!empresaId){alert('Selecione uma empresa');return;}
+  if(!_itemConectadoPendente){return;}
+  const item = _itemConectadoPendente;
   try{
-    await sbPost('contas_bancarias',{empresa_id:EMPRESA_ID,pluggy_item_id:item.id,pluggy_account_id:'PENDENTE_'+item.id,banco:item.connector?.name||'Banco',nome_conta:'Conta conectada',tipo:'BANK',ativa:true});
-    alert('Banco conectado! Sincronize em alguns minutos.');
+    const accounts = item.accounts || [];
+    if(accounts.length > 0){
+      // Salvar cada conta do item
+      for(const acc of accounts){
+        await sbPost('contas_bancarias',{
+          empresa_id: empresaId,
+          pluggy_item_id: item.id,
+          pluggy_account_id: acc.id,
+          banco: item.connector?.name || 'Banco',
+          nome_conta: acc.name || 'Conta conectada',
+          tipo: acc.type === 'CREDIT' ? 'CREDIT' : 'BANK',
+          ativa: true
+        });
+      }
+    } else {
+      await sbPost('contas_bancarias',{
+        empresa_id: empresaId,
+        pluggy_item_id: item.id,
+        pluggy_account_id: 'PENDENTE_'+item.id,
+        banco: item.connector?.name || 'Banco',
+        nome_conta: 'Conta conectada',
+        tipo: 'BANK',
+        ativa: true
+      });
+    }
+    fecharModal('modal-vincular-empresa-conta');
+    _itemConectadoPendente = null;
+    alert('Banco conectado com sucesso!');
     loadContas();
   }catch(e){alert('Erro: '+e.message);}
 }
