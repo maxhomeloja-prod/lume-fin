@@ -3544,6 +3544,231 @@ async function verificarCallbackMarketplace(){
   }catch(e){alert('Erro ao finalizar conexão: '+e.message);}
 }
 
+async function carregarOPsFaccao(){
+  if(!FACCAO_LOGADO)return;
+  const el=document.getElementById('fac-ops');
+  if(!el)return;
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  try{
+    // Buscar OPs do terceiro logado
+    const ops=await sbGet('ordens_producao',
+      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
+      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '&situacao=in.(ABERTA,EM_PRODUCAO,PARCIAL)'+
+      '&order=criado_em.desc&limit=100');
+    // Buscar preços de facção
+    const precos=await sbGet('precos_faccao',
+      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
+      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '&ativo=eq.true&limit=500').catch(()=>[]);
+    const precosMap={};
+    precos.forEach(p=>precosMap[p.sku.toUpperCase()]=p.preco);
+
+    // Atualizar nome do facção na UI
+    const nomeEl=document.getElementById('fac-nome-display');
+    if(nomeEl)nomeEl.textContent=FACCAO_LOGADO.nome||'—';
+
+    if(!ops.length){
+      el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhuma OP em andamento</div><div class="empty-sub">Você não tem ordens de produção abertas no momento</div></div>';
+      return;
+    }
+    const corSit={ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa'};
+    const nomeSit={ABERTA:'ABERTA',EM_PRODUCAO:'EM PRODUÇÃO',PARCIAL:'PARCIAL'};
+    el.innerHTML='<div style="display:flex;flex-direction:column;gap:12px">'+ops.map(op=>{
+      const preco=precosMap[op.sku.toUpperCase()]||op.preco_unitario||0;
+      const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
+      const aberto=op.quantidade-op.quantidade_entregue;
+      const cor=corSit[op.situacao]||'#4a7a9b';
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">'+
+        '<div style="background:var(--surface2);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;border-left:4px solid '+cor+'">'+
+        '<div>'+
+        '<div style="font-weight:700;font-size:15px">'+op.numero+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+op.sku+'</div>'+
+        '</div>'+
+        '<span class="badge" style="background:'+cor+'22;color:'+cor+';border:1px solid '+cor+'">'+nomeSit[op.situacao]+'</span>'+
+        '</div>'+
+        '<div style="padding:12px 16px">'+
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">'+(op.descricao||op.sku)+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+
+        '<div style="text-align:center;background:var(--surface2);border-radius:var(--radius);padding:8px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Total</div>'+
+        '<div style="font-weight:700;font-size:18px">'+op.quantidade+'</div></div>'+
+        '<div style="text-align:center;background:var(--surface2);border-radius:var(--radius);padding:8px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Entregue</div>'+
+        '<div style="font-weight:700;font-size:18px;color:var(--green)">'+op.quantidade_entregue+'</div></div>'+
+        '<div style="text-align:center;background:var(--surface2);border-radius:var(--radius);padding:8px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Restante</div>'+
+        '<div style="font-weight:700;font-size:18px;color:var(--amber)">'+aberto+'</div></div>'+
+        '</div>'+
+        '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px">'+
+        '<div style="height:100%;background:'+cor+';border-radius:3px;width:'+pct+'%"></div></div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text3)">'+
+        '<span>'+pct+'% concluído</span>'+
+        '<span>Preço: '+(preco?fBRL(preco):'—')+'</span>'+
+        '</div>'+
+        '</div>'+
+        '</div>';
+    }).join('')+'</div>';
+  }catch(e){
+    el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';
+  }
+}
+
+// ── BUSCA FACÇÃO ──────────────────────────────────────────────
+async function faccaoBuscar(){
+  if(!FACCAO_LOGADO)return;
+  const q=document.getElementById('fac-busca')?.value.trim().toUpperCase();
+  const el=document.getElementById('fac-resultados');
+  if(!q){el.innerHTML='';return;}
+  try{
+    const ops=await sbGet('ordens_producao',
+      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
+      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '&situacao=in.(ABERTA,EM_PRODUCAO,PARCIAL)'+
+      '&or=(sku.ilike.*'+q+'*,numero.ilike.*'+q+'*)'+
+      '&limit=10');
+    if(!ops.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px">Nenhuma OP encontrada</div>';return;}
+    el.innerHTML=ops.map(op=>{
+      const aberto=op.quantidade-op.quantidade_entregue;
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:pointer;background:var(--surface2)" onclick="faccaoSelecionarOP(this.dataset.id)" data-id="'+op.id+'">"+'
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-weight:600">'+op.numero+' · '+op.sku+'</div>'+
+        '<div style="font-size:11px;color:var(--text3)">Restante: '+aberto+' peças</div></div>'+
+        '<button class="btn btn-primary btn-sm">+ Entregar</button>'+
+        '</div></div>';
+    }).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--red);font-size:12px">Erro: '+e.message+'</div>';}
+}
+
+let _faccaoOPSelecionada=null;
+const _faccaoCarrinho=[];
+
+async function faccaoSelecionarOP(idOrEl){const id=typeof idOrEl==='string'?idOrEl:idOrEl;
+  if(!FACCAO_LOGADO)return;
+  const ops=await sbGet('ordens_producao','?id=eq.'+id).catch(()=>[]);
+  const op=ops[0];if(!op)return;
+  // Buscar preço
+  const precos=await sbGet('precos_faccao','?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+op.sku+'&limit=1').catch(()=>[]);
+  op._preco=precos[0]?.preco||op.preco_unitario||0;
+  _faccaoOPSelecionada=op;
+  const aberto=op.quantidade-op.quantidade_entregue;
+  document.getElementById('fac-busca').value='';
+  document.getElementById('fac-resultados').innerHTML=
+    '<div style="border:2px solid var(--accent);border-radius:var(--radius);padding:14px">'+
+    '<div style="font-weight:600;margin-bottom:4px">'+op.numero+' · '+op.sku+'</div>'+
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Restante: '+aberto+' peças · Preço: '+(op._preco?fBRL(op._preco):'—')+'</div>'+
+    '<div style="display:flex;gap:8px;align-items:center">'+
+    '<input type="number" id="fac-qtd-input" class="form-control" style="width:100px" min="1" max="'+aberto+'" placeholder="Qtd" value="'+aberto+'">'+
+    '<button class="btn btn-primary" onclick="faccaoAdicionarCarrinho()">+ Adicionar ao Carrinho</button>'+
+    '</div></div>';
+}
+
+function faccaoAdicionarCarrinho(){
+  if(!_faccaoOPSelecionada)return;
+  const qtd=parseInt(document.getElementById('fac-qtd-input')?.value)||0;
+  if(!qtd||qtd<=0){alert('Informe a quantidade');return;}
+  const aberto=_faccaoOPSelecionada.quantidade-_faccaoOPSelecionada.quantidade_entregue;
+  if(qtd>aberto){alert('Quantidade maior que o restante ('+aberto+')');return;}
+  _faccaoCarrinho.push({op:_faccaoOPSelecionada,qtd,valor:qtd*_faccaoOPSelecionada._preco});
+  _faccaoOPSelecionada=null;
+  document.getElementById('fac-resultados').innerHTML='';
+  document.getElementById('fac-busca').value='';
+  renderFaccaoCarrinho();
+}
+
+function renderFaccaoCarrinho(){
+  const el=document.getElementById('fac-carrinho');
+  const card=document.getElementById('fac-carrinho-card');
+  if(!_faccaoCarrinho.length){if(card)card.style.display='none';return;}
+  if(card)card.style.display='';
+  const total=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
+  document.getElementById('fac-total').textContent=fBRL(total);
+  el.innerHTML=_faccaoCarrinho.map((item,idx)=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+    '<div><div style="font-weight:500">'+item.op.numero+' · '+item.op.sku+'</div>'+
+    '<div style="font-size:11px;color:var(--text3)">'+item.qtd+' peças × '+(item.op._preco?fBRL(item.op._preco):'—')+'</div></div>'+
+    '<div style="display:flex;align-items:center;gap:8px">'+
+    '<span style="color:var(--green);font-weight:600">'+fBRL(item.valor)+'</span>'+
+    '<button class="btn btn-danger btn-sm" onclick="faccaoRemoverCarrinho('+idx+')">✕</button>'+
+    '</div></div>'
+  ).join('');
+}
+
+function faccaoRemoverCarrinho(idx){
+  _faccaoCarrinho.splice(idx,1);
+  renderFaccaoCarrinho();
+}
+
+function faccaoSemOP(){
+  // TODO: entrega avulsa sem OP
+  alert('Funcionalidade em desenvolvimento');
+}
+
+function abrirConfirmacaoFaccao(){
+  if(!_faccaoCarrinho.length)return;
+  const total=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
+  document.getElementById('fac-conf-total').textContent=fBRL(total);
+  document.getElementById('fac-conf-itens').innerHTML=_faccaoCarrinho.map(item=>
+    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'+
+    '<span>'+item.op.numero+' · '+item.op.sku+' ('+item.qtd+' peças)</span>'+
+    '<span style="color:var(--green)">'+fBRL(item.valor)+'</span>'+
+    '</div>'
+  ).join('');
+  document.getElementById('fac-conf-obs').value='';
+  abrirModal('modal-fac-confirmar');
+}
+
+async function confirmarEntregaFaccao(){
+  if(!_faccaoCarrinho.length||!FACCAO_LOGADO)return;
+  const btn=document.getElementById('btn-conf-fac');
+  btn.disabled=true;btn.textContent='Confirmando...';
+  const obs=document.getElementById('fac-conf-obs').value.trim();
+  try{
+    for(const item of _faccaoCarrinho){
+      const op=item.op;
+      const catFaccao=null; // sem categoria no contexto de facção
+      // Criar lançamento
+      let lanId=null;
+      if(item.valor>0){
+        const lan=await sbPost('lancamentos_externos',{
+          empresa_id:op.empresa_id,
+          data:new Date().toISOString().split('T')[0],
+          data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
+          descricao:'Entrega OP '+op.numero+' — '+op.sku+' ('+item.qtd+' peças)',
+          valor:item.valor,tipo_lancamento:'PAGAR',meio_pagamento:'PIX',
+          situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome||null,
+          observacao:obs||null
+        });
+        lanId=lan[0]?.id;
+      }
+      // Registrar entrega
+      await sbPost('entregas_op',{
+        empresa_id:op.empresa_id,op_id:op.id,
+        terceiro_id:FACCAO_LOGADO.id,
+        quantidade:item.qtd,valor_total:item.valor,
+        observacao:obs||null,lancamento_id:lanId
+      });
+      // Atualizar OP
+      const novaQtd=op.quantidade_entregue+item.qtd;
+      const novaSit=novaQtd>=op.quantidade?'CONCLUIDA':novaQtd>0?'PARCIAL':'ABERTA';
+      await sbPatch('ordens_producao','id=eq.'+op.id,{
+        quantidade_entregue:novaQtd,situacao:novaSit,
+        data_conclusao:novaSit==='CONCLUIDA'?new Date().toISOString().split('T')[0]:null
+      });
+    }
+    // Limpar carrinho
+    _faccaoCarrinho.length=0;
+    fecharModal('modal-fac-confirmar');
+    btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';
+    alert('✅ Entrega registrada com sucesso!');
+    await carregarOPsFaccao();
+    renderFaccaoCarrinho();
+  }catch(e){
+    btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';
+    alert('Erro: '+e.message);
+  }
+}
+
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
