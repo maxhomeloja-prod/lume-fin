@@ -3607,6 +3607,9 @@ async function carregarOPsFaccao(){
         '<span>'+pct+'% concluído</span>'+
         '<span>Preço: '+(preco?fBRL(preco):'—')+'</span>'+
         '</div>'+
+        '<div style="margin-top:12px">'+
+        '<button class="btn btn-primary" style="width:100%" onclick="faccaoSelecionarOP(this.dataset.id)" data-id="'+op.id+'">📦 Registrar Entrega</button>'+
+        '</div>'+
         '</div>'+
         '</div>';
     }).join('')+'</div>';
@@ -3631,7 +3634,7 @@ async function faccaoBuscar(){
     if(!ops.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px">Nenhuma OP encontrada</div>';return;}
     el.innerHTML=ops.map(op=>{
       const aberto=op.quantidade-op.quantidade_entregue;
-      return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:pointer;background:var(--surface2)" onclick="faccaoSelecionarOP(this.dataset.id)" data-id="'+op.id+'">"+'
+      return '<div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;cursor:pointer;background:var(--surface2)" onclick="faccaoSelecionarOP(this.dataset.id)" data-id="'+op.id+'">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div><div style="font-weight:600">'+op.numero+' · '+op.sku+'</div>'+
         '<div style="font-size:11px;color:var(--text3)">Restante: '+aberto+' peças</div></div>'+
