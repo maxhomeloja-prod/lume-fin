@@ -448,6 +448,7 @@ tr:hover td{background:var(--surface2);}
         </button>
         <div class="nav-dropdown" id="dd-cadastros">
           <button class="nav-dd-item" onclick="irPara('empresas')">🏢 Empresas</button>
+          <button class="nav-dd-item" onclick="irPara('marketplaces')">🛒 Marketplaces</button>
           <button class="nav-dd-item" onclick="irPara('contas')">🏦 Contas Bancárias</button>
           <div class="nav-dd-sep"></div>
           <button class="nav-dd-item" onclick="irPara('terceiros')">👥 Terceiros / Facções</button>
@@ -931,6 +932,15 @@ tr:hover td{background:var(--surface2);}
       <div id="cx-sai-panel" style="display:none"><div class="card"><div class="tbl-wrap" id="cx-sai-wrap"></div></div></div>
     </div>
 
+    <!-- MARKETPLACES -->
+    <div id="page-marketplaces" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Marketplaces</div><div class="page-sub">Conecte seus canais de venda</div></div>
+        <button class="btn btn-primary btn-sm" onclick="abrirModalAddMarketplace()">+ Adicionar Marketplace</button>
+      </div>
+      <div id="mkt-lista" class="grid-2"></div>
+    </div>
+
     <!-- PERFIL -->
     <div id="page-perfil" class="page">
       <div class="page-header"><div><div class="page-title">Meu Perfil</div><div class="page-sub">Dados cadastrais e conta</div></div></div>
@@ -1109,6 +1119,62 @@ tr:hover td{background:var(--surface2);}
 </div>
 
 
+<!-- ── MODAL ADD MARKETPLACE ── -->
+<div class="modal-overlay" id="modal-add-marketplace">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">Adicionar Marketplace</div>
+    <div class="modal-sub" style="margin-bottom:20px">Selecione o canal de vendas para conectar</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+      <!-- Shopee -->
+      <div class="card" style="cursor:pointer;text-align:center;padding:20px 12px;border:2px solid transparent;transition:border .2s" 
+           id="mkt-card-shopee"
+           onmouseenter="this.style.borderColor='var(--accent)'" 
+           onmouseleave="this.style.borderColor='transparent'"
+           onclick="selecionarMarketplace('shopee')">
+        <div style="font-size:32px;margin-bottom:8px">🟠</div>
+        <div style="font-weight:600;font-size:13px">Shopee</div>
+        <div style="font-size:10px;color:var(--green);margin-top:4px">● Disponível</div>
+      </div>
+      <!-- TikTok Shop -->
+      <div class="card" style="cursor:not-allowed;text-align:center;padding:20px 12px;opacity:.5">
+        <div style="font-size:32px;margin-bottom:8px">🎵</div>
+        <div style="font-weight:600;font-size:13px">TikTok Shop</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Em breve</div>
+      </div>
+      <!-- Mercado Livre -->
+      <div class="card" style="cursor:not-allowed;text-align:center;padding:20px 12px;opacity:.5">
+        <div style="font-size:32px;margin-bottom:8px">🟡</div>
+        <div style="font-weight:600;font-size:13px">Mercado Livre</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">Em breve</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-add-marketplace')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL EMPRESA MARKETPLACE ── -->
+<div class="modal-overlay" id="modal-mkt-empresa">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title" id="mkt-emp-titulo">Conectar Shopee</div>
+    <div class="modal-sub" style="margin-bottom:16px">Selecione a empresa que será vinculada a esta loja</div>
+    <div class="form-group">
+      <label class="form-label">Empresa</label>
+      <select class="form-control" id="mkt-emp-sel">
+        <option value="">Selecione...</option>
+      </select>
+    </div>
+    <div style="background:var(--surface2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--text2);margin-bottom:16px">
+      Você será redirecionado para a página da <span id="mkt-emp-nome-mkt">Shopee</span> para autorizar o acesso. Após autorizar, voltará automaticamente para o sistema.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-mkt-empresa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarConectarMarketplace()">Conectar →</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL VINCULAR EMPRESA CONTA ── -->
 <div class="modal-overlay" id="modal-vincular-empresa-conta">
   <div class="modal" style="max-width:420px">
@@ -1193,6 +1259,7 @@ tr:hover td{background:var(--surface2);}
 const SB_URL  = 'https://ynwkgersqcxglryrwqxl.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlud2tnZXJzcWN4Z2xyeXJ3cXhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODA4NDMsImV4cCI6MjA5NDg1Njg0M30.Pi7SMfACrMoyPcnFlOWXQ7BVojYpZucNgjUgVJ0f7Hw';
 const WORKER  = 'https://lume-fin.maxhome-loja.workers.dev';
+const MKT_WORKER = 'https://lume-mkt.maxhome-loja.workers.dev';
 const CATS_ESPECIAIS = new Set(['405619d5-0000-0000-0000-000000000000','6d58abb5-0000-0000-0000-000000000000','4c734a9a-0000-0000-0000-000000000000','73511595-0000-0000-0000-000000000000']);
 
 // ── Estado ─────────────────────────────────────────────────
@@ -1381,7 +1448,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();}
+    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
   };
   if(loaders[pagina])loaders[pagina]();
 }
@@ -3353,6 +3420,128 @@ function renderLanCharts(lancamentos){
       }
     });
   }
+}
+
+// ── MARKETPLACES ──────────────────────────────────────────────
+let _mktSelecionado = null;
+
+async function loadMarketplaces(){
+  if(!EMPRESA_ID){semEmpresaMsg('mkt-lista');return;}
+  const el=document.getElementById('mkt-lista');
+  if(!el)return;
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  try{
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
+    const conexoes=await sbGet('marketplace_conexoes','?empresa_id=in.('+empIds+')&order=criado_em.desc');
+    if(!conexoes.length){
+      el.innerHTML='<div class="empty"><div class="empty-icon">🛒</div>'+
+        '<div class="empty-title">Nenhum marketplace conectado</div>'+
+        '<div class="empty-sub">Clique em "+ Adicionar Marketplace" para começar</div></div>';
+      return;
+    }
+    const empMap={};EMPRESAS.forEach(e=>{empMap[e.id]=e.nome;});
+    const icons={shopee:'🟠',tiktok:'🎵',mercadolivre:'🟡'};
+    const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre'};
+    el.innerHTML=conexoes.map(c=>'<div class="card">'+
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+
+      '<div style="font-size:28px">'+(icons[c.marketplace]||'🛒')+'</div>'+
+      '<div><div style="font-weight:600">'+(c.shop_name||nomes[c.marketplace]||c.marketplace)+'</div>'+
+      '<div style="font-size:11px;color:var(--text3)">'+(empMap[c.empresa_id]||'—')+'</div></div>'+
+      '<span class="badge '+(c.status==='conectado'?'badge-green':c.status==='erro'?'badge-red':'badge-amber')+'" style="margin-left:auto">'+
+      (c.status==='conectado'?'CONECTADO':c.status==='erro'?'ERRO':'PENDENTE')+'</span></div>'+
+      '<div style="font-size:11px;color:var(--text3)">Último sync: '+(c.ultimo_sync?fDate(c.ultimo_sync.split('T')[0]):'Nunca')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<button class="btn btn-secondary btn-sm" onclick="reconectarMarketplace(this.dataset.id,this.dataset.mkt)" data-id="'+c.id+'" data-mkt="'+c.marketplace+'">↻ Reconectar</button>'+
+      '<button class="btn btn-danger btn-sm" onclick="desconectarMarketplace(this.dataset.id)" data-id="'+c.id+'">Desconectar</button>'+
+      '</div></div>').join('');
+  }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+function abrirModalAddMarketplace(){
+  abrirModal('modal-add-marketplace');
+}
+
+function selecionarMarketplace(mkt){
+  _mktSelecionado=mkt;
+  fecharModal('modal-add-marketplace');
+  // Preencher select de empresas
+  const sel=document.getElementById('mkt-emp-sel');
+  sel.innerHTML='<option value="">Selecione...</option>'+
+    EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  sel.value=EMPRESA_ID||'';
+  const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre'};
+  document.getElementById('mkt-emp-titulo').textContent='Conectar '+nomes[mkt];
+  document.getElementById('mkt-emp-nome-mkt').textContent=nomes[mkt];
+  abrirModal('modal-mkt-empresa');
+}
+
+async function confirmarConectarMarketplace(){
+  const empresaId=document.getElementById('mkt-emp-sel').value;
+  if(!empresaId){alert('Selecione uma empresa');return;}
+  if(!_mktSelecionado)return;
+  // Salvar conexão pendente e redirecionar para OAuth
+  try{
+    // Criar registro pendente no banco
+    await sbPost('marketplace_conexoes',{
+      empresa_id:empresaId,
+      marketplace:_mktSelecionado,
+      status:'pendente'
+    });
+    fecharModal('modal-mkt-empresa');
+    // Redirecionar para OAuth do marketplace
+    const oauthUrl=await fetch(MKT_WORKER+'/'+_mktSelecionado+'/auth?empresa_id='+empresaId,{
+      headers:{Authorization:'Bearer '+SESSION.access_token}
+    });
+    const data=await oauthUrl.json();
+    if(data.url){
+      window.location.href=data.url;
+    }else{
+      throw new Error(data.error||'Erro ao gerar URL de autorização');
+    }
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function desconectarMarketplace(id){
+  if(!confirm('Desconectar este marketplace? Os dados de vendas já importados serão mantidos.'))return;
+  try{
+    await sbDelete('marketplace_conexoes','id=eq.'+id);
+    loadMarketplaces();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function reconectarMarketplace(id,mkt){
+  try{
+    const oauthUrl=await fetch(MKT_WORKER+'/'+mkt+'/auth?reconectar='+id,{
+      headers:{Authorization:'Bearer '+SESSION.access_token}
+    });
+    const data=await oauthUrl.json();
+    if(data.url)window.location.href=data.url;
+    else throw new Error(data.error||'Erro');
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+// Processar callback OAuth ao carregar a página
+async function verificarCallbackMarketplace(){
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');
+  const shop_id=params.get('shop_id');
+  const mkt=params.get('marketplace');
+  if(!code||!shop_id||!mkt)return;
+  // Limpar URL
+  window.history.replaceState({},'',window.location.pathname);
+  // Trocar code por token via Worker
+  try{
+    const r=await fetch(MKT_WORKER+'/'+mkt+'/callback?code='+code+'&shop_id='+shop_id,{
+      headers:{Authorization:'Bearer '+SESSION.access_token}
+    });
+    const data=await r.json();
+    if(data.ok){
+      alert('✅ '+data.shop_name+' conectado com sucesso!');
+      irPara('marketplaces');
+    }else{
+      throw new Error(data.error||'Erro no callback');
+    }
+  }catch(e){alert('Erro ao finalizar conexão: '+e.message);}
 }
 
 // ── BOOT ──────────────────────────────────────────────────────
