@@ -1270,18 +1270,19 @@ let _caixaEntradas=[], _caixaSaidas=[], _vendas=[], _abcData=[], _abcFiltro='all
 let _opViewMode='cards', _bomLinhas=0, _opEntregaAtual=null, _lanEditId=null;
 
 // ── Supabase helpers ────────────────────────────────────────
+function getAuthToken(){return SESSION?.access_token||FACCAO_LOGADO?.token||SB_ANON;}
 async function sbGet(t,q=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`}});
+  const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken()}});
   if(!r.ok){const e=await r.text();console.error(`sbGet ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
   return r.json();
 }
 async function sbPost(t,b){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
+  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
   if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
   return r.json();
 }
 async function sbPatch(t,f,b){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
+  const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
   if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
   return true;
 }
