@@ -1361,6 +1361,22 @@ async function fazerLogin(){
     const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SB_ANON,'Content-Type':'application/json'},body:JSON.stringify({email,password:senha})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error_description||d.msg||'Credenciais inválidas');
+    // Verificar se é facção — facções não podem acessar login empresarial
+    const rTerc=await fetch(`${SB_URL}/rest/v1/terceiros?auth_user_id=eq.${d.user.id}&select=id`,{
+      headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
+    });
+    const tercs=await rTerc.json();
+    if(tercs.length>0){
+      throw new Error('Acesso negado. Use o login de Facção.');
+    }
+    // Verificar se tem empresa vinculada
+    const rEmp=await fetch(`${SB_URL}/rest/v1/empresas?owner_id=eq.${d.user.id}&select=id&limit=1`,{
+      headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
+    });
+    const emps=await rEmp.json();
+    if(!emps.length){
+      throw new Error('Nenhuma empresa vinculada a este usuário.');
+    }
     SESSION=d;
     localStorage.setItem('lume_session',JSON.stringify(d));
     iniciarApp();
