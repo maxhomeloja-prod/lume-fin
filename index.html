@@ -1424,6 +1424,8 @@ async function iniciarApp(){
   const fcxAte=document.getElementById('fcx-ate');if(fcxAte)fcxAte.value=fd(fim);
   const fpagDe=document.getElementById('fpag-de');if(fpagDe)fpagDe.value=fd(ini);
   const fpagAte=document.getElementById('fpag-ate');if(fpagAte)fpagAte.value=fd(fim);
+  const fentDe=document.getElementById('fent-de');if(fentDe)fentDe.value=fd(ini);
+  const fentAte=document.getElementById('fent-ate');if(fentAte)fentAte.value=fd(fim);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
@@ -2059,21 +2061,49 @@ async function confirmarEntrega(){
 async function loadEntregas(){
   if(!EMPRESA_ID){semEmpresaMsg('entregas-lista');return;}
   try{
-    const entregas=await sbGet('entregas_op',`?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`);
+    const de=document.getElementById('fent-de')?.value;
+    const ate=document.getElementById('fent-ate')?.value;
+    const terc=document.getElementById('fent-terc')?.value;
+    const sku=document.getElementById('fent-sku')?.value.trim().toUpperCase();
+    // Popular select facção
+    const selT=document.getElementById('fent-terc');
+    if(selT&&_terceiros.length){
+      const v=selT.value;
+      selT.innerHTML='<option value="">Todas</option>'+_terceiros.map(t=>'<option value="'+t.id+'"'+(t.id===v?' selected':'')+'>'+t.nome+'</option>').join('');
+      if(v)selT.value=v;
+    }
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
+    let q='?empresa_id=in.('+empIds+')&order=criado_em.desc&limit=500';
+    if(de)q+='&criado_em=gte.'+de+'T00:00:00';
+    if(ate)q+='&criado_em=lte.'+ate+'T23:59:59';
+    if(terc)q+='&terceiro_id=eq.'+terc;
+    const entregas=await sbGet('entregas_op',q);
     const opMap={};_ops.forEach(o=>{opMap[o.id]=o;});
     const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
+    // Filtrar por SKU/OP localmente
+    const filtradas=sku?entregas.filter(e=>{
+      const opNum=(opMap[e.op_id]?.numero||'').toUpperCase();
+      const eskuU=(e.sku||opMap[e.op_id]?.sku||'').toUpperCase();
+      return opNum.includes(sku)||eskuU.includes(sku);
+    }):entregas;
     const el=document.getElementById('entregas-lista');
-    if(!entregas.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma entrega registrada</div></div>';return;}
-    el.innerHTML='<table><thead><tr><th>Data</th><th>OP</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Lançamento</th></tr></thead><tbody>'+entregas.map(e=>`<tr>
-      <td>${fDate(e.criado_em?.split('T')[0])}</td>
-      <td style="font-weight:500;color:var(--accent)">${opMap[e.op_id]?.numero||'—'}</td>
-      <td style="color:var(--text2)">${e.sku||opMap[e.op_id]?.sku||'—'}</td>
-      <td style="color:var(--text2)">${tercMap[e.terceiro_id]||'—'}</td>
-      <td style="text-align:right">${fN(e.quantidade)}</td>
-      <td style="text-align:right;color:var(--green)">${fBRL(e.valor_total)}</td>
-      <td><span class="badge ${e.lancamento_id?'badge-green':'badge-gray'}">${e.lancamento_id?'✓ Criado':'—'}</span></td>
-    </tr>`).join('')+'</tbody></table>';
-  }catch(e){}
+    if(!filtradas.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma entrega encontrada</div></div>';return;}
+    el.innerHTML='<table><thead><tr><th>Data</th><th>OP</th><th>SKU</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>'+
+      filtradas.map(e=>'<tr>'+
+        '<td>'+fDate(e.criado_em?.split('T')[0])+'</td>'+
+        '<td style="font-weight:500;color:var(--accent)">'+(opMap[e.op_id]?.numero||'—')+'</td>'+
+        '<td style="color:var(--text2)">'+(e.sku||opMap[e.op_id]?.sku||'—')+'</td>'+
+        '<td style="color:var(--text2)">'+(tercMap[e.terceiro_id]||'—')+'</td>'+
+        '<td style="text-align:right">'+fN(e.quantidade)+'</td>'+
+        '<td style="text-align:right;color:var(--green)">'+fBRL(e.valor_total)+'</td>'+
+        '<td style="color:var(--text3);font-size:11px">'+(e.observacao||'—')+'</td>'+
+        '<td style="display:flex;gap:4px;padding:6px 4px">'+
+        '<button class="btn btn-danger btn-sm" onclick="excluirEntrega(this.dataset.id)" data-id="'+e.id+'" title="Excluir entrega">✕</button>'+
+        (e.lancamento_id?'<button class="btn btn-ghost btn-sm" onclick="editarLancamentoEntrega(this.dataset.id)" data-id="'+e.lancamento_id+'" title="Editar lançamento">✎</button>':'—')+
+        '</td>'+
+        '</tr>').join('')+
+      '</tbody></table>';
+  }catch(e){document.getElementById('entregas-lista').innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
 }
 
 async function loadPagamentosOP(){
@@ -3947,6 +3977,16 @@ async function excluirEntrega(id){
   try{
     await sbDelete('entregas_op','id=eq.'+id);
     loadEntregas();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function editarLancamentoEntrega(lanId){
+  if(!lanId)return;
+  try{
+    const lans=await sbGet('lancamentos_externos','?id=eq.'+lanId);
+    if(!lans.length){alert('Lançamento não encontrado');return;}
+    _lancamentos=lans;
+    abrirModalLancamento(lanId);
   }catch(e){alert('Erro: '+e.message);}
 }
 
