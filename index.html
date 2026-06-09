@@ -919,7 +919,19 @@ tr:hover td{background:var(--surface2);}
           <button class="btn btn-danger btn-sm" onclick="abrirModalSaida()">− Saída</button>
         </div>
       </div>
-            <div class="kpi-grid" style="margin-bottom:16px">
+            <div class="filters" style="margin-bottom:12px">
+        <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fcx-de" onchange="loadCaixa()"></div>
+        <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fcx-ate" onchange="loadCaixa()"></div>
+        <div class="filter-group"><span class="filter-label">Tipo</span>
+          <select class="filter-control" id="fcx-tipo" onchange="loadCaixa()">
+            <option value="">Todos</option>
+            <option value="CHEQUE">Cheque</option>
+            <option value="DINHEIRO">Dinheiro</option>
+            <option value="PIX">PIX</option>
+          </select>
+        </div>
+      </div>
+      <div class="kpi-grid" style="margin-bottom:16px">
         <div class="kpi"><div class="kpi-label">Total Entradas</div><div class="kpi-value green" id="cx-total-ent">—</div></div>
         <div class="kpi"><div class="kpi-label">Total Saídas</div><div class="kpi-value red" id="cx-total-sai">—</div></div>
         <div class="kpi"><div class="kpi-label">Saldo Período</div><div class="kpi-value" id="cx-total-saldo">—</div></div>
@@ -1365,6 +1377,8 @@ async function iniciarApp(){
   ['fcat-de','fbal-de','flan-de','fven-de','fabc-de'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(ini);});
   ['fcat-ate','fbal-ate','flan-ate','fven-ate','fabc-ate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=fd(fim);});
   document.getElementById('sai-data').value=fd(hoje);
+  const fcxDe=document.getElementById('fcx-de');if(fcxDe)fcxDe.value=fd(ini);
+  const fcxAte=document.getElementById('fcx-ate');if(fcxAte)fcxAte.value=fd(fim);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
@@ -2526,12 +2540,12 @@ async function loadBalancete(){
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
-      sbGet('caixa_entradas','?'+empQB.replace('&status=eq.CONFIRMADA','')+'&limit=500'),
+      sbGet('caixa_entradas','?'+empQB.replace('&status=eq.CONFIRMADA','')+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500'),
       sbGet('caixa_saidas','?'+empQB.replace('&status=eq.CONFIRMADA','')+'&limit=500')
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
-      ...caixaEnt.map(e=>({data:e.criado_em?.split('T')[0],descricao:`Entrada: ${e.cliente||'—'}`,valor:e.valor_original,tipo:'CREDIT',categoria_id:e.categoria_id,fonte:'caixa'})),
+      ...caixaEnt.filter(e=>(!de||e.data>=de)&&(!ate||e.data<=ate)).map(e=>({data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
       ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
@@ -2675,12 +2689,21 @@ async function salvarLancamento(){
 async function loadCaixa(){
   if(!EMPRESA_ID){semEmpresaMsg('cx-ent-wrap');semEmpresaMsg('cx-sai-wrap');return;}
   try{
+    const de=document.getElementById('fcx-de')?.value;
+    const ate=document.getElementById('fcx-ate')?.value;
+    const tipo=document.getElementById('fcx-tipo')?.value;
+    const empQ=buildEmpresaQuery('fbal-empresa'); // reusar filtro de empresa
+    let qE='?'+empQ+'&order=data_vencimento.desc&limit=500';
+    let qS='?'+empQ+'&order=data.desc&limit=500';
+    if(de){qE+=`&data=gte.${de}`;qS+=`&data=gte.${de}`;}
+    if(ate){qE+=`&data=lte.${ate}`;qS+=`&data=lte.${ate}`;}
+    if(tipo)qE+=`&tipo=eq.${tipo}`;
     [_caixaEntradas,_caixaSaidas]=await Promise.all([
-      sbGet('caixa_entradas',`?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`),
-      sbGet('caixa_saidas',`?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`)
+      sbGet('caixa_entradas',qE),
+      sbGet('caixa_saidas',qS)
     ]);
     renderCaixaEnt();renderCaixaSai();
-  }catch(e){}
+  }catch(e){console.error('loadCaixa:',e);}
 }
 function switchCaixa(tab,el){
   document.querySelectorAll('#tab-cx-ent,#tab-cx-sai').forEach(b=>{b.style.borderBottom='';b.style.color='';});
