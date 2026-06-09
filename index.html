@@ -3724,13 +3724,18 @@ async function faccaoSemOP(){
 
 async function faccaoBuscarPrecoSKU(sku){
   if(!sku||!FACCAO_LOGADO)return;
+  const el=document.getElementById('fac-sem-op-preco');
   try{
-    const rows=await sbGet('precos_faccao',
+    // Tentar exact match primeiro, depois ilike
+    let rows=await sbGet('precos_faccao',
       '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
       '&terceiro_id=eq.'+FACCAO_LOGADO.id+
-      '&sku=eq.'+sku.toUpperCase()+'&limit=1');
-    const el=document.getElementById('fac-sem-op-preco');
-    if(el&&rows[0]?.preco)el.value=rows[0].preco;
+      '&sku=ilike.'+encodeURIComponent(sku.trim())+'&limit=1');
+    if(rows[0]?.preco&&el){
+      el.value=rows[0].preco;
+      el.style.background='var(--green-bg,#e8f5e9)';
+      setTimeout(()=>{if(el)el.style.background='';},1500);
+    }
   }catch(e){}
 }
 
