@@ -1304,9 +1304,10 @@ async function sbGet(t,q=''){
   return r.json();
 }
 async function sbPost(t,b){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
+  const prefer=FACCAO_LOGADO&&!SESSION?'return=minimal':'return=representation';
+  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:prefer},body:JSON.stringify(b)});
   if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
-  return r.json();
+  return prefer==='return=minimal'?[]:r.json();
 }
 async function sbPatch(t,f,b){
   const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
