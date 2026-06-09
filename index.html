@@ -3697,15 +3697,20 @@ function renderFaccaoCarrinho(){
   if(card)card.style.display='';
   const total=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
   document.getElementById('fac-total').textContent=fBRL(total);
-  el.innerHTML=_faccaoCarrinho.map((item,idx)=>
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
-    '<div><div style="font-weight:500">'+item.op.numero+' · '+item.op.sku+'</div>'+
-    '<div style="font-size:11px;color:var(--text3)">'+item.qtd+' peças × '+(item.op._preco?fBRL(item.op._preco):'—')+'</div></div>'+
-    '<div style="display:flex;align-items:center;gap:8px">'+
-    '<span style="color:var(--green);font-weight:600">'+fBRL(item.valor)+'</span>'+
-    '<button class="btn btn-danger btn-sm" onclick="faccaoRemoverCarrinho('+idx+')">✕</button>'+
-    '</div></div>'
-  ).join('');
+  el.innerHTML=_faccaoCarrinho.map(function(item,idx){
+    const nome=item.avulso?('Avulso · '+item.sku):(item.op.numero+' · '+item.op.sku);
+    const preco=item.avulso?item.preco:(item.op._preco||0);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+      '<div>'+
+      '<div style="font-weight:500">'+nome+'</div>'+
+      '<div style="font-size:11px;color:var(--text3)">'+item.qtd+' peças × '+(preco?fBRL(preco):'—')+'</div>'+
+      (item.obs?'<div style="font-size:10px;color:var(--text3)">'+item.obs+'</div>':'')+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+      '<span style="color:var(--green);font-weight:600">'+fBRL(item.valor)+'</span>'+
+      '<button class="btn btn-danger btn-sm" onclick="faccaoRemoverCarrinho('+idx+')">✕</button>'+
+      '</div></div>';
+  }).join('');
 }
 
 function faccaoRemoverCarrinho(idx){
@@ -3741,59 +3746,36 @@ async function faccaoBuscarPrecoSKU(sku){
   }catch(e){}
 }
 
-async function confirmarEntregaSemOP(){
+function confirmarEntregaSemOP(){
   if(!FACCAO_LOGADO)return;
   const sku=document.getElementById('fac-sem-op-sku').value.trim().toUpperCase();
   const qtd=parseInt(document.getElementById('fac-sem-op-qtd').value)||0;
   const preco=parseFloat(document.getElementById('fac-sem-op-preco').value)||0;
   const obs=document.getElementById('fac-sem-op-obs').value.trim();
   if(!sku||!qtd){alert('Preencha SKU e quantidade');return;}
-  const btn=document.getElementById('btn-confirmar-sem-op');
-  btn.disabled=true;btn.textContent='Salvando...';
-  try{
-    const valor=qtd*preco;
-    let lanId=null;
-    if(valor>0){
-      const lan=await sbPost('lancamentos_externos',{
-        empresa_id:FACCAO_LOGADO.empresa_id,
-        data:new Date().toISOString().split('T')[0],
-        data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
-        descricao:'Entrega avulsa — '+sku+' ('+qtd+' peças)',
-        valor:valor,tipo_lancamento:'PAGAR',meio_pagamento:'PIX',
-        situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome||null,
-        observacao:obs||null
-      });
-      lanId=lan[0]?.id;
-    }
-    await sbPost('entregas_op',{
-      empresa_id:FACCAO_LOGADO.empresa_id,
-      op_id:null,
-      terceiro_id:FACCAO_LOGADO.id,
-      sku:sku,
-      quantidade:qtd,
-      valor_total:valor,
-      observacao:(obs?obs+' | ':'')+'SKU: '+sku,
-      lancamento_id:lanId
-    });
-    fecharModal('modal-fac-sem-op');
-    btn.disabled=false;btn.textContent='Confirmar';
-    alert('✅ Entrega registrada!');
-  }catch(e){
-    btn.disabled=false;btn.textContent='Confirmar';
-    alert('Erro: '+e.message);
-  }
+  // Adicionar ao carrinho como item avulso (sem OP)
+  _faccaoCarrinho.push({
+    op:null,
+    sku:sku,qtd:qtd,preco:preco,
+    valor:qtd*preco,
+    obs:obs,
+    avulso:true
+  });
+  fecharModal('modal-fac-sem-op');
+  renderFaccaoCarrinho();
 }
 
 function abrirConfirmacaoFaccao(){
   if(!_faccaoCarrinho.length)return;
   const total=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
   document.getElementById('fac-conf-total').textContent=fBRL(total);
-  document.getElementById('fac-conf-itens').innerHTML=_faccaoCarrinho.map(item=>
-    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'+
-    '<span>'+item.op.numero+' · '+item.op.sku+' ('+item.qtd+' peças)</span>'+
-    '<span style="color:var(--green)">'+fBRL(item.valor)+'</span>'+
-    '</div>'
-  ).join('');
+  document.getElementById('fac-conf-itens').innerHTML=_faccaoCarrinho.map(function(item){
+    const nome=item.avulso?('Avulso · '+item.sku):(item.op.numero+' · '+item.op.sku);
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'+
+      '<span>'+nome+' ('+item.qtd+' peças)</span>'+
+      '<span style="color:var(--green)">'+fBRL(item.valor)+'</span>'+
+      '</div>';
+  }).join('');
   document.getElementById('fac-conf-obs').value='';
   abrirModal('modal-fac-confirmar');
 }
@@ -3805,36 +3787,43 @@ async function confirmarEntregaFaccao(){
   const obs=document.getElementById('fac-conf-obs').value.trim();
   try{
     for(const item of _faccaoCarrinho){
-      const op=item.op;
-      const catFaccao=null; // sem categoria no contexto de facção
-      // Criar lançamento
+      const hoje=new Date().toISOString().split('T')[0];
+      const venc=new Date(Date.now()+7*864e5).toISOString().split('T')[0];
+      const empresaId=item.avulso?FACCAO_LOGADO.empresa_id:item.op.empresa_id;
       let lanId=null;
       if(item.valor>0){
-        const lan=await sbPost('lancamentos_externos',{
-          empresa_id:op.empresa_id,
-          data:new Date().toISOString().split('T')[0],
-          data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
-          descricao:'Entrega OP '+op.numero+' — '+op.sku+' ('+item.qtd+' peças)',
-          valor:item.valor,tipo_lancamento:'PAGAR',meio_pagamento:'PIX',
+        const descLan=item.avulso?
+          'Entrega avulsa — '+item.sku+' ('+item.qtd+' peças)':
+          'Entrega OP '+item.op.numero+' — '+item.op.sku+' ('+item.qtd+' peças)';
+        await sbPost('lancamentos_externos',{
+          empresa_id:empresaId,
+          data:hoje,data_vencimento:venc,
+          descricao:descLan,valor:item.valor,
+          tipo_lancamento:'PAGAR',meio_pagamento:'PIX',
           situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome||null,
-          observacao:obs||null
+          observacao:(obs||(item.obs||null))
         });
-        lanId=lan[0]?.id;
       }
       // Registrar entrega
-      await sbPost('entregas_op',{
-        empresa_id:op.empresa_id,op_id:op.id,
+      const entrega={
+        empresa_id:empresaId,
+        op_id:item.avulso?null:item.op.id,
         terceiro_id:FACCAO_LOGADO.id,
+        sku:item.avulso?item.sku:item.op.sku,
         quantidade:item.qtd,valor_total:item.valor,
-        observacao:obs||null,lancamento_id:lanId
-      });
-      // Atualizar OP
-      const novaQtd=op.quantidade_entregue+item.qtd;
-      const novaSit=novaQtd>=op.quantidade?'CONCLUIDA':novaQtd>0?'PARCIAL':'ABERTA';
-      await sbPatch('ordens_producao','id=eq.'+op.id,{
-        quantidade_entregue:novaQtd,situacao:novaSit,
-        data_conclusao:novaSit==='CONCLUIDA'?new Date().toISOString().split('T')[0]:null
-      });
+        observacao:obs||(item.obs||null)
+      };
+      await sbPost('entregas_op',entrega);
+      // Atualizar OP (só se não for avulso)
+      if(!item.avulso){
+        const op=item.op;
+        const novaQtd=op.quantidade_entregue+item.qtd;
+        const novaSit=novaQtd>=op.quantidade?'CONCLUIDA':novaQtd>0?'PARCIAL':'ABERTA';
+        await sbPatch('ordens_producao','id=eq.'+op.id,{
+          quantidade_entregue:novaQtd,situacao:novaSit,
+          data_conclusao:novaSit==='CONCLUIDA'?hoje:null
+        });
+      }
     }
     // Limpar carrinho
     _faccaoCarrinho.length=0;
