@@ -935,6 +935,7 @@ tr:hover td{background:var(--surface2);}
         </div>
       </div>
             <div class="filters" style="margin-bottom:12px">
+        <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fcx-empresa" onchange="loadCaixa()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fcx-de" onchange="loadCaixa()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fcx-ate" onchange="loadCaixa()"></div>
         <div class="filter-group"><span class="filter-label">Tipo</span>
@@ -1122,6 +1123,7 @@ tr:hover td{background:var(--surface2);}
 
 <div class="modal-overlay" id="modal-entrada">
   <div class="modal"><div class="modal-title">Nova Entrada de Caixa</div><div class="modal-sub">Dinheiro ou cheque recebido</div>
+    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="ent-empresa"><option value="">Selecione...</option></select></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Tipo</label><select class="form-control" id="ent-tipo" onchange="toggleEntFields()"><option value="DINHEIRO">Dinheiro</option><option value="CHEQUE">Cheque</option></select></div><div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-control" type="number" id="ent-valor" step="0.01"></div></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Cliente</label><input class="form-control" type="text" id="ent-cliente"></div><div class="form-group"><label class="form-label">Categoria</label><select class="form-control" id="ent-cat"></select></div></div>
     <div id="ent-cheque-fields" style="display:none">
@@ -1715,7 +1717,7 @@ async function salvarTerceiro(){
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
   if(!nome)return alert('Informe o nome');
-  const body={empresa_id:EMPRESA_ID,nome,email:email||null,ativo:true};
+  const body={empresa_id:entEmpId,nome,email:email||null,ativo:true};
   if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
   try{
     if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
@@ -2038,6 +2040,7 @@ async function loadEntregas(){
     el.innerHTML='<table><thead><tr><th>Data</th><th>OP</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Lançamento</th></tr></thead><tbody>'+entregas.map(e=>`<tr>
       <td>${fDate(e.criado_em?.split('T')[0])}</td>
       <td style="font-weight:500;color:var(--accent)">${opMap[e.op_id]?.numero||'—'}</td>
+      <td style="color:var(--text2)">${e.sku||opMap[e.op_id]?.sku||'—'}</td>
       <td style="color:var(--text2)">${tercMap[e.terceiro_id]||'—'}</td>
       <td style="text-align:right">${fN(e.quantidade)}</td>
       <td style="text-align:right;color:var(--green)">${fBRL(e.valor_total)}</td>
@@ -2047,23 +2050,75 @@ async function loadEntregas(){
 }
 
 async function loadPagamentosOP(){
+  // Modo facção: mostrar próprios lançamentos
+  if(FACCAO_LOGADO){
+    const el=document.getElementById('pagamentos-op-lista');
+    if(!el)return;
+    el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+    try{
+      const lans=await sbGet('lancamentos_externos',
+        '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
+        '&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+
+        '&tipo_lancamento=eq.PAGAR&order=data_vencimento.asc&limit=200');
+      if(!lans.length){
+        el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento encontrado</div></div>';
+        return;
+      }
+      const total=lans.reduce((s,l)=>s+l.valor,0);
+      const pago=lans.filter(l=>l.situacao==='PAGO_RECEBIDO').reduce((s,l)=>s+l.valor,0);
+      const aberto=lans.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
+      el.innerHTML=
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'+
+        '<div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value">'+fBRL(total)+'</div></div>'+
+        '<div class="kpi"><div class="kpi-label">Pago</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'+
+        '<div class="kpi"><div class="kpi-label">Em Aberto</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'+
+        '</div>'+
+        '<table><thead><tr><th>Vencimento</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>'+
+        lans.map(l=>'<tr>'+
+          '<td>'+fDate(l.data_vencimento)+'</td>'+
+          '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'+
+          '<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'+
+          '<td><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'+(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'+
+          '</tr>').join('')+
+        '</tbody></table>';
+    }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+    return;
+  }
+  // Modo empresa: mostrar todos os lançamentos de facção
   if(!EMPRESA_ID){semEmpresaMsg('pagamentos-op-lista');return;}
   try{
-    const lans=await sbGet('lancamentos_externos',`?empresa_id=eq.${EMPRESA_ID}&order=data_vencimento.asc&limit=200`);
-    const faccao=lans.filter(l=>l.descricao?.includes('Entrega OP')||l.observacao?.includes('OP'));
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
+    const lans=await sbGet('lancamentos_externos',
+      '?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.asc&limit=500');
+    const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
+    const faccao=lans.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()));
     const el=document.getElementById('pagamentos-op-lista');
-    if(!faccao.length){el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento de facção pendente</div></div>';return;}
-    const pagar=faccao.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
-    el.innerHTML=`<div style="margin-bottom:14px;font-size:13px;color:var(--text2)">Total a pagar facção: <strong style="color:var(--red)">${fBRL(pagar)}</strong></div>`+'<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th style="text-align:right">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+faccao.map(l=>`<tr>
-      <td>${fDate(l.data_vencimento)}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.descricao||'—'}</td>
-      <td style="color:var(--text2)">${l.fornecedor||'—'}</td>
-      <td style="text-align:right;color:var(--red)">${fBRL(l.valor)}</td>
-      <td><span class="badge ${l.situacao==='EM_ABERTO'?'badge-amber':'badge-green'}">${l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO'}</span></td>
-      <td>${l.situacao==='EM_ABERTO'?`<button class="btn btn-success btn-sm" onclick="darBaixaFaccao('${l.id}')">Pagar</button>`:''}</td>
-    </tr>`).join('')+'</tbody></table>';
-  }catch(e){}
+    if(!faccao.length){
+      el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento de facção</div></div>';
+      return;
+    }
+    const total=faccao.reduce((s,l)=>s+l.valor,0);
+    const pago=faccao.filter(l=>l.situacao==='PAGO_RECEBIDO').reduce((s,l)=>s+l.valor,0);
+    const aberto=faccao.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
+    el.innerHTML=
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'+
+      '<div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value">'+fBRL(total)+'</div></div>'+
+      '<div class="kpi"><div class="kpi-label">Pago</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'+
+      '<div class="kpi"><div class="kpi-label">Em Aberto</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'+
+      '</div>'+
+      '<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Facção</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead><tbody>'+
+      faccao.map(l=>'<tr>'+
+        '<td>'+fDate(l.data_vencimento)+'</td>'+
+        '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'+
+        '<td style="color:var(--text2)">'+(l.fornecedor||'—')+'</td>'+
+        '<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'+
+        '<td><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'+(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'+
+        '<td>'+(l.situacao==='EM_ABERTO'?'<button class="btn btn-success btn-sm" onclick="darBaixaFaccao(this.dataset.id)" data-id="'+l.id+'">✓ Pagar</button>':'')+'</td>'+
+        '</tr>').join('')+
+      '</tbody></table>';
+  }catch(e){document.getElementById('pagamentos-op-lista').innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
 }
+
 async function darBaixaFaccao(id){
   if(!confirm('Marcar como pago?'))return;
   await sbPatch('lancamentos_externos',`id=eq.${id}`,{situacao:'PAGO_RECEBIDO'});
@@ -2708,7 +2763,7 @@ async function loadCaixa(){
     const de=document.getElementById('fcx-de')?.value;
     const ate=document.getElementById('fcx-ate')?.value;
     const tipo=document.getElementById('fcx-tipo')?.value;
-    const empQ=buildEmpresaQuery('fbal-empresa'); // reusar filtro de empresa
+    const empQ=buildEmpresaQuery('fcx-empresa');
     let qE='?'+empQ+'&order=data_vencimento.desc&limit=500';
     let qS='?'+empQ+'&order=data.desc&limit=500';
     if(de){qE+=`&data=gte.${de}`;qS+=`&data=gte.${de}`;}
@@ -2735,7 +2790,14 @@ function renderCaixaSai(){
   if(!_caixaSaidas.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
   document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_caixaSaidas.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
 }
-function abrirModalEntrada(){toggleEntFields();abrirModal('modal-entrada');acInit('ent-cliente',acFetchClientes);}
+function abrirModalEntrada(){
+  toggleEntFields();
+  // Popular select de empresa
+  const sel=document.getElementById('ent-empresa');
+  if(sel){sel.innerHTML='<option value="">Selecione...</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'"'+(e.id===EMPRESA_ID?' selected':'')+'>'+e.nome+'</option>').join('');}
+  abrirModal('modal-entrada');
+  acInit('ent-cliente',acFetchClientes);
+}
 function toggleEntFields(){const t=document.getElementById('ent-tipo')?.value;const f=document.getElementById('ent-cheque-fields');if(f)f.style.display=t==='CHEQUE'?'':'none';}
 async function salvarEntrada(){
   const tipo=document.getElementById('ent-tipo').value;const valor=parseFloat(document.getElementById('ent-valor').value);
@@ -3838,6 +3900,14 @@ async function confirmarEntregaFaccao(){
   }
 }
 
+async function excluirEntrega(id){
+  if(!confirm('Excluir esta entrega? O lançamento vinculado não será removido.'))return;
+  try{
+    await sbDelete('entregas_op','id=eq.'+id);
+    loadEntregas();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
 // ── BOOT ──────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   ['login-email','login-senha'].forEach(id=>{document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});});
@@ -4072,7 +4142,7 @@ function atualizarEmpresaUI(){
   const emp=EMPRESAS.find(e=>e.id===EMPRESA_ID);
   const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'—';
   const opts='<option value="">Todas</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
-  ['fcat-empresa','fbal-empresa','flan-empresa','fcontas-empresa'].forEach(id=>{
+  ['fcat-empresa','fbal-empresa','flan-empresa','fcontas-empresa','fcx-empresa'].forEach(id=>{
     const sel=document.getElementById(id);if(sel)sel.innerHTML=opts;
   });
 }
