@@ -683,7 +683,12 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Pagamentos de Facção</div><div class="page-sub">Controle de pagamentos por entrega</div></div>
       </div>
-      <div class="card"><div class="tbl-wrap" id="pagamentos-op-lista"></div></div>
+      <div class="filters">
+        <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fpag-de" onchange="loadPagamentosOP()"></div>
+        <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fpag-ate" onchange="loadPagamentosOP()"></div>
+        <div class="filter-group"><span class="filter-label">Facção</span><select class="filter-control" id="fpag-terc" onchange="loadPagamentosOP()"><option value="">Todas</option></select></div>
+      </div>
+      <div id="pagamentos-op-lista"></div>
     </div>
 
     <!-- VENDAS -->
@@ -1797,7 +1802,7 @@ async function loadOPs(){
   const sku=document.getElementById('fop-sku')?.value.trim().toUpperCase();
   // Preencher select de terceiros
   const selT=document.getElementById('fop-terc');
-  if(selT&&_terceiros.length){selT.innerHTML='<option value="">Todos</option>'+_terceiros.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');}
+  if(selT&&_terceiros.length){const vT=selT.value;selT.innerHTML='<option value="">Todos</option>'+_terceiros.map(t=>'<option value="'+t.id+'"'+(t.id===vT?' selected':'')+'>'+t.nome+'</option>').join('');selT.value=vT;}
   // Preencher select de terceiros no modal
   const selOM=document.getElementById('op-terceiro');
   if(selOM)selOM.innerHTML='<option value="">Sem terceiro</option>'+_terceiros.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
@@ -2056,10 +2061,12 @@ async function loadPagamentosOP(){
     if(!el)return;
     el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
     try{
-      const lans=await sbGet('lancamentos_externos',
-        '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
-        '&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+
-        '&tipo_lancamento=eq.PAGAR&order=data_vencimento.asc&limit=200');
+      const fpDe=document.getElementById('fpag-de')?.value;
+      const fpAte=document.getElementById('fpag-ate')?.value;
+      let qFac='?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
+      if(fpDe)qFac+='&data_vencimento=gte.'+fpDe;
+      if(fpAte)qFac+='&data_vencimento=lte.'+fpAte;
+      const lans=await sbGet('lancamentos_externos',qFac);
       if(!lans.length){
         el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento encontrado</div></div>';
         return;
@@ -2087,11 +2094,21 @@ async function loadPagamentosOP(){
   // Modo empresa: mostrar todos os lançamentos de facção
   if(!EMPRESA_ID){semEmpresaMsg('pagamentos-op-lista');return;}
   try{
+    const fpDe2=document.getElementById('fpag-de')?.value;
+    const fpAte2=document.getElementById('fpag-ate')?.value;
+    const fpTerc=document.getElementById('fpag-terc')?.value;
+    // Popular select facção
+    const selPag=document.getElementById('fpag-terc');
+    if(selPag&&_terceiros.length){const vP=selPag.value;selPag.innerHTML='<option value="">Todas</option>'+_terceiros.map(t=>'<option value="'+t.nome+'"'+(t.nome===vP?' selected':'')+'>'+t.nome+'</option>').join('');if(vP)selPag.value=vP;}
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    const lans=await sbGet('lancamentos_externos',
-      '?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.asc&limit=500');
+    let qEmp='?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=500';
+    if(fpDe2)qEmp+='&data_vencimento=gte.'+fpDe2;
+    if(fpAte2)qEmp+='&data_vencimento=lte.'+fpAte2;
+    const lans=await sbGet('lancamentos_externos',qEmp);
+    const faccaoFiltro=fpTerc||null;
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
-    const faccao=lans.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()));
+    let faccao=lans.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()));
+    if(faccaoFiltro)faccao=faccao.filter(l=>l.fornecedor===faccaoFiltro);
     const el=document.getElementById('pagamentos-op-lista');
     if(!faccao.length){
       el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento de facção</div></div>';
