@@ -2545,7 +2545,7 @@ async function loadBalancete(){
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
-      ...caixaEnt.filter(e=>(!de||e.data>=de)&&(!ate||e.data<=ate)).map(e=>({data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
+      ...caixaEnt.filter(e=>{const d=e.data||e.criado_em?.split('T')[0];return(!de||d>=de)&&(!ate||d<=ate);}).map(e=>({data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
       ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
@@ -2713,7 +2713,7 @@ function switchCaixa(tab,el){
 }
 function renderCaixaEnt(){
   if(!_caixaEntradas.length){document.getElementById('cx-ent-wrap').innerHTML='<div class="empty"><div class="empty-icon">💵</div><div class="empty-title">Nenhuma entrada</div></div>';return;}
-  document.getElementById('cx-ent-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Cliente</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Disponível</th><th></th></tr></thead><tbody>'+_caixaEntradas.map(e=>`<tr class="caixa-entrada"><td>${fDate(e.criado_em?.split('T')[0])}</td><td>${e.cliente||'—'}</td><td><span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></td><td style="color:var(--text3)">${getNomeCat(e.categoria_id)}</td><td style="text-align:right">${fBRL(e.valor_original)}</td><td style="text-align:right;color:var(--green)">${fBRL(e.valor_disponivel)}</td><td><button class="btn btn-danger btn-sm" onclick="excluirEntrada('${e.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
+  document.getElementById('cx-ent-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Vencimento</th><th>Cliente</th><th>Tipo</th><th>Categoria</th><th style="text-align:right">Total</th><th style="text-align:right">Disponível</th><th></th></tr></thead><tbody>'+_caixaEntradas.map(e=>`<tr class="caixa-entrada"><td>${fDate(e.data||e.criado_em?.split('T')[0])}</td><td style="color:var(--text3)">${e.data_vencimento?fDate(e.data_vencimento):'—'}</td><td>${e.cliente||'—'}</td><td><span class="badge ${e.tipo==='CHEQUE'?'badge-amber':'badge-green'}">${e.tipo}</span></td><td style="color:var(--text3)">${getNomeCat(e.categoria_id)}</td><td style="text-align:right">${fBRL(e.valor_original)}</td><td style="text-align:right;color:var(--green)">${fBRL(e.valor_disponivel)}</td><td><button class="btn btn-danger btn-sm" onclick="excluirEntrada('${e.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
 }
 function renderCaixaSai(){
   if(!_caixaSaidas.length){document.getElementById('cx-sai-wrap').innerHTML='<div class="empty"><div class="empty-icon">💸</div><div class="empty-title">Nenhuma saída</div></div>';return;}
