@@ -3719,7 +3719,8 @@ async function faccaoSemOP(){
   document.getElementById('fac-sem-op-preco').value='';
   document.getElementById('fac-sem-op-obs').value='';
   abrirModal('modal-fac-sem-op');
-  if(skuBusca)await faccaoBuscarPrecoSKU(skuBusca);
+  // Aguardar modal abrir e depois buscar preço
+  setTimeout(async()=>{if(skuBusca)await faccaoBuscarPrecoSKU(skuBusca);},200);
 }
 
 async function faccaoBuscarPrecoSKU(sku){
