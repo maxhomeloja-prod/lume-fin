@@ -412,7 +412,7 @@ tr:hover td{background:var(--surface2);}
 <div class="modal-overlay" id="modal-fac-sem-op">
   <div class="modal" style="max-width:380px">
     <div class="modal-title">Entrega sem OP</div>
-    <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="fac-sem-op-sku" placeholder="Ex: LC001-CAL"></div>
+    <div class="form-group"><label class="form-label">SKU</label><input class="form-control" id="fac-sem-op-sku" placeholder="Ex: LC001-CAL" oninput="faccaoBuscarPrecoSKU(this.value.trim())"></div>
     <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="fac-sem-op-qtd" min="1" placeholder="0"></div>
     <div class="form-group"><label class="form-label">Preço unitário (R$)</label><input class="form-control" type="number" id="fac-sem-op-preco" step="0.01" min="0" placeholder="0,00"></div>
     <div class="form-group"><label class="form-label">Observação</label><input class="form-control" id="fac-sem-op-obs" placeholder="Opcional"></div>
@@ -3712,20 +3712,26 @@ function faccaoRemoverCarrinho(idx){
   renderFaccaoCarrinho();
 }
 
-function faccaoSemOP(){
-  // Puxar SKU da barra de busca se preenchido
+async function faccaoSemOP(){
   const skuBusca=document.getElementById('fac-busca')?.value.trim().toUpperCase()||'';
   document.getElementById('fac-sem-op-sku').value=skuBusca;
   document.getElementById('fac-sem-op-qtd').value='';
   document.getElementById('fac-sem-op-preco').value='';
   document.getElementById('fac-sem-op-obs').value='';
-  // Buscar preço do SKU automaticamente
-  if(skuBusca&&FACCAO_LOGADO){
-    sbGet('precos_faccao','?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+skuBusca+'&limit=1')
-      .then(rows=>{if(rows[0]?.preco)document.getElementById('fac-sem-op-preco').value=rows[0].preco;})
-      .catch(()=>{});
-  }
   abrirModal('modal-fac-sem-op');
+  if(skuBusca)await faccaoBuscarPrecoSKU(skuBusca);
+}
+
+async function faccaoBuscarPrecoSKU(sku){
+  if(!sku||!FACCAO_LOGADO)return;
+  try{
+    const rows=await sbGet('precos_faccao',
+      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
+      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '&sku=eq.'+sku.toUpperCase()+'&limit=1');
+    const el=document.getElementById('fac-sem-op-preco');
+    if(el&&rows[0]?.preco)el.value=rows[0].preco;
+  }catch(e){}
 }
 
 async function confirmarEntregaSemOP(){
