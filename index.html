@@ -675,6 +675,12 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Entregas</div><div class="page-sub">Histórico de entregas registradas</div></div>
       </div>
+      <div class="filters">
+        <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fent-de" onchange="loadEntregas()"></div>
+        <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fent-ate" onchange="loadEntregas()"></div>
+        <div class="filter-group"><span class="filter-label">Facção</span><select class="filter-control" id="fent-terc" onchange="loadEntregas()"><option value="">Todas</option></select></div>
+        <div class="filter-group"><span class="filter-label">OP / SKU</span><input type="text" class="filter-control" id="fent-sku" placeholder="Buscar..." oninput="loadEntregas()"></div>
+      </div>
       <div class="card"><div class="tbl-wrap" id="entregas-lista"></div></div>
     </div>
 
@@ -687,6 +693,13 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fpag-de" onchange="loadPagamentosOP()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fpag-ate" onchange="loadPagamentosOP()"></div>
         <div class="filter-group"><span class="filter-label">Facção</span><select class="filter-control" id="fpag-terc" onchange="loadPagamentosOP()"><option value="">Todas</option></select></div>
+        <div class="filter-group"><span class="filter-label">Status</span>
+          <select class="filter-control" id="fpag-status" onchange="loadPagamentosOP()">
+            <option value="EM_ABERTO">Em Aberto</option>
+            <option value="">Todos</option>
+            <option value="PAGO_RECEBIDO">Pago</option>
+          </select>
+        </div>
       </div>
       <div id="pagamentos-op-lista"></div>
     </div>
@@ -1311,10 +1324,17 @@ async function sbGet(t,q=''){
   return r.json();
 }
 async function sbPost(t,b){
-  const prefer=FACCAO_LOGADO&&!SESSION?'return=minimal':'return=representation';
-  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:prefer},body:JSON.stringify(b)});
-  if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
-  return prefer==='return=minimal'?[]:r.json();
+  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
+  if(!r.ok){
+    // Se falhar com representation (policy SELECT), tentar com minimal
+    if(r.status===403){
+      const r2=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
+      if(!r2.ok){const e2=await r2.json();throw new Error(e2.message||r2.status);}
+      return [];
+    }
+    const e=await r.json();throw new Error(e.message||r.status);
+  }
+  return r.json();
 }
 async function sbPatch(t,f,b){
   const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
@@ -1402,6 +1422,8 @@ async function iniciarApp(){
   document.getElementById('sai-data').value=fd(hoje);
   const fcxDe=document.getElementById('fcx-de');if(fcxDe)fcxDe.value=fd(ini);
   const fcxAte=document.getElementById('fcx-ate');if(fcxAte)fcxAte.value=fd(fim);
+  const fpagDe=document.getElementById('fpag-de');if(fpagDe)fpagDe.value=fd(ini);
+  const fpagAte=document.getElementById('fpag-ate');if(fpagAte)fpagAte.value=fd(fim);
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
@@ -2063,9 +2085,11 @@ async function loadPagamentosOP(){
     try{
       const fpDe=document.getElementById('fpag-de')?.value;
       const fpAte=document.getElementById('fpag-ate')?.value;
+      const fpStatus=document.getElementById('fpag-status')?.value;
       let qFac='?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
       if(fpDe)qFac+='&data_vencimento=gte.'+fpDe;
       if(fpAte)qFac+='&data_vencimento=lte.'+fpAte;
+      if(fpStatus)qFac+='&situacao=eq.'+fpStatus;
       const lans=await sbGet('lancamentos_externos',qFac);
       if(!lans.length){
         el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento encontrado</div></div>';
@@ -2101,9 +2125,11 @@ async function loadPagamentosOP(){
     const selPag=document.getElementById('fpag-terc');
     if(selPag&&_terceiros.length){const vP=selPag.value;selPag.innerHTML='<option value="">Todas</option>'+_terceiros.map(t=>'<option value="'+t.nome+'"'+(t.nome===vP?' selected':'')+'>'+t.nome+'</option>').join('');if(vP)selPag.value=vP;}
     const empIds=EMPRESAS.map(e=>e.id).join(',');
+    const fpStatus2=document.getElementById('fpag-status')?.value;
     let qEmp='?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=500';
     if(fpDe2)qEmp+='&data_vencimento=gte.'+fpDe2;
     if(fpAte2)qEmp+='&data_vencimento=lte.'+fpAte2;
+    if(fpStatus2)qEmp+='&situacao=eq.'+fpStatus2;
     const lans=await sbGet('lancamentos_externos',qEmp);
     const faccaoFiltro=fpTerc||null;
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
@@ -3875,12 +3901,11 @@ async function confirmarEntregaFaccao(){
           'Entrega avulsa — '+item.sku+' ('+item.qtd+' peças)':
           'Entrega OP '+item.op.numero+' — '+item.op.sku+' ('+item.qtd+' peças)';
         await sbPost('lancamentos_externos',{
-          empresa_id:empresaId,
-          data:hoje,data_vencimento:venc,
+          empresa_id:empresaId,data:hoje,data_vencimento:venc,
           descricao:descLan,valor:item.valor,
           tipo_lancamento:'PAGAR',meio_pagamento:'PIX',
           situacao:'EM_ABERTO',fornecedor:FACCAO_LOGADO.nome||null,
-          observacao:(obs||(item.obs||null))
+          observacao:obs||(item.obs||null)
         });
       }
       // Registrar entrega
