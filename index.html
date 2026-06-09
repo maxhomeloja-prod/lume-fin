@@ -3713,11 +3713,18 @@ function faccaoRemoverCarrinho(idx){
 }
 
 function faccaoSemOP(){
-  // Abrir modal de entrega avulsa
-  document.getElementById('fac-sem-op-sku').value='';
+  // Puxar SKU da barra de busca se preenchido
+  const skuBusca=document.getElementById('fac-busca')?.value.trim().toUpperCase()||'';
+  document.getElementById('fac-sem-op-sku').value=skuBusca;
   document.getElementById('fac-sem-op-qtd').value='';
   document.getElementById('fac-sem-op-preco').value='';
   document.getElementById('fac-sem-op-obs').value='';
+  // Buscar preço do SKU automaticamente
+  if(skuBusca&&FACCAO_LOGADO){
+    sbGet('precos_faccao','?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+skuBusca+'&limit=1')
+      .then(rows=>{if(rows[0]?.preco)document.getElementById('fac-sem-op-preco').value=rows[0].preco;})
+      .catch(()=>{});
+  }
   abrirModal('modal-fac-sem-op');
 }
 
@@ -3749,8 +3756,11 @@ async function confirmarEntregaSemOP(){
       empresa_id:FACCAO_LOGADO.empresa_id,
       op_id:null,
       terceiro_id:FACCAO_LOGADO.id,
-      sku:sku,quantidade:qtd,valor_total:valor,
-      observacao:obs||null,lancamento_id:lanId
+      sku:sku,
+      quantidade:qtd,
+      valor_total:valor,
+      observacao:(obs?obs+' | ':'')+'SKU: '+sku,
+      lancamento_id:lanId
     });
     fecharModal('modal-fac-sem-op');
     btn.disabled=false;btn.textContent='Confirmar';
