@@ -2702,7 +2702,7 @@ async function loadCaixa(){
       sbGet('caixa_entradas',qE),
       sbGet('caixa_saidas',qS)
     ]);
-    renderCaixaEnt();renderCaixaSai();
+    renderCaixaEnt();renderCaixaSai();atualizarTotaisCaixa();
   }catch(e){console.error('loadCaixa:',e);}
 }
 function switchCaixa(tab,el){
