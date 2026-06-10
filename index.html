@@ -562,9 +562,15 @@ tr:hover td{background:var(--surface2);}
           <div style="position:relative;height:200px"><canvas id="dash-chart-ops"></canvas></div>
         </div>
       </div>
-      <div class="card" style="margin-top:16px">
-        <div class="card-title">Entregas de Facção — Mês Corrente</div>
-        <div id="dash-entregas-tabela"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div class="card">
+          <div class="card-title">Entregas de Facção — Mês Corrente</div>
+          <div id="dash-entregas-tabela"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Perda por Facção — Histórico</div>
+          <div id="dash-perda-tabela"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
+        </div>
       </div>
     </div>
 
@@ -1303,9 +1309,10 @@ tr:hover td{background:var(--surface2);}
       <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('EM_PRODUCAO')">Em Produção</button>
       <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('PARCIAL')">Parcial</button>
       <button class="btn btn-success btn-sm" onclick="alterarSitOP('CONCLUIDA')">Concluída</button>
-      <button class="btn btn-danger btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
+      <button class="btn btn-danger btn-sm" onclick="excluirOPModal()">🗑 Excluir OP</button>
+      <button class="btn btn-secondary btn-sm" onclick="alterarSitOP('CANCELADA')">Cancelar OP</button>
       <div style="margin-left:auto">
-        <button class="btn btn-primary btn-sm" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">✓ Finalizar com Perda</button>
+        <button class="btn btn-primary btn-sm" id="btn-finalizar-op" onclick="finalizarOPModal()" style="background:var(--green);border-color:var(--green)">✓ Finalizar com Perda</button>
       </div>
     </div>
   </div>
@@ -1641,6 +1648,42 @@ async function loadDashboard(){
           '<td style="padding:6px;text-align:right;font-weight:600;color:var(--amber)">'+fBRL(totalMes)+'</td>'+
           '</tr></tbody></table>';
       }
+    }
+    // KPI perda por facção (histórico)
+    const elPerda = document.getElementById('dash-perda-tabela');
+    if(elPerda && _terceiros.length > 0){
+      try{
+        const perdas = await sbGet('perda_op',
+          '?empresa_id=in.('+empIds+')&select=terceiro_id,percentual_perda,finalizado_em&limit=500'
+        ).catch(()=>[]);
+        if(!perdas.length){
+          elPerda.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Nenhuma OP finalizada ainda</div>';
+        }else{
+          // Agrupar por terceiro
+          const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
+          const grupos={};
+          perdas.forEach(p=>{
+            const nome=tercMap[p.terceiro_id]||'—';
+            if(!grupos[nome])grupos[nome]={total:0,count:0};
+            grupos[nome].total+=p.percentual_perda||0;
+            grupos[nome].count++;
+          });
+          const linhas=Object.entries(grupos)
+            .map(([nome,g])=>({nome,media:g.total/g.count,count:g.count}))
+            .sort((a,b)=>b.media-a.media);
+          elPerda.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
+            '<th style="padding:5px 6px;text-align:left;color:var(--text3);font-weight:600">Facção</th>'+
+            '<th style="padding:5px 6px;text-align:right;color:var(--text3);font-weight:600">OPs</th>'+
+            '<th style="padding:5px 6px;text-align:right;color:var(--text3);font-weight:600">Perda Média</th>'+
+            '</tr></thead><tbody>'+
+            linhas.map(l=>'<tr>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border)">'+l.nome+'</td>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+l.count+'</td>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+(l.media>10?'var(--red)':l.media>5?'var(--amber)':'var(--green)')+'">'+l.media.toFixed(1)+'%</td>'+
+            '</tr>').join('')+
+            '</tbody></table>';
+        }
+      }catch(e){elPerda.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">—</div>';}
     }
     // Charts
     renderDashCharts(ops);
@@ -4249,6 +4292,135 @@ function editarEntradaCaixa(id){
   document.getElementById('modal-entrada').dataset.editId=id;
   abrirModal('modal-entrada');
   acInit('ent-cliente',acFetchClientes);
+}
+
+
+// ── Modal Detalhes OP ────────────────────────────────────────
+let _opDetalheAtual = null;
+
+function abrirDetalhesOP(id){
+  const op = _ops.find(o => o.id === id);
+  if(!op) return;
+  _opDetalheAtual = op;
+  const tercMap = {}; _terceiros.forEach(t => { tercMap[t.id] = t.nome; });
+  const pct = op.quantidade > 0 ? Math.min(100, Math.round(op.quantidade_entregue / op.quantidade * 100)) : 0;
+  const aberto = op.quantidade - op.quantidade_entregue;
+  const corSit = {ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa',CONCLUIDA:'#00d4a0',CANCELADA:'#4a7a9b'};
+
+  document.getElementById('mod-op-num').textContent = op.numero;
+  document.getElementById('mod-op-badge').innerHTML = opBadge(op.situacao);
+  document.getElementById('mod-op-desc').textContent = op.sku + (op.descricao ? ' — ' + op.descricao : '');
+  document.getElementById('mod-op-qtd').textContent = fN(op.quantidade);
+  document.getElementById('mod-op-entregue').textContent = fN(op.quantidade_entregue);
+  document.getElementById('mod-op-aberto').textContent = fN(aberto);
+  document.getElementById('mod-op-pct').textContent = pct + '%';
+  document.getElementById('mod-op-bar').style.width = pct + '%';
+  document.getElementById('mod-op-bar').style.background = corSit[op.situacao] || 'var(--green)';
+  document.getElementById('mod-op-faccao').textContent = tercMap[op.terceiro_id] || '—';
+  document.getElementById('mod-op-preco').textContent = op.preco_unitario ? fBRL(op.preco_unitario) : '—';
+  document.getElementById('mod-op-abertura').textContent = fDate(op.criado_em?.split('T')[0]);
+  document.getElementById('mod-op-prev-info').textContent = op.data_previsao ? fDate(op.data_previsao) : '—';
+  document.getElementById('mod-op-valor-total').textContent = op.preco_unitario ? fBRL(op.quantidade * op.preco_unitario) : '—';
+  const obsWrap = document.getElementById('mod-op-obs-wrap');
+  const obsTxt = document.getElementById('mod-op-obs-txt');
+  if(op.observacao){ if(obsWrap)obsWrap.style.display=''; if(obsTxt)obsTxt.textContent=op.observacao; }
+  else { if(obsWrap)obsWrap.style.display='none'; }
+
+  // Botão finalizar — só mostra se não for cancelada/concluída
+  const btnFin = document.getElementById('btn-finalizar-op');
+  if(btnFin) btnFin.style.display = (op.situacao === 'CANCELADA' || op.situacao === 'CONCLUIDA') ? 'none' : '';
+
+  abrirModal('modal-op-detalhe');
+}
+
+async function alterarSitOP(sit){
+  if(!_opDetalheAtual) return;
+  try{
+    await sbPatch('ordens_producao','id=eq.'+_opDetalheAtual.id,{
+      situacao: sit,
+      data_conclusao: sit === 'CONCLUIDA' ? new Date().toISOString().split('T')[0] : null
+    });
+    fecharModal('modal-op-detalhe');
+    loadOPs();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+
+function editarOPDaModal(){
+  if(!_opDetalheAtual) return;
+  fecharModal('modal-op-detalhe');
+  abrirModalOP(_opDetalheAtual.id);
+}
+
+function abrirEntregaDaModal(){
+  if(!_opDetalheAtual) return;
+  fecharModal('modal-op-detalhe');
+  abrirEntregaOPDireto(_opDetalheAtual);
+}
+
+async function finalizarOPModal(){
+  const op = _opDetalheAtual;
+  if(!op) return;
+  const qtdOp = op.quantidade;
+  const qtdEnt = op.quantidade_entregue;
+  const qtdPerda = qtdOp - qtdEnt;
+  const pctPerda = qtdOp > 0 ? ((qtdPerda / qtdOp) * 100) : 0;
+
+  const tercMap = {}; _terceiros.forEach(t => { tercMap[t.id] = t.nome; });
+  const nomeFaccao = tercMap[op.terceiro_id] || '—';
+
+  if(!confirm(
+    'Finalizar OP ' + op.numero + '?\n\n' +
+    'Quantidade OP: ' + fN(qtdOp) + ' peças\n' +
+    'Quantidade entregue: ' + fN(qtdEnt) + ' peças\n' +
+    'Perda: ' + fN(qtdPerda) + ' peças (' + pctPerda.toFixed(1) + '%)\n\n' +
+    'Facção: ' + nomeFaccao + '\n\n' +
+    'Confirmar?'
+  )) return;
+
+  try{
+    // Marcar OP como concluída
+    await sbPatch('ordens_producao','id=eq.'+op.id,{
+      situacao: 'CONCLUIDA',
+      data_conclusao: new Date().toISOString().split('T')[0]
+    });
+
+    // Registrar perda
+    if(qtdPerda >= 0){
+      await sbPost('perda_op',{
+        empresa_id: op.empresa_id,
+        op_id: op.id,
+        terceiro_id: op.terceiro_id || null,
+        sku: op.sku,
+        quantidade_op: qtdOp,
+        quantidade_entregue: qtdEnt,
+        quantidade_perda: qtdPerda,
+        percentual_perda: parseFloat(pctPerda.toFixed(2)),
+        finalizado_em: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    fecharModal('modal-op-detalhe');
+    loadOPs();
+
+    // Mostrar resumo de perda
+    alert(
+      '✅ OP ' + op.numero + ' finalizada!\n\n' +
+      '📦 ' + fN(qtdEnt) + ' peças entregues de ' + fN(qtdOp) + '\n' +
+      '⚠️ Perda: ' + pctPerda.toFixed(1) + '% (' + fN(qtdPerda) + ' peças)\n' +
+      '👤 Facção: ' + nomeFaccao
+    );
+  }catch(e){ alert('Erro: '+e.message); }
+}
+
+
+async function excluirOPModal(){
+  if(!_opDetalheAtual)return;
+  if(!confirm('Excluir a OP ' + _opDetalheAtual.numero + '? Esta ação não pode ser desfeita.'))return;
+  try{
+    await sbDelete('ordens_producao','id=eq.'+_opDetalheAtual.id);
+    fecharModal('modal-op-detalhe');
+    loadOPs();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 
