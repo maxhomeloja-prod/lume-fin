@@ -931,10 +931,11 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Categoria</span><select class="filter-control" id="flan-cat" onchange="loadLancamentos()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">Fornec/Cliente</span><input class="filter-control" type="text" id="flan-fc" placeholder="Buscar..." oninput="loadLancamentos()"></div>
       </div>
-      <div class="grid-3 mb16">
+      <div class="kpi-grid mb16">
         <div class="kpi"><div class="kpi-label">A Pagar</div><div class="kpi-value red" id="lan-pagar">—</div></div>
         <div class="kpi"><div class="kpi-label">A Receber</div><div class="kpi-value green" id="lan-receber">—</div></div>
-        <div class="kpi"><div class="kpi-label">Saldo</div><div class="kpi-value" id="lan-saldo">—</div></div>
+        <div class="kpi"><div class="kpi-label">Banco + Caixa</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Saldo total disponível</div><div class="kpi-value" id="lan-saldo">—</div></div>
+        <div class="kpi"><div class="kpi-label">Saldo Projetado</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Banco + Caixa + Receber − Pagar</div><div class="kpi-value" id="lan-total-geral">—</div></div>
       </div>
       <!-- Gráficos de categorias -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
@@ -2871,7 +2872,28 @@ async function loadLancamentos(){
     const saldo=receber-pagar;
     document.getElementById('lan-pagar').textContent=fBRL(pagar);
     document.getElementById('lan-receber').textContent=fBRL(receber);
-    const sEl=document.getElementById('lan-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
+    // lan-saldo será atualizado junto com totalGeral abaixo
+    // Buscar saldo total (banco + caixa físico)
+    const elTG=document.getElementById('lan-total-geral');
+    if(elTG){
+      try{
+        const empIds=EMPRESAS.map(e=>e.id).join(',');
+        const[saldos,cxEnt]=await Promise.all([
+          sbGet('saldos_conta','?empresa_id=in.('+empIds+')&select=saldo_atual,contas_bancarias(tipo)'),
+          sbGet('caixa_entradas','?empresa_id=in.('+empIds+')&select=valor_disponivel')
+        ]);
+        const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
+        const totalCaixa=cxEnt.reduce((s,e)=>s+(e.valor_disponivel||0),0);
+        const totalBC=totalBanco+totalCaixa;
+        const totalGeral=totalBC+receber-pagar;
+        // Banco + Caixa
+        const sEl=document.getElementById('lan-saldo');
+        if(sEl){sEl.textContent=fBRL(totalBC);sEl.className='kpi-value '+(totalBC>=0?'green':'red');}
+        // Saldo projetado
+        elTG.textContent=fBRL(totalGeral);
+        elTG.className='kpi-value '+(totalGeral>=0?'green':'red');
+      }catch(e){elTG.textContent='—';}
+    }
     // Filtrar por fornecedor/cliente localmente
     if(fc){
       _lancamentos=_lancamentos.filter(l=>{
