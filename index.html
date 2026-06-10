@@ -1317,7 +1317,7 @@ const SB_URL  = 'https://ynwkgersqcxglryrwqxl.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlud2tnZXJzcWN4Z2xyeXJ3cXhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODA4NDMsImV4cCI6MjA5NDg1Njg0M30.Pi7SMfACrMoyPcnFlOWXQ7BVojYpZucNgjUgVJ0f7Hw';
 const WORKER  = 'https://lume-fin.maxhome-loja.workers.dev';
 const MKT_WORKER = 'https://lume-mkt.maxhome-loja.workers.dev';
-const CATS_ESPECIAIS = new Set(['405619d5-a208-478b-b09a-ab28e73307e0','6d58abb5-755b-4b19-9e4a-d490570e4b8f','4c734a9a-691d-4349-b8bb-ca1a78262077','73511595-cf4c-4906-b449-22cbccc026b2','aaae7cc0-1dc2-4c65-a902-e0f8f3c1e60d']);
+const CATS_ESPECIAIS = new Set(['405619d5-a208-478b-b09a-ab28e73307e0','6d58abb5-755b-4b19-9e4a-d490570e4b8f','4c734a9a-691d-4349-b8bb-ca1a78262077','73511595-cf4c-4906-b449-22cbccc026b2']);
 
 // ── Estado ─────────────────────────────────────────────────
 let SESSION=null, EMPRESA_ID=null, EMPRESAS=[], CATEGORIAS=[], CONTAS=[];
@@ -1562,7 +1562,12 @@ function preencherSelects(){
   const rec=folhas.filter(c=>c.tipo==='RECEITA').map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
   const dep=folhas.filter(c=>c.tipo==='DESPESA').map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
   const all=`<optgroup label="Receitas">${rec}</optgroup><optgroup label="Despesas">${dep}</optgroup>`;
-  ['lan-cat','ent-cat','sai-cat'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=all;});
+  // lan-cat: ambos (pagar ou receber)
+  const elLan=document.getElementById('lan-cat');if(elLan)elLan.innerHTML=all;
+  // ent-cat: só RECEITA (entradas de caixa)
+  const elEnt=document.getElementById('ent-cat');if(elEnt)elEnt.innerHTML=rec;
+  // sai-cat: só DESPESA (saídas de caixa)
+  const elSai=document.getElementById('sai-cat');if(elSai)elSai.innerHTML=dep;
   document.getElementById('flan-cat')?document.getElementById('flan-cat').innerHTML='<option value="">Todas</option>'+all:'';
 }
 
@@ -2954,6 +2959,7 @@ async function salvarEntrada(){
   const tipo=document.getElementById('ent-tipo').value;const valor=parseFloat(document.getElementById('ent-valor').value);
   const entEmpId=document.getElementById('ent-empresa')?.value||EMPRESA_ID;
   const hoje=document.getElementById('ent-data')?.value||new Date().toISOString().split('T')[0];
+  const editId=document.getElementById('modal-entrada').dataset.editId||null;
   const descricao=document.getElementById('ent-descricao')?.value.trim()||
     (tipo==='CHEQUE'?'Cheque recebido':'Entrada de caixa')+' — '+(document.getElementById('ent-cliente')?.value.trim()||hoje);
   try{await sbPost('caixa_entradas',{empresa_id:entEmpId,data:hoje,tipo,descricao,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
@@ -4198,6 +4204,29 @@ function popularDatalistMateriais(){
     const dl=document.getElementById('bom-materiais-list');
     if(dl){const nomes=[...new Set(rows.map(r=>r.material_nome).filter(Boolean))];dl.innerHTML=nomes.map(n=>'<option value="'+n+'">').join('');}
   }).catch(()=>{});
+}
+
+
+function editarEntradaCaixa(id){
+  const e=_caixaEntradas.find(x=>x.id===id);
+  if(!e)return;
+  // Popular modal de entrada com os dados existentes
+  document.getElementById('ent-tipo').value=e.tipo||'DINHEIRO';
+  document.getElementById('ent-valor').value=e.valor_original||'';
+  document.getElementById('ent-cliente').value=e.cliente||'';
+  document.getElementById('ent-cat').value=e.categoria_id||'';
+  document.getElementById('ent-data').value=e.data||new Date().toISOString().split('T')[0];
+  if(e.tipo==='CHEQUE'){
+    document.getElementById('ent-venc').value=e.data_vencimento||'';
+    document.getElementById('ent-banco').value=e.banco_emissor||'';
+    document.getElementById('ent-num-cheque').value=e.numero_cheque||'';
+    document.getElementById('ent-nome-cheque').value=e.nome_cheque||'';
+  }
+  toggleEntFields();
+  // Guardar ID para salvar como edição
+  document.getElementById('modal-entrada').dataset.editId=id;
+  abrirModal('modal-entrada');
+  acInit('ent-cliente',acFetchClientes);
 }
 
 
