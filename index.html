@@ -1457,6 +1457,7 @@ async function iniciarApp(){
 
   await carregarBase();
   irPara('dashboard');
+  await loadDashboard();
 }
 
 async function carregarBase(){
@@ -1587,8 +1588,6 @@ async function loadDashboard(){
     sEl.className='kpi-value '+(saldo>=0?'green':'red');
     // KPI entregas por dia/terceiro no mês
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    // Garantir que _terceiros está carregado
-    if(!_terceiros.length)await loadTerceiros();
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
     const entFac=[];
     if(faccaoNomes.size>0){
