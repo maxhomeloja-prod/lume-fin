@@ -4107,6 +4107,34 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
   if(win){win.document.write(html);win.document.close();}
 }
 
+// ── BOOT ─────────────────────────────────────────────────────
+// Verificar callback OAuth ao carregar
+window.addEventListener('load',()=>{if(window.location.search.includes('code='))verificarCallbackMarketplace();});
+
+// Restaurar sessão do localStorage
+(async()=>{
+  try{
+    const raw=localStorage.getItem('lume_session');
+    if(raw){
+      const d=JSON.parse(raw);
+      // Verificar se token ainda é válido
+      const exp=d.expires_at||d.user?.exp;
+      if(exp&&Date.now()/1000>exp){
+        localStorage.removeItem('lume_session');
+        document.getElementById('login-screen').style.display='flex';
+        return;
+      }
+      SESSION=d;
+      await iniciarApp();
+    }else{
+      document.getElementById('login-screen').style.display='flex';
+    }
+  }catch(e){
+    console.error('Boot error:',e);
+    document.getElementById('login-screen').style.display='flex';
+  }
+})();
+
 </script>
 <datalist id="bom-materiais-list"></datalist>
 </body>
