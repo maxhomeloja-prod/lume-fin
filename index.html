@@ -494,6 +494,7 @@ tr:hover td{background:var(--surface2);}
         </button>
         <div class="nav-dropdown" id="dd-vendas">
           <button class="nav-dd-item" onclick="irPara('vendas')">📊 Registro de Vendas</button>
+          <button class="nav-dd-item" onclick="irPara('correlacao')">🔗 Correlação SKU</button>
           <button class="nav-dd-item" onclick="irPara('bom')">🧩 Estrutura (BOM)</button>
           <button class="nav-dd-item" onclick="irPara('estoque')">📦 Estoque Modelo</button>
           <button class="nav-dd-item" onclick="irPara('calc')">🧮 Calculadora de Preços</button>
@@ -726,6 +727,8 @@ tr:hover td{background:var(--surface2);}
           <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaVendas()">⬇ Planilha Modelo</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-vendas').click()">📂 Upload</button>
           <input type="file" id="upload-vendas" accept=".csv" style="display:none" onchange="uploadVendas(this)">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-correlacao-limpeza').click()">🧹 Limpeza de Dados</button>
+          <input type="file" id="upload-correlacao-limpeza" accept=".csv" style="display:none" onchange="uploadLimpezaDados(this)">
           <button class="btn btn-primary btn-sm" onclick="abrirModalVendaManual()">+ Venda Manual</button>
         </div>
       </div>
@@ -746,6 +749,26 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-tkt">—</div></div>
       </div>
       <div class="card"><div class="tbl-wrap" id="ven-table"></div></div>
+    </div>
+
+    <!-- CORRELAÇÃO SKU -->
+    <div id="page-correlacao" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Correlação SKU</div><div class="page-sub">Mapeamento de SKUs de venda para SKUs canônicos</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaCorrelacao()">⬇ Modelo</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-correlacao').click()">📂 Upload</button>
+          <input type="file" id="upload-correlacao" accept=".csv" style="display:none" onchange="uploadCorrelacao(this)">
+        </div>
+      </div>
+      <div class="upload-progress" id="prog-corr">
+        <div id="prog-corr-txt">Processando...</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-corr-bar" style="width:0%"></div></div>
+      </div>
+      <!-- SKUs sem correlação -->
+      <div id="corr-pendentes" class="mb16"></div>
+      <!-- Tabela de correlações -->
+      <div class="card"><div class="tbl-wrap" id="corr-lista"></div></div>
     </div>
 
     <!-- BOM -->
@@ -1547,7 +1570,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
+    'correlacao':loadCorrelacao,'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
   };
   if(loaders[pagina])loaders[pagina]();
 }
@@ -2493,8 +2516,16 @@ async function loadBOM(){
     sbGet('vendas',`?empresa_id=eq.${EMPRESA_ID}&select=sku&limit=5000`).catch(()=>[]),
     sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&select=sku`).catch(()=>[])
   ]);
-  const skusV=[...new Set(vTodas.map(v=>v.sku))];
+  // BOM usa APENAS SKUs canônicos
+  const corrs=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&select=sku_canonico&limit=2000').catch(()=>[]);
+  const skusCanonicos=[...new Set(corrs.map(c=>c.sku_canonico))].sort();
+  if(!skusCanonicos.length){
+    document.getElementById('bom-pendencias').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">🔗</div><div class="empty-title">Cadastre correlações SKU primeiro</div><div class="empty-sub">A estrutura de materiais é baseada nos SKUs canônicos. Vá em <strong>Vendas → Correlação SKU</strong> para cadastrar.</div></div></div>';
+    document.getElementById('bom-cadastrados').innerHTML='';
+    return;
+  }
   const skusB=new Set(bomEx.map(b=>b.sku));
+  const skusV=skusCanonicos;
   const pend=skusV.filter(s=>!skusB.has(s));
   const cad=skusV.filter(s=>skusB.has(s));
   const badge=document.getElementById('badge-bom');
@@ -4440,6 +4471,147 @@ async function editarLancamentoEntrega(lanId){
     _lancamentos=lans;
     abrirModalLancamento(lanId);
   }catch(e){alert('Erro: '+e.message);}
+}
+
+
+// ── CORRELAÇÃO SKU ───────────────────────────────────────────
+let _correlacao = [];
+
+async function loadCorrelacao(){
+  if(!EMPRESA_ID){semEmpresaMsg('corr-lista');return;}
+  const el=document.getElementById('corr-lista');
+  if(!el)return;
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  try{
+    _correlacao=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&order=sku_canonico.asc&limit=2000');
+
+    // SKUs sem correlação — buscar SKUs únicos das vendas que não têm correlação
+    const vendaSkus=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&select=sku&limit=5000');
+    const skusVenda=[...new Set(vendaSkus.map(v=>v.sku).filter(Boolean))];
+    const skusMapeados=new Set(_correlacao.map(c=>c.sku_venda));
+    const semCorr=skusVenda.filter(s=>!skusMapeados.has(s));
+
+    // Renderizar pendentes
+    const elPend=document.getElementById('corr-pendentes');
+    if(elPend){
+      if(semCorr.length){
+        const skusCanonicos=[...new Set(_correlacao.map(c=>c.sku_canonico))].sort();
+        elPend.innerHTML='<div class="card mb16"><div class="card-title" style="color:var(--amber)">⚠ '+semCorr.length+' SKU'+
+          (semCorr.length>1?'s':'')+' sem correlação</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
+          semCorr.map(sku=>'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px">'+
+            '<span style="font-weight:500">'+sku+'</span>'+
+            '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'">'+
+              '<option value="">Selecionar canônico...</option>'+
+              skusCanonicos.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+
+              '<option value="__novo__">+ Novo canônico</option>'+
+            '</select>'+
+            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" onclick="associarSKU(this.dataset.sku)">Associar</button>'+
+          '</div>').join('')+
+          '</div></div>';
+      }else{
+        elPend.innerHTML='<div class="card mb16"><div style="color:var(--green);font-size:13px;padding:8px">✅ Todos os SKUs de venda têm correlação</div></div>';
+      }
+    }
+
+    // Renderizar tabela de correlações
+    if(!_correlacao.length){
+      el.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><div class="empty-title">Nenhuma correlação cadastrada</div><div class="empty-sub">Faça upload de uma planilha de correlação</div></div>';
+      return;
+    }
+    el.innerHTML='<table><thead><tr><th>SKU de Venda</th><th>SKU Canônico</th><th></th></tr></thead><tbody>'+
+      _correlacao.map(c=>'<tr>'+
+        '<td style="color:var(--text2);font-size:12px">'+c.sku_venda+'</td>'+
+        '<td style="font-weight:500;color:var(--accent)">'+c.sku_canonico+'</td>'+
+        '<td><button class="btn btn-danger btn-sm" onclick="excluirCorrelacao(this.dataset.id)" data-id="'+c.id+'">✕</button></td>'+
+      '</tr>').join('')+
+      '</tbody></table>';
+  }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+async function associarSKU(skuVenda){
+  const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
+  const sel=document.getElementById(key);
+  if(!sel)return;
+  let skuCan=sel.value;
+  if(!skuCan){alert('Selecione ou crie um SKU canônico');return;}
+  if(skuCan==='__novo__'){
+    skuCan=prompt('Digite o novo SKU canônico:','');
+    if(!skuCan||!skuCan.trim())return;
+    skuCan=skuCan.trim().toUpperCase();
+  }
+  try{
+    await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan});
+    // Atualizar vendas com esse SKU
+    await sbPatch('vendas','empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda),{sku:skuCan,sku_original:skuVenda});
+    loadCorrelacao();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function excluirCorrelacao(id){
+  if(!confirm('Excluir esta correlação?'))return;
+  await sbDelete('correlacao_sku','id=eq.'+id);
+  loadCorrelacao();
+}
+
+function downloadPlanilhaCorrelacao(){
+  const csv='sku_venda,sku_canonico\nLENÇOL_CASAL_BEGE_V2,LENCOL_CASAL_BEGE\nLENÇOL-CASAL-BEGE-NOVO,LENCOL_CASAL_BEGE\n';
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='correlacao_sku_modelo.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function uploadCorrelacao(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  const prog=document.getElementById('prog-corr');
+  const txt=document.getElementById('prog-corr-txt');
+  const bar=document.getElementById('prog-corr-bar');
+  prog.style.display='';bar.style.width='5%';
+  txt.textContent='Lendo arquivo...';
+  const text=await file.text();
+  const linhas=text.trim().split('\n').slice(1).filter(l=>l.trim());
+  let ok=0,erros=0;
+  for(let i=0;i<linhas.length;i++){
+    const cols=linhas[i].split(',').map(c=>c.trim().replace(/"/g,''));
+    const[skuVenda,skuCan]=cols;
+    if(!skuVenda||!skuCan)continue;
+    try{
+      // Upsert correlação
+      const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
+      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan.toUpperCase()});}
+      else{await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan.toUpperCase()});}
+      // Atualizar vendas com esse SKU preservando original
+      await sbPatch('vendas','empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda),{sku:skuCan.toUpperCase(),sku_original:skuVenda});
+      ok++;
+    }catch(e){erros++;}
+    bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
+    txt.textContent='Processando '+(i+1)+'/'+linhas.length+' — '+ok+' ok'+(erros?', '+erros+' erros':'');
+  }
+  txt.textContent='✅ '+ok+' correlações processadas'+(erros?', '+erros+' erros':'');
+  setTimeout(()=>{
+    prog.style.display='none';
+    loadCorrelacao();
+    // Recarregar abas que dependem dos SKUs
+    if(typeof loadVendas==='function')loadVendas();
+    if(typeof loadABC==='function'){
+      // ABC usa filtros de data — só recarrega se já estiver na aba
+      const pageABC=document.getElementById('page-abc');
+      if(pageABC?.classList.contains('active'))loadABC();
+    }
+    if(typeof loadBOM==='function'){
+      const pageBOM=document.getElementById('page-bom');
+      if(pageBOM?.classList.contains('active'))loadBOM();
+    }
+  },2000);
+}
+
+async function uploadLimpezaDados(input){
+  if(!input.files[0])return;
+  // Reusar o input de correlação
+  const dt=new DataTransfer();dt.items.add(input.files[0]);
+  const fakeInput={files:dt.files,value:''};
+  await uploadCorrelacao(fakeInput);
 }
 
 
