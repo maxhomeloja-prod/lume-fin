@@ -4117,6 +4117,17 @@ function atualizarEmpresaUI(){
 }
 
 
+function getEmpresaFiltro(selId){
+  const val=document.getElementById(selId)?.value;
+  return val||null;
+}
+
+function buildEmpresaQuery(selId){
+  const v=getEmpresaFiltro(selId);
+  return v?'empresa_id=eq.'+v:'empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')';
+}
+
+
 // ── BOOT ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   const dbg=s=>{console.warn('[BOOT]',s);};
