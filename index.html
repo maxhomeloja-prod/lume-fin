@@ -1317,7 +1317,7 @@ const SB_URL  = 'https://ynwkgersqcxglryrwqxl.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlud2tnZXJzcWN4Z2xyeXJ3cXhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODA4NDMsImV4cCI6MjA5NDg1Njg0M30.Pi7SMfACrMoyPcnFlOWXQ7BVojYpZucNgjUgVJ0f7Hw';
 const WORKER  = 'https://lume-fin.maxhome-loja.workers.dev';
 const MKT_WORKER = 'https://lume-mkt.maxhome-loja.workers.dev';
-const CATS_ESPECIAIS = new Set(['405619d5-0000-0000-0000-000000000000','6d58abb5-0000-0000-0000-000000000000','4c734a9a-0000-0000-0000-000000000000','73511595-0000-0000-0000-000000000000']);
+const CATS_ESPECIAIS = new Set(['405619d5-a208-478b-b09a-ab28e73307e0','6d58abb5-755b-4b19-9e4a-d490570e4b8f','4c734a9a-691d-4349-b8bb-ca1a78262077','73511595-cf4c-4906-b449-22cbccc026b2','aaae7cc0-1dc2-4c65-a902-e0f8f3c1e60d']);
 
 // ── Estado ─────────────────────────────────────────────────
 let SESSION=null, EMPRESA_ID=null, EMPRESAS=[], CATEGORIAS=[], CONTAS=[];
@@ -2762,7 +2762,7 @@ async function loadBalancete(){
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
       sbGet('caixa_entradas','?'+empQB.replace('&status=eq.CONFIRMADA','')+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500'),
-      sbGet('caixa_saidas','?'+empQB.replace('&status=eq.CONFIRMADA','')+'&limit=500')
+      sbGet('caixa_saidas','?'+empQB.replace('&status=eq.CONFIRMADA','')+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
@@ -2914,7 +2914,7 @@ async function loadCaixa(){
     const ate=document.getElementById('fcx-ate')?.value;
     const tipo=document.getElementById('fcx-tipo')?.value;
     const empQ=buildEmpresaQuery('fcx-empresa');
-    let qE='?'+empQ+'&order=data_vencimento.desc&limit=500';
+    let qE='?'+empQ+'&order=data.desc&limit=500';
     let qS='?'+empQ+'&order=data.desc&limit=500';
     if(de){qE+=`&data=gte.${de}`;qS+=`&data=gte.${de}`;}
     if(ate){qE+=`&data=lte.${ate}`;qS+=`&data=lte.${ate}`;}
@@ -4129,6 +4129,39 @@ function getEmpresaFiltro(selId){
 function buildEmpresaQuery(selId){
   const v=getEmpresaFiltro(selId);
   return v?'empresa_id=eq.'+v:'empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')';
+}
+
+
+function renderBalanceteSemanal(agrupado){
+  const semanas={};
+  _balTransacoes.forEach(t=>{
+    if(!t.data)return;
+    const d=new Date(t.data+'T12:00:00');
+    const dow=d.getDay();const seg=new Date(d);seg.setDate(d.getDate()-(dow===0?6:dow-1));
+    const key=seg.toISOString().split('T')[0];
+    if(!semanas[key])semanas[key]={rec:0,desp:0,trans:[]};
+    const ehEsp=CATS_ESPECIAIS.has(t.categoria_id);
+    if(!ehEsp){if(t.valor>=0)semanas[key].rec+=t.valor;else semanas[key].desp+=Math.abs(t.valor);}
+    semanas[key].trans.push(t);
+  });
+  const semOrdenadas=Object.entries(semanas).sort((a,b)=>a[0].localeCompare(b[0]));
+  let html='<div class="bal-section"><div class="bal-section-title">Semanas</div><div class="bal-table">';
+  semOrdenadas.forEach(([seg,s])=>{
+    const fim=new Date(seg+'T12:00:00');fim.setDate(fim.getDate()+6);
+    const label=fDate(seg)+' – '+fDate(fim.toISOString().split('T')[0]);
+    const saldo=s.rec-s.desp;
+    const rowId='sem-'+seg.replace(/-/g,'');
+    html+='<div class="bal-row" style="cursor:pointer" data-rowid="'+rowId+'" onclick="toggleBalRow(this.dataset.rowid)">'+
+      '<span class="bal-row-name">▶ '+label+'</span>'+
+      '<span class="bal-row-val" style="color:'+(saldo>=0?'var(--green)':'var(--red)')+'">Rec: '+fBRL(s.rec)+' | Desp: '+fBRL(s.desp)+' | Saldo: '+fBRL(saldo)+'</span>'+
+      '</div>'+
+      '<div id="'+rowId+'" style="display:none">'+s.trans.map(t=>'<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2)">'+
+        '<span>'+fDate(t.data)+' · '+(t.descricao||'—')+'</span>'+
+        '<span style="color:'+(t.valor>=0?'var(--green)':'var(--red)')+'">'+fBRL(t.valor)+'</span>'+
+        '</div>').join('')+'</div>';
+  });
+  html+='</div></div>';
+  document.getElementById('bal-corpo').innerHTML=html;
 }
 
 
