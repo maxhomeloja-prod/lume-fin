@@ -4108,32 +4108,43 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
 }
 
 // ── BOOT ─────────────────────────────────────────────────────
-// Verificar callback OAuth ao carregar
-window.addEventListener('load',()=>{if(window.location.search.includes('code='))verificarCallbackMarketplace();});
-
-// Restaurar sessão do localStorage
-(async()=>{
+window.addEventListener('DOMContentLoaded', async()=>{
+  // Enter key no login
+  ['login-email','login-senha'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
+  });
+  // Callback OAuth marketplace
+  if(window.location.search.includes('code='))verificarCallbackMarketplace();
+  // Restaurar sessão facção
+  try{
+    const rawFac=localStorage.getItem('lume_faccao');
+    if(rawFac){
+      const fac=JSON.parse(rawFac);
+      if(fac&&fac.id){
+        FACCAO_LOGADO=fac;
+        await iniciarFaccaoView();
+        return;
+      }
+    }
+  }catch(e){}
+  // Restaurar sessão empresa
   try{
     const raw=localStorage.getItem('lume_session');
     if(raw){
       const d=JSON.parse(raw);
-      // Verificar se token ainda é válido
       const exp=d.expires_at||d.user?.exp;
-      if(exp&&Date.now()/1000>exp){
-        localStorage.removeItem('lume_session');
-        document.getElementById('login-screen').style.display='flex';
+      if(exp&&Date.now()/1000<exp){
+        SESSION=d;
+        await iniciarApp();
         return;
+      }else{
+        localStorage.removeItem('lume_session');
       }
-      SESSION=d;
-      await iniciarApp();
-    }else{
-      document.getElementById('login-screen').style.display='flex';
     }
-  }catch(e){
-    console.error('Boot error:',e);
-    document.getElementById('login-screen').style.display='flex';
-  }
-})();
+  }catch(e){console.error('Boot error:',e);}
+  // Mostrar login
+  document.getElementById('login-screen').style.display='flex';
+});
 
 </script>
 <datalist id="bom-materiais-list"></datalist>
