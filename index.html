@@ -1583,16 +1583,20 @@ async function loadDashboard(){
     sEl.className='kpi-value '+(saldo>=0?'green':'red');
     // KPI entregas por dia/terceiro no mês
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    const entregas=await sbGet('lancamentos_externos',
-      '?empresa_id=in.('+empIds+')'+
-      '&tipo_lancamento=eq.PAGAR'+
-      '&data=gte.'+fd(ini)+
-      '&fornecedor=not.is.null'+
-      '&select=data,fornecedor,valor'
-    );
-    // Filtrar só facções
+    // Garantir que _terceiros está carregado
+    if(!_terceiros.length)await carregarTerceiros();
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
-    const entFac=entregas.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()));
+    const entFac=[];
+    if(faccaoNomes.size>0){
+      const entregas=await sbGet('lancamentos_externos',
+        '?empresa_id=in.('+empIds+')'+
+        '&tipo_lancamento=eq.PAGAR'+
+        '&data=gte.'+fd(ini)+
+        '&select=data,fornecedor,valor'
+      ).catch(()=>[]);
+      entregas.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()))
+              .forEach(l=>entFac.push(l));
+    }
     // Agrupar por data + terceiro
     const grupos={};
     entFac.forEach(l=>{
