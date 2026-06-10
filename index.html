@@ -1456,8 +1456,8 @@ async function iniciarApp(){
   document.getElementById('venda-data').value=fd(hoje);
 
   await carregarBase();
-  irPara('dashboard');
   await loadDashboard();
+  irPara('dashboard');
 }
 
 async function carregarBase(){
@@ -1591,10 +1591,13 @@ async function loadDashboard(){
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
     const entFac=[];
     if(faccaoNomes.size>0){
+      const nomesFaccao=_terceiros.map(t=>t.nome).join(',');
       const entregas=await sbGet('lancamentos_externos',
         '?empresa_id=in.('+empIds+')'+
         '&tipo_lancamento=eq.PAGAR'+
         '&data=gte.'+fd(ini)+
+        '&order=data.desc'+
+        '&limit=500'+
         '&select=data,fornecedor,valor'
       ).catch(()=>[]);
       entregas.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()))
