@@ -2890,7 +2890,9 @@ function abrirModalEntrada(){
 function toggleEntFields(){const t=document.getElementById('ent-tipo')?.value;const f=document.getElementById('ent-cheque-fields');if(f)f.style.display=t==='CHEQUE'?'':'none';}
 async function salvarEntrada(){
   const tipo=document.getElementById('ent-tipo').value;const valor=parseFloat(document.getElementById('ent-valor').value);
-  try{await sbPost('caixa_entradas',{empresa_id:EMPRESA_ID,tipo,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
+  const entEmpId=document.getElementById('ent-empresa')?.value||EMPRESA_ID;
+  const hoje=new Date().toISOString().split('T')[0];
+  try{await sbPost('caixa_entradas',{empresa_id:entEmpId,data:hoje,tipo,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
 }
 async function excluirEntrada(id){if(!confirm('Excluir?'))return;await sbDelete('caixa_entradas',`id=eq.${id}`);loadCaixa();}
 function abrirModalSaida(){
