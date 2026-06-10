@@ -4107,42 +4107,54 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
   if(win){win.document.write(html);win.document.close();}
 }
 
+function atualizarEmpresaUI(){
+  const emp=EMPRESAS.find(e=>e.id===EMPRESA_ID);
+  const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'—';
+  const opts='<option value="">Todas</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  ['fcat-empresa','fbal-empresa','flan-empresa','fcontas-empresa','fcx-empresa'].forEach(id=>{
+    const sel=document.getElementById(id);if(sel)sel.innerHTML=opts;
+  });
+}
+
+
 // ── BOOT ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
+  const dbg=s=>{console.warn('[BOOT]',s);};
   // Enter key no login
   ['login-email','login-senha'].forEach(id=>{
     document.getElementById(id)?.addEventListener('keydown',e=>{if(e.key==='Enter')fazerLogin();});
   });
-  // Callback OAuth marketplace
   if(window.location.search.includes('code='))verificarCallbackMarketplace();
   // Restaurar sessão facção
   try{
     const rawFac=localStorage.getItem('lume_faccao');
+    dbg('lume_faccao: '+(rawFac?'existe':'vazio'));
     if(rawFac){
       const fac=JSON.parse(rawFac);
-      if(fac&&fac.id){
-        FACCAO_LOGADO=fac;
-        await iniciarFaccaoView();
-        return;
-      }
+      if(fac&&fac.id){FACCAO_LOGADO=fac;await iniciarFaccaoView();return;}
     }
-  }catch(e){}
+  }catch(e){dbg('faccao err: '+e.message);}
   // Restaurar sessão empresa
   try{
     const raw=localStorage.getItem('lume_session');
+    dbg('lume_session: '+(raw?'existe':'vazio'));
     if(raw){
       const d=JSON.parse(raw);
       const exp=d.expires_at||d.user?.exp;
+      dbg('exp='+exp+' agora='+Math.round(Date.now()/1000)+' valido='+(Date.now()/1000<exp));
       if(exp&&Date.now()/1000<exp){
         SESSION=d;
+        dbg('chamando iniciarApp...');
         await iniciarApp();
+        dbg('iniciarApp concluido');
         return;
       }else{
+        dbg('sessao expirada, removendo');
         localStorage.removeItem('lume_session');
       }
     }
-  }catch(e){console.error('Boot error:',e);}
-  // Mostrar login
+  }catch(e){dbg('boot err: '+e.message);}
+  dbg('mostrando login');
   document.getElementById('login-screen').style.display='flex';
 });
 
