@@ -1593,17 +1593,18 @@ async function loadDashboard(){
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
     const entFac=[];
     if(faccaoNomes.size>0){
-      const nomesFaccao=_terceiros.map(t=>t.nome).join(',');
-      const entregas=await sbGet('lancamentos_externos',
-        '?empresa_id=in.('+empIds+')'+
-        '&tipo_lancamento=eq.PAGAR'+
-        '&data=gte.'+fd(ini)+
-        '&order=data.desc'+
-        '&limit=500'+
-        '&select=data,fornecedor,valor'
-      ).catch(()=>[]);
-      entregas.filter(l=>l.fornecedor&&faccaoNomes.has(l.fornecedor.toLowerCase()))
-              .forEach(l=>entFac.push(l));
+      // Buscar diretamente por fornecedor para cada facção
+      for(const terc of _terceiros){
+        const rows=await sbGet('lancamentos_externos',
+          '?empresa_id=in.('+empIds+')'+
+          '&tipo_lancamento=eq.PAGAR'+
+          '&data=gte.'+fd(ini)+
+          '&fornecedor=eq.'+encodeURIComponent(terc.nome)+
+          '&order=data.desc&limit=200'+
+          '&select=data,fornecedor,valor'
+        ).catch(()=>[]);
+        rows.forEach(l=>entFac.push(l));
+      }
     }
     // Agrupar por data + terceiro
     const grupos={};
