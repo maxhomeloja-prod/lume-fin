@@ -4165,6 +4165,42 @@ function renderBalanceteSemanal(agrupado){
 }
 
 
+function toggleBalRow(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  const vis=el.style.display!=='none';
+  el.style.display=vis?'none':'';
+  // Girar seta
+  const row=el.previousElementSibling;
+  if(row){const arrow=row.querySelector('.bal-row-name');if(arrow)arrow.textContent=arrow.textContent.replace(vis?'▼':'▶',vis?'▶':'▼');}
+}
+
+function toggleBalSemanal(){
+  _balSemanal=!_balSemanal;
+  const btn=document.getElementById('btn-bal-semanal');
+  if(btn){btn.style.borderColor=_balSemanal?'var(--accent)':'';btn.style.color=_balSemanal?'var(--accent)':'';}
+  if(_balTransacoes.length)renderBalancete();
+}
+
+function atualizarTotaisCaixa(){
+  const totalEnt=_caixaEntradas.reduce((s,e)=>s+(parseFloat(e.valor_original)||0),0);
+  const totalSai=_caixaSaidas.reduce((s,s2)=>s+(parseFloat(s2.valor_total)||0),0);
+  const saldo=totalEnt-totalSai;
+  const elE=document.getElementById('cx-total-ent');if(elE)elE.textContent=fBRL(totalEnt);
+  const elS=document.getElementById('cx-total-sai');if(elS)elS.textContent=fBRL(totalSai);
+  const elSaldo=document.getElementById('cx-total-saldo');
+  if(elSaldo){elSaldo.textContent=fBRL(saldo);elSaldo.className='kpi-value '+(saldo>=0?'green':'red');}
+}
+
+function popularDatalistMateriais(){
+  if(!EMPRESA_ID)return;
+  sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&select=material_nome&limit=500').then(rows=>{
+    const dl=document.getElementById('bom-materiais-list');
+    if(dl){const nomes=[...new Set(rows.map(r=>r.material_nome).filter(Boolean))];dl.innerHTML=nomes.map(n=>'<option value="'+n+'">').join('');}
+  }).catch(()=>{});
+}
+
+
 // ── BOOT ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async()=>{
   const dbg=s=>{console.warn('[BOOT]',s);};
