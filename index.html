@@ -1325,6 +1325,8 @@ let _catsProduto=[], _produtos=[], _clientes=[], _terceiros=[], _precosOp={};
 let _transacoesPendentes=[], _balTransacoes=[], _lancamentos=[];
 let _caixaEntradas=[], _caixaSaidas=[], _vendas=[], _abcData=[], _abcFiltro='all';
 let _opViewMode='cards', _bomLinhas=0, _opEntregaAtual=null, _lanEditId=null;
+let _balSemanal=false;
+let FACCAO_LOGADO=null, _faccaoCarrinho=[];
 
 // ── Supabase helpers ────────────────────────────────────────
 function getAuthToken(){return SESSION?.access_token||FACCAO_LOGADO?.token||SB_ANON;}
@@ -3869,7 +3871,7 @@ async function faccaoBuscar(){
 }
 
 let _faccaoOPSelecionada=null;
-const _faccaoCarrinho=[];
+_faccaoCarrinho.length=0;
 
 async function faccaoSelecionarOP(idOrEl){const id=typeof idOrEl==='string'?idOrEl:idOrEl;
   if(!FACCAO_LOGADO)return;
