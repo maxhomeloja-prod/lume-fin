@@ -562,6 +562,10 @@ tr:hover td{background:var(--surface2);}
           <div style="position:relative;height:200px"><canvas id="dash-chart-ops"></canvas></div>
         </div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">Entregas de Facção — Mês Corrente</div>
+        <div id="dash-entregas-tabela"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
+      </div>
     </div>
 
     <!-- EMPRESAS -->
@@ -1584,7 +1588,7 @@ async function loadDashboard(){
     // KPI entregas por dia/terceiro no mês
     const empIds=EMPRESAS.map(e=>e.id).join(',');
     // Garantir que _terceiros está carregado
-    if(!_terceiros.length)await carregarTerceiros();
+    if(!_terceiros.length)await loadTerceiros();
     const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
     const entFac=[];
     if(faccaoNomes.size>0){
