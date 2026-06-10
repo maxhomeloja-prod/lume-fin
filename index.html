@@ -2978,7 +2978,8 @@ async function salvarSaida(){
   const sel=[];_caixaEntradas.filter(e=>e.valor_disponivel>0).forEach(e=>{const chk=document.getElementById(`sc-${e.id}`);if(chk?.checked){const val=document.getElementById(`sv-${e.id}`);const usado=val?Math.min(parseFloat(val.value)||0,e.valor_disponivel):e.valor_disponivel;sel.push({entrada:e,usado});}});
   if(sel.reduce((s,x)=>s+x.usado,0)<vp)return alert('Cobertura insuficiente');
   try{
-    const[saida]=await sbPost('caixa_saidas',{empresa_id:EMPRESA_ID,data:document.getElementById('sai-data').value,descricao:document.getElementById('sai-desc')?.value?.trim()||null,fornecedor:document.getElementById('sai-forn').value.trim(),valor_total:vp,categoria_id:document.getElementById('sai-cat').value||null});
+    const saiDesc=document.getElementById('sai-desc')?.value?.trim()||('Pagamento — '+document.getElementById('sai-forn').value.trim());
+const[saida]=await sbPost('caixa_saidas',{empresa_id:EMPRESA_ID,data:document.getElementById('sai-data').value,descricao:saiDesc,fornecedor:document.getElementById('sai-forn').value.trim(),valor_total:vp,categoria_id:document.getElementById('sai-cat').value||null});
     for(const{entrada,usado}of sel){await sbPost('caixa_movimentos',{saida_id:saida.id,entrada_id:entrada.id,valor_utilizado:usado});await sbPatch('caixa_entradas',`id=eq.${entrada.id}`,{valor_disponivel:Math.max(0,entrada.valor_disponivel-usado)});}
     fecharModal('modal-saida');loadCaixa();
   }catch(e){alert('Erro: '+e.message);}
