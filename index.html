@@ -429,13 +429,15 @@ tr:hover td{background:var(--surface2);}
     <div class="modal-title">Confirmar Entrega</div>
     <div class="modal-sub">Revise os itens antes de confirmar</div>
     <div id="fac-conf-itens" style="margin-bottom:16px"></div>
-    <div class="form-group">
-      <label class="form-label">Data da Entrega</label>
-      <input class="form-control" type="date" id="fac-conf-data">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Observação</label>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Data da Entrega</label>
+        <input class="form-control" type="date" id="fac-conf-data">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observação</label>
       <input class="form-control" type="text" id="fac-conf-obs" placeholder="Opcional">
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--border)">
       <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green)" id="fac-conf-total">R$ 0,00</span>
@@ -1626,28 +1628,22 @@ async function loadDashboard(){
     sEl.className='kpi-value '+(saldo>=0?'green':'red');
     // KPI entregas por dia/terceiro no mês
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    const faccaoNomes=new Set(_terceiros.map(t=>t.nome.toLowerCase()));
-    const entFac=[];
-    if(faccaoNomes.size>0){
-      // Buscar diretamente por fornecedor para cada facção
-      for(const terc of _terceiros){
-        const rows=await sbGet('lancamentos_externos',
-          '?empresa_id=in.('+empIds+')'+
-          '&tipo_lancamento=eq.PAGAR'+
-          '&data=gte.'+fd(ini)+
-          '&fornecedor=eq.'+encodeURIComponent(terc.nome)+
-          '&order=data.desc&limit=200'+
-          '&select=data,fornecedor,valor'
-        ).catch(()=>[]);
-        rows.forEach(l=>entFac.push(l));
-      }
-    }
+    // KPI Entregas — buscar diretamente de entregas_op sem filtro de status
+    const tercMap2={};_terceiros.forEach(t=>{tercMap2[t.id]=t.nome;});
+    const entFacRows=await sbGet('entregas_op',
+      '?empresa_id=in.('+empIds+')'+
+      '&data_entrega=gte.'+fd(ini)+
+      '&order=data_entrega.desc&limit=500'+
+      '&select=data_entrega,criado_em,terceiro_id,valor_total'
+    ).catch(()=>[]);
     // Agrupar por data + terceiro
     const grupos={};
-    entFac.forEach(l=>{
-      const key=l.data+'|'+l.fornecedor;
-      if(!grupos[key])grupos[key]={data:l.data,terceiro:l.fornecedor,total:0};
-      grupos[key].total+=l.valor;
+    entFacRows.forEach(e=>{
+      const data=e.data_entrega||e.criado_em?.split('T')[0]||'';
+      const nome=tercMap2[e.terceiro_id]||'Produção Interna';
+      const key=data+'|'+nome;
+      if(!grupos[key])grupos[key]={data,terceiro:nome,total:0};
+      grupos[key].total+=e.valor_total||0;
     });
     const linhas=Object.values(grupos).sort((a,b)=>b.data.localeCompare(a.data));
     const elKpi=document.getElementById('dash-entregas-tabela');
@@ -2222,9 +2218,9 @@ async function loadEntregas(){
       if(v)selT.value=v;
     }
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    let q='?empresa_id=in.('+empIds+')&order=criado_em.desc&limit=500';
-    if(de)q+='&criado_em=gte.'+de+'T00:00:00';
-    if(ate)q+='&criado_em=lte.'+ate+'T23:59:59';
+    let q='?empresa_id=in.('+empIds+')&order=data_entrega.desc,criado_em.desc&limit=500';
+    if(de)q+='&data_entrega=gte.'+de;
+    if(ate)q+='&data_entrega=lte.'+ate;
     if(terc)q+='&terceiro_id=eq.'+terc;
     const entregas=await sbGet('entregas_op',q);
     const opMap={};_ops.forEach(o=>{opMap[o.id]=o;});
@@ -2237,9 +2233,9 @@ async function loadEntregas(){
     }):entregas;
     const el=document.getElementById('entregas-lista');
     if(!filtradas.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma entrega encontrada</div></div>';return;}
-    el.innerHTML='<table><thead><tr><th>Data</th><th>OP</th><th>SKU</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>'+
+    el.innerHTML='<table><thead><tr><th>Data Entrega</th><th>OP</th><th>SKU</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>'+
       filtradas.map(e=>'<tr>'+
-        '<td>'+fDate(e.criado_em?.split('T')[0])+'</td>'+
+        '<td>'+fDate(e.data_entrega||e.criado_em?.split('T')[0])+'</td>'+
         '<td style="font-weight:500;color:var(--accent)">'+(opMap[e.op_id]?.numero||'—')+'</td>'+
         '<td style="color:var(--text2)">'+(e.sku||opMap[e.op_id]?.sku||'—')+'</td>'+
         '<td style="color:var(--text2)">'+(tercMap[e.terceiro_id]||'—')+'</td>'+
@@ -2895,26 +2891,28 @@ function renderBalancete(){
     return '<div id="'+rowId+'" style="display:none">'+rows+'</div>';
   }
 
-  function secao(titulo,itens,cls){
+  function secao(titulo,itens,cls,totalRecBase){
     if(!itens.length)return'';
     var sub=itens.reduce(function(s,i){return s+Math.abs(i.total);},0);
     var linhas=itens.map(function(item,idx){
       var rowId='balr'+idx+''+titulo.charCodeAt(0);
+      var pct=(totalRecBase>0&&Math.abs(item.total)>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((Math.abs(item.total)/totalRecBase)*100).toFixed(1)+'%)</span>':'';
       var header='<div class="bal-row" style="cursor:pointer;display:flex;justify-content:space-between" onclick="toggleBalRow(\''+rowId+'\')">'+
         '<span class="bal-row-name">\u25b6 '+item.nome+'</span>'+
-        '<span class="bal-row-val '+cls+'">'+fBRL(item.total)+'</span>'+
+        '<span class="bal-row-val '+cls+'">'+fBRL(item.total)+pct+'</span>'+
         '</div>';
       return header+buildDetalhes(item.trans,rowId);
     }).join('');
+    var pctTotal=(totalRecBase>0&&sub>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((sub/totalRecBase)*100).toFixed(1)+'%)</span>':'';
     return '<div class="bal-section"><div class="bal-section-title">'+titulo+'</div>'+
       '<div class="bal-table">'+linhas+
       '<div class="bal-row bal-subtotal"><span class="bal-row-name">Total '+titulo+'</span>'+
-      '<span class="bal-row-val '+cls+'">'+fBRL(sub)+'</span></div></div></div>';
+      '<span class="bal-row-val '+cls+'">'+fBRL(sub)+pctTotal+'</span></div></div></div>';
   }
 
   document.getElementById('bal-corpo').innerHTML=
-    secao('Receitas',rec,'recei')+
-    secao('Despesas',desp,'desp')+
+    secao('Receitas',rec,'recei',totalRec)+
+    secao('Despesas',desp,'desp',totalRec)+
     (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div><div class="bal-table">'+
       esp.map(function(i){return '<div class="bal-row"><span class="bal-row-name">'+i.nome+'</span><span class="bal-row-val" style="color:var(--text2)">'+fBRL(i.total)+'</span></div>';}).join('')+
       '</div></div>':'');
@@ -4087,6 +4085,10 @@ function confirmarEntregaSemOP(){
 
 function abrirConfirmacaoFaccao(){
   if(!_faccaoCarrinho.length)return;
+  // Preencher data com hoje
+  const dataHoje=new Date().toISOString().split('T')[0];
+  const elData=document.getElementById('fac-conf-data');
+  if(elData)elData.value=dataHoje;
   const total=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
   document.getElementById('fac-conf-total').textContent=fBRL(total);
   document.getElementById('fac-conf-itens').innerHTML=_faccaoCarrinho.map(function(item){
@@ -4139,6 +4141,7 @@ async function confirmarEntregaFaccao(){
         sku:item.avulso?item.sku:item.op.sku,
         quantidade:item.qtd,
         valor_total:item.valor,
+        data_entrega:dataEntrega,
         observacao:obs||null
       };
       await sbPost('entregas_op',entrega);
@@ -4416,7 +4419,7 @@ async function finalizarOPModal(){
     });
 
     // Registrar perda
-    if(qtdPerda >= 0){
+    if(qtdPerda >= 0){ // registra inclusive perda 0 (100% entregue)
       await sbPost('perda_op',{
         empresa_id: op.empresa_id,
         op_id: op.id,
