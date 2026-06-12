@@ -2853,7 +2853,7 @@ async function loadBalancete(){
     document.getElementById('bal-saldos').innerHTML=[
       ...saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').map(s=>`<div class="saldo-card"><div class="saldo-banco">${s.contas_bancarias.banco}</div><div class="saldo-nome">${s.contas_bancarias.nome_conta}</div><div class="saldo-val ${s.saldo_atual>=0?'pos':'neg'}">${fBRL(s.saldo_atual)}</div></div>`),
       `<div class="saldo-card"><div class="saldo-banco">Caixa Físico</div><div class="saldo-nome">Dinheiro & Cheques</div><div class="saldo-val pos">${fBRL(cxFis)}</div></div>`,
-      `<div class="saldo-card" style="background:var(--surface2);border-color:var(--border2)"><div class="saldo-banco">Total Geral</div><div class="saldo-nome">Banco + Caixa</div><div class="saldo-val pos" style="font-size:22px">${fBRL(totalBanco+cxFis)}</div></div>`
+      `<div class="saldo-card" style="background:var(--surface2);border-color:var(--border2)"><div class="saldo-banco">Total Geral</div><div class="saldo-nome">Banco + Caixa</div><div class="saldo-val ${(totalBanco+cxFis)>=0?'pos':'neg'}" style="font-size:22px">${fBRL(totalBanco+cxFis)}</div></div>`
     ].join('');
   }catch(e){document.getElementById('bal-corpo').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
