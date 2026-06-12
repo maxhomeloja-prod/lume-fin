@@ -2954,8 +2954,8 @@ async function loadLancamentos(){
           sbGet('saldos_conta','?empresa_id=in.('+empIds+')&select=saldo_atual,contas_bancarias(tipo)'),
           sbGet('caixa_entradas','?empresa_id=in.('+empIds+')&select=valor_disponivel')
         ]);
-        const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
-        const totalCaixa=cxEnt.reduce((s,e)=>s+(e.valor_disponivel||0),0);
+        const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
+        const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
         const totalBC=totalBanco+totalCaixa;
         const totalGeral=totalBC+receber-pagar;
         // Banco + Caixa
