@@ -2038,7 +2038,7 @@ function renderOPs(){
       <td style="font-size:11px;color:var(--text2)">${tercMap[op.terceiro_id]||'—'}</td>
       <td style="text-align:right">${fN(op.quantidade)}</td>
       <td style="text-align:right;color:var(--green)">${fN(op.quantidade_entregue)}</td>
-      <td style="text-align:right">${op.valor_unitario?fBRL(op.quantidade*op.valor_unitario):'—'}</td>
+      <td style="text-align:right">${op.preco_unitario?fBRL(op.quantidade*op.preco_unitario):'—'}</td>
       <td style="display:flex;gap:4px;padding:8px 6px" onclick="event.stopPropagation()">
         <button class="btn btn-primary btn-sm" onclick="abrirEntregaOP('${op.id}',event)">Entrega</button>
         <button class="btn btn-ghost btn-sm" onclick="abrirModalOP('${op.id}',event)">✎</button>
@@ -2058,7 +2058,7 @@ function abrirModalOP(id,e){
   document.getElementById('op-sku').value=op?.sku||'';
   document.getElementById('op-desc').value=op?.descricao||'';
   document.getElementById('op-qtd').value=op?.quantidade||1;
-  document.getElementById('op-preco').value=op?.valor_unitario||'';
+  document.getElementById('op-preco').value=op?.preco_unitario||'';
   document.getElementById('op-sit').value=op?.situacao||'ABERTA';
   document.getElementById('op-prev').value=op?.data_previsao||'';
   document.getElementById('op-obs').value=op?.observacao||'';
@@ -2094,7 +2094,7 @@ async function salvarOP(){
     empresa_id:EMPRESA_ID,sku,
     descricao:document.getElementById('op-desc').value.trim()||sku,
     quantidade:qtd,
-    valor_unitario:parseFloat(document.getElementById('op-preco').value)||0,
+    preco_unitario:parseFloat(document.getElementById('op-preco').value)||0,
     situacao:document.getElementById('op-sit').value,
     terceiro_id:document.getElementById('op-terceiro').value||null,
     data_previsao:document.getElementById('op-prev').value||null,
@@ -2140,7 +2140,7 @@ function abrirEntregaOPDireto(op){
       <div><div style="color:var(--text3);font-size:10px;text-transform:uppercase;margin-bottom:3px">Entregue</div><div style="color:var(--green)">${fN(op.quantidade_entregue)} peças</div></div>
       <div><div style="color:var(--text3);font-size:10px;text-transform:uppercase;margin-bottom:3px">Restante</div><div style="color:var(--amber)">${fN(restante)} peças</div></div>
       <div><div style="color:var(--text3);font-size:10px;text-transform:uppercase;margin-bottom:3px">Facção</div><div>${terc?.nome||'—'}</div></div>
-      <div><div style="color:var(--text3);font-size:10px;text-transform:uppercase;margin-bottom:3px">Preço Unit.</div><div style="color:var(--accent)">${op.valor_unitario?fBRL(op.valor_unitario):'—'}</div></div>
+      <div><div style="color:var(--text3);font-size:10px;text-transform:uppercase;margin-bottom:3px">Preço Unit.</div><div style="color:var(--accent)">${op.preco_unitario?fBRL(op.preco_unitario):'—'}</div></div>
     </div>`;
   document.getElementById('entrega-qtd').value='';
   document.getElementById('entrega-valor').value='';
