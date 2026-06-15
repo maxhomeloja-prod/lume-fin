@@ -2602,8 +2602,9 @@ async function loadABC(){
     if(skuFiltro)vendas=vendas.filter(v=>v.sku&&v.sku.toUpperCase().includes(skuFiltro));
     const porSku={};
     vendas.forEach(v=>{
+      const liq=v.receita_liquida>0?v.receita_liquida:(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
       if(!porSku[v.sku])porSku[v.sku]={rec:0,qtd:0};
-      porSku[v.sku].rec+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+      porSku[v.sku].rec+=liq;
       porSku[v.sku].qtd+=v.quantidade;
     });
     const sorted=Object.entries(porSku).sort((a,b)=>b[1].rec-a[1].rec);
@@ -2701,7 +2702,7 @@ function renderChartCanal(vendas){
     canais.add(c);
     if(!porDataCanal[d])porDataCanal[d]={};
     if(!porDataCanal[d][c])porDataCanal[d][c]=0;
-    porDataCanal[d][c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porDataCanal[d][c]+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
   });
   const datas=Object.keys(porDataCanal).sort();
   const canalList=[...canais].sort();
@@ -2734,7 +2735,7 @@ function renderChartPizza(vendas){
   vendas.forEach(v=>{
     const c=v.marketplace||'Sem canal';
     if(!porCanal[c])porCanal[c]=0;
-    porCanal[c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porCanal[c]+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
   });
   const labels=Object.keys(porCanal).sort();
   const data=labels.map(c=>porCanal[c]);
@@ -3156,7 +3157,7 @@ async function loadVendas(){
       if(sku&&!(v.sku||'').toUpperCase().includes(sku.toUpperCase()))return false;
       return true;
     });
-    const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
+    const rec=_vendas.reduce((s,v)=>s+(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0)),0);
     const uni=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
     const recLiq=_vendas.reduce((s,v)=>s+(v.receita_liquida||0),0);
     const pedidos=[...new Set(_vendas.map(v=>v.pedido_id))].length;
@@ -3266,7 +3267,7 @@ function renderChartMensal(vendas){
     if(!porMesCat[mes])porMesCat[mes]={};
     if(!porMesCat[mes][cat])porMesCat[mes][cat]={qtd:0,val:0};
     porMesCat[mes][cat].qtd+=v.quantidade||0;
-    porMesCat[mes][cat].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porMesCat[mes][cat].val+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
   });
   const meses=Object.keys(porMesCat).sort();
   const catList=[...cats].sort();
@@ -3342,7 +3343,7 @@ async function calcularEstoqueModelo(){
     vendas.forEach(v=>{
       if(!porSku[v.sku])porSku[v.sku]={qtd:0,val:0};
       porSku[v.sku].qtd+=v.quantidade||0;
-      porSku[v.sku].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+      porSku[v.sku].val+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
     });
     // Projeção para N dias
     const projecaoSKU=Object.entries(porSku).map(([sku,v])=>({
