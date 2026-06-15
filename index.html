@@ -2859,8 +2859,10 @@ async function loadBalancete(){
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
     const uid=SESSION?.user?.id||'00000000-0000-0000-0000-000000000000';
     const cxQ=inclCaixa?'?user_id=eq.'+uid:'?user_id=eq.00000000-0000-0000-0000-000000000000';
+    // Se só caixa físico selecionado, não buscar transações bancárias
+    const transQ=empIds.length>0?qT+'&limit=2000':'?empresa_id=eq.00000000-0000-0000-0000-000000000000';
     const[trans,caixaEnt,caixaSai]=await Promise.all([
-      sbGet('transacoes',qT+'&limit=2000'),
+      sbGet('transacoes',transQ),
       sbGet('caixa_entradas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500'),
       sbGet('caixa_saidas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
     ]);
