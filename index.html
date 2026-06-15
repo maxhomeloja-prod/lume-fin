@@ -1608,15 +1608,16 @@ function preencherSelects(){
 
 // ── DASHBOARD ──────────────────────────────────────────────────
 async function loadDashboard(){
-  if(!EMPRESA_ID)return;
+  if(!EMPRESAS||!EMPRESAS.length)return;
   try{
     const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
     const fd=d=>d.toISOString().split('T')[0];
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
     const[vendas,ops,lans,saldos]=await Promise.all([
-      sbGet('vendas',`?empresa_id=eq.${EMPRESA_ID}&data_pedido=gte.${fd(ini)}&select=valor_total`),
-      sbGet('ordens_producao',`?empresa_id=eq.${EMPRESA_ID}&situacao=neq.CANCELADA&select=situacao,quantidade`),
-      sbGet('lancamentos_externos',`?empresa_id=eq.${EMPRESA_ID}&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&select=valor`),
-      sbGet('saldos_conta','?empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')'+'&select=saldo_atual,contas_bancarias(tipo)')
+      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=gte.${fd(ini)}&select=valor_total`),
+      sbGet('ordens_producao',`?empresa_id=in.(${empIds})&situacao=neq.CANCELADA&select=situacao,quantidade`),
+      sbGet('lancamentos_externos',`?empresa_id=in.(${empIds})&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&select=valor`),
+      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`)
     ]);
     const rec=vendas.reduce((s,v)=>s+(v.valor_total||0),0);
     const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').length;
