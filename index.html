@@ -1630,7 +1630,6 @@ async function loadDashboard(){
     sEl.textContent=fBRL(saldo);
     sEl.className='kpi-value '+(saldo>=0?'green':'red');
     // KPI entregas por dia/terceiro no mês
-    const empIds=EMPRESAS.map(e=>e.id).join(',');
     // KPI Entregas — buscar diretamente de entregas_op sem filtro de status
     const tercMap2={};_terceiros.forEach(t=>{tercMap2[t.id]=t.nome;});
     const entFacRows=await sbGet('entregas_op',
