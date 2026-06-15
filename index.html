@@ -932,7 +932,20 @@ tr:hover td{background:var(--surface2);}
         </div>
       </div>
       <div class="filters">
-        <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="fbal-empresa" onchange="loadBalancete()"><option value="">Todas</option></select></div>
+        <div class="filter-group" style="position:relative">
+          <span class="filter-label">Empresas</span>
+          <div id="fbal-emp-btn" onclick="toggleFiltroEmpresas()" style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px;min-width:160px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span id="fbal-emp-label">Todas</span><span>▾</span>
+          </div>
+          <div id="fbal-emp-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+            <div id="fbal-emp-checks"></div>
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="selTodosEmpresas(true)">Todas</button>
+              <button class="btn btn-secondary btn-sm" onclick="selTodosEmpresas(false)">Nenhuma</button>
+              <button class="btn btn-primary btn-sm" onclick="aplicarFiltroEmpresas()">Aplicar</button>
+            </div>
+          </div>
+        </div>
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fbal-de"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fbal-ate"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
@@ -2832,13 +2845,24 @@ async function loadBalancete(){
   const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    const empQB=buildEmpresaQuery('fbal-empresa');
-    let qT='?'+empQB+'&status=eq.CONFIRMADA';
+    // Montar query de empresas com suporte a multi-seleção e caixa
+    let empIds,inclCaixa=false;
+    if(_balEmpSel===null){
+      empIds=EMPRESAS.map(e=>e.id);
+      inclCaixa=true;
+    } else {
+      empIds=_balEmpSel.filter(id=>id!=='__caixa__');
+      inclCaixa=_balEmpSel.includes('__caixa__');
+    }
+    const empQStr=empIds.length?'empresa_id=in.('+empIds.join(',')+')':`empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})`;
+    let qT='?'+empQStr+'&status=eq.CONFIRMADA';
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
+    const uid=SESSION?.user?.id||'00000000-0000-0000-0000-000000000000';
+    const cxQ=inclCaixa?'?user_id=eq.'+uid:'?user_id=eq.00000000-0000-0000-0000-000000000000';
     const[trans,caixaEnt,caixaSai]=await Promise.all([
       sbGet('transacoes',qT+'&limit=2000'),
-      sbGet('caixa_entradas','?'+empQB.replace('&status=eq.CONFIRMADA','')+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500'),
-      sbGet('caixa_saidas','?'+empQB.replace('&status=eq.CONFIRMADA','')+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
+      sbGet('caixa_entradas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500'),
+      sbGet('caixa_saidas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
     ]);
     _balTransacoes=[
       ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
@@ -2952,7 +2976,7 @@ async function loadLancamentos(){
         const empIds=EMPRESAS.map(e=>e.id).join(',');
         const[saldos,cxEnt]=await Promise.all([
           sbGet('saldos_conta','?empresa_id=in.('+empIds+')&select=saldo_atual,contas_bancarias(tipo)'),
-          sbGet('caixa_entradas','?empresa_id=in.('+empIds+')&select=valor_disponivel')
+          sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=valor_disponivel')
         ]);
         const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
         const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
@@ -3012,8 +3036,8 @@ async function loadCaixa(){
     const de=document.getElementById('fcx-de')?.value;
     const ate=document.getElementById('fcx-ate')?.value;
     const tipo=document.getElementById('fcx-tipo')?.value;
-    const empQ=buildEmpresaQuery('fcx-empresa');
-    let qE='?'+empQ+'&order=data.desc&limit=500';
+    const uid=SESSION?.user?.id||'';
+    let qE='?user_id=eq.'+uid+'&order=data.desc&limit=500';
     let qS='?'+empQ+'&order=data.desc&limit=500';
     if(de){qE+=`&data=gte.${de}`;qS+=`&data=gte.${de}`;}
     if(ate){qE+=`&data=lte.${ate}`;qS+=`&data=lte.${ate}`;}
@@ -3056,7 +3080,7 @@ async function salvarEntrada(){
   const editId=document.getElementById('modal-entrada').dataset.editId||null;
   const descricao=document.getElementById('ent-descricao')?.value.trim()||
     (tipo==='CHEQUE'?'Cheque recebido':'Entrada de caixa')+' — '+(document.getElementById('ent-cliente')?.value.trim()||hoje);
-  try{await sbPost('caixa_entradas',{empresa_id:entEmpId,data:hoje,tipo,descricao,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
+  try{await sbPost('caixa_entradas',{user_id:SESSION?.user?.id,data:hoje,tipo,descricao,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
 }
 async function excluirEntrada(id){if(!confirm('Excluir?'))return;await sbDelete('caixa_entradas',`id=eq.${id}`);loadCaixa();}
 function abrirModalSaida(){
@@ -3679,7 +3703,7 @@ async function acFetchFornecedores(q){
 }
 async function acFetchClientes(q){
   if(!EMPRESA_ID)return[];
-  const rows=await sbGet('caixa_entradas','?empresa_id=eq.'+EMPRESA_ID+'&select=cliente&not.cliente.is.null&limit=200');
+  const rows=await sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=cliente&not.cliente.is.null&limit=200');
   return[...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
 }
 async function acFetchMateriais(q){
@@ -3691,7 +3715,7 @@ async function acFetchFornClientes(q){
   if(!EMPRESA_ID)return[];
   const [lans,caixaE]=await Promise.all([
     sbGet('lancamentos_externos','?empresa_id=eq.'+EMPRESA_ID+'&select=fornecedor,cliente&limit=300'),
-    sbGet('caixa_entradas','?empresa_id=eq.'+EMPRESA_ID+'&select=cliente&limit=200')
+    sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=cliente&limit=200')
   ]);
   const set=new Set();
   lans.forEach(l=>{if(l.fornecedor)set.add(l.fornecedor);if(l.cliente)set.add(l.cliente);});
@@ -4232,6 +4256,62 @@ function getEmpresaFiltro(selId){
   const val=document.getElementById(selId)?.value;
   return val||null;
 }
+
+// ── Filtro multi-empresa balancete ──
+let _balEmpSel = null; // null = todas
+
+function toggleFiltroEmpresas(){
+  const dd=document.getElementById('fbal-emp-dropdown');
+  if(dd.style.display==='none'){
+    // Renderizar checkboxes
+    const checks=document.getElementById('fbal-emp-checks');
+    const opts=[...EMPRESAS.map(e=>({id:e.id,nome:e.nome})),{id:'__caixa__',nome:'💵 Caixa Físico'}];
+    checks.innerHTML=opts.map(e=>{
+      const checked=_balEmpSel===null||_balEmpSel.includes(e.id);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
+        <input type="checkbox" value="${e.id}" ${checked?'checked':''} onchange="atualizarLabelEmpresas()">
+        ${e.nome}
+      </label>`;
+    }).join('');
+    dd.style.display='block';
+  } else {
+    dd.style.display='none';
+  }
+}
+
+function atualizarLabelEmpresas(){
+  const checks=[...document.querySelectorAll('#fbal-emp-checks input[type=checkbox]')];
+  const total=checks.length;
+  const selecionados=checks.filter(c=>c.checked).length;
+  const label=document.getElementById('fbal-emp-label');
+  if(selecionados===0||selecionados===total) label.textContent='Todas';
+  else if(selecionados===1) label.textContent=checks.find(c=>c.checked).parentElement.textContent.trim();
+  else label.textContent=selecionados+' selecionadas';
+}
+
+function selTodosEmpresas(val){
+  document.querySelectorAll('#fbal-emp-checks input[type=checkbox]').forEach(c=>c.checked=val);
+  atualizarLabelEmpresas();
+}
+
+function aplicarFiltroEmpresas(){
+  const checks=[...document.querySelectorAll('#fbal-emp-checks input[type=checkbox]')];
+  const selecionados=checks.filter(c=>c.checked).map(c=>c.value);
+  const total=checks.length;
+  _balEmpSel=selecionados.length===total||selecionados.length===0?null:selecionados;
+  document.getElementById('fbal-emp-dropdown').style.display='none';
+  atualizarLabelEmpresas();
+  loadBalancete();
+}
+
+// Fechar dropdown ao clicar fora
+document.addEventListener('click',e=>{
+  const btn=document.getElementById('fbal-emp-btn');
+  const dd=document.getElementById('fbal-emp-dropdown');
+  if(dd&&btn&&!btn.contains(e.target)&&!dd.contains(e.target)){
+    dd.style.display='none';
+  }
+});
 
 function buildEmpresaQuery(selId){
   const v=getEmpresaFiltro(selId);
