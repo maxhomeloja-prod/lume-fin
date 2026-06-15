@@ -749,8 +749,6 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-value" id="ven-ped">—</div></div>
         <div class="kpi"><div class="kpi-label">Unidades</div><div class="kpi-value" id="ven-uni">—</div></div>
         <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-tkt">—</div></div>
-        <div class="kpi"><div class="kpi-label">Receita Líquida</div><div class="kpi-value green" id="ven-rec-liq">—</div></div>
-        <div class="kpi"><div class="kpi-label">Ticket Médio Líquido</div><div class="kpi-value" id="ven-tkt-liq">—</div></div>
       </div>
       <div class="card"><div class="tbl-wrap" id="ven-table"></div></div>
     </div>
@@ -2602,9 +2600,8 @@ async function loadABC(){
     if(skuFiltro)vendas=vendas.filter(v=>v.sku&&v.sku.toUpperCase().includes(skuFiltro));
     const porSku={};
     vendas.forEach(v=>{
-      const liq=v.receita_liquida>0?v.receita_liquida:(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
       if(!porSku[v.sku])porSku[v.sku]={rec:0,qtd:0};
-      porSku[v.sku].rec+=liq;
+      porSku[v.sku].rec+=(v.valor_total||v.valor_unitario*v.quantidade||0);
       porSku[v.sku].qtd+=v.quantidade;
     });
     const sorted=Object.entries(porSku).sort((a,b)=>b[1].rec-a[1].rec);
@@ -2702,7 +2699,7 @@ function renderChartCanal(vendas){
     canais.add(c);
     if(!porDataCanal[d])porDataCanal[d]={};
     if(!porDataCanal[d][c])porDataCanal[d][c]=0;
-    porDataCanal[d][c]+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
+    porDataCanal[d][c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
   });
   const datas=Object.keys(porDataCanal).sort();
   const canalList=[...canais].sort();
@@ -2735,7 +2732,7 @@ function renderChartPizza(vendas){
   vendas.forEach(v=>{
     const c=v.marketplace||'Sem canal';
     if(!porCanal[c])porCanal[c]=0;
-    porCanal[c]+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
+    porCanal[c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
   });
   const labels=Object.keys(porCanal).sort();
   const data=labels.map(c=>porCanal[c]);
@@ -3157,18 +3154,14 @@ async function loadVendas(){
       if(sku&&!(v.sku||'').toUpperCase().includes(sku.toUpperCase()))return false;
       return true;
     });
-    const rec=_vendas.reduce((s,v)=>s+(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0)),0);
+    const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
     const uni=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
-    const recLiq=_vendas.reduce((s,v)=>s+(v.receita_liquida||0),0);
     const pedidos=[...new Set(_vendas.map(v=>v.pedido_id))].length;
     document.getElementById('ven-rec').textContent=fBRL(rec);
     document.getElementById('ven-ped').textContent=fN(_vendas.length);
     document.getElementById('ven-uni').textContent=fN(uni);
     document.getElementById('ven-tkt').textContent=_vendas.length?fBRL(rec/_vendas.length):'—';
-    const elRecLiq=document.getElementById('ven-rec-liq');
-    const elTktLiq=document.getElementById('ven-tkt-liq');
-    if(elRecLiq)elRecLiq.textContent=fBRL(recLiq);
-    if(elTktLiq)elTktLiq.textContent=pedidos?fBRL(recLiq/pedidos):'—';
+
     if(!_vendas.length){
       document.getElementById('ven-table').innerHTML='<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Nenhuma venda encontrada</div></div>';
       return;
@@ -3267,7 +3260,7 @@ function renderChartMensal(vendas){
     if(!porMesCat[mes])porMesCat[mes]={};
     if(!porMesCat[mes][cat])porMesCat[mes][cat]={qtd:0,val:0};
     porMesCat[mes][cat].qtd+=v.quantidade||0;
-    porMesCat[mes][cat].val+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
+    porMesCat[mes][cat].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
   });
   const meses=Object.keys(porMesCat).sort();
   const catList=[...cats].sort();
@@ -3343,7 +3336,7 @@ async function calcularEstoqueModelo(){
     vendas.forEach(v=>{
       if(!porSku[v.sku])porSku[v.sku]={qtd:0,val:0};
       porSku[v.sku].qtd+=v.quantidade||0;
-      porSku[v.sku].val+=(v.receita_liquida>0?v.receita_liquida:(v.valor_total||v.valor_unitario*v.quantidade||0));
+      porSku[v.sku].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
     });
     // Projeção para N dias
     const projecaoSKU=Object.entries(porSku).map(([sku,v])=>({
