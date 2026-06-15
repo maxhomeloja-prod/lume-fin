@@ -3033,14 +3033,14 @@ async function salvarLancamento(){
 }
 
 async function loadCaixa(){
-  if(!EMPRESA_ID){semEmpresaMsg('cx-ent-wrap');semEmpresaMsg('cx-sai-wrap');return;}
+  if(!SESSION?.user?.id){semEmpresaMsg('cx-ent-wrap');semEmpresaMsg('cx-sai-wrap');return;}
   try{
     const de=document.getElementById('fcx-de')?.value;
     const ate=document.getElementById('fcx-ate')?.value;
     const tipo=document.getElementById('fcx-tipo')?.value;
-    const uid=SESSION?.user?.id||'';
+    const uid=SESSION.user.id;
     let qE='?user_id=eq.'+uid+'&order=data.desc&limit=500';
-    let qS='?'+empQ+'&order=data.desc&limit=500';
+    let qS='?user_id=eq.'+uid+'&order=data.desc&limit=500';
     if(de){qE+=`&data=gte.${de}`;qS+=`&data=gte.${de}`;}
     if(ate){qE+=`&data=lte.${ate}`;qS+=`&data=lte.${ate}`;}
     if(tipo)qE+=`&tipo=eq.${tipo}`;
