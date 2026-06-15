@@ -1513,8 +1513,7 @@ async function carregarBase(){
   const saved=localStorage.getItem('lume_empresa_id');
   EMPRESA_ID=(saved&&EMPRESAS.find(e=>e.id===saved))?saved:EMPRESAS[0]?.id;
   const sel=document.getElementById('sel-empresa');
-  sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  if(EMPRESA_ID) sel.value=EMPRESA_ID;
+  if(sel){sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(EMPRESA_ID)sel.value=EMPRESA_ID;}
   atualizarEmpresaUI();
 
   try{CATEGORIAS=await sbGet('categorias','?ativa=eq.true&order=tipo,nome');}catch(e){CATEGORIAS=[];}
