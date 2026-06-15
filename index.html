@@ -749,6 +749,8 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Pedidos</div><div class="kpi-value" id="ven-ped">—</div></div>
         <div class="kpi"><div class="kpi-label">Unidades</div><div class="kpi-value" id="ven-uni">—</div></div>
         <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-tkt">—</div></div>
+        <div class="kpi"><div class="kpi-label">Receita Líquida</div><div class="kpi-value green" id="ven-rec-liq">—</div></div>
+        <div class="kpi"><div class="kpi-label">Ticket Médio Líquido</div><div class="kpi-value" id="ven-tkt-liq">—</div></div>
       </div>
       <div class="card"><div class="tbl-wrap" id="ven-table"></div></div>
     </div>
@@ -3156,10 +3158,16 @@ async function loadVendas(){
     });
     const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
     const uni=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
+    const recLiq=_vendas.reduce((s,v)=>s+(v.receita_liquida||0),0);
+    const pedidos=[...new Set(_vendas.map(v=>v.pedido_id))].length;
     document.getElementById('ven-rec').textContent=fBRL(rec);
     document.getElementById('ven-ped').textContent=fN(_vendas.length);
     document.getElementById('ven-uni').textContent=fN(uni);
     document.getElementById('ven-tkt').textContent=_vendas.length?fBRL(rec/_vendas.length):'—';
+    const elRecLiq=document.getElementById('ven-rec-liq');
+    const elTktLiq=document.getElementById('ven-tkt-liq');
+    if(elRecLiq)elRecLiq.textContent=fBRL(recLiq);
+    if(elTktLiq)elTktLiq.textContent=pedidos?fBRL(recLiq/pedidos):'—';
     if(!_vendas.length){
       document.getElementById('ven-table').innerHTML='<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Nenhuma venda encontrada</div></div>';
       return;
@@ -4509,6 +4517,7 @@ async function loadCorrelacao(){
               skusCanonicos.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+
               '<option value="__novo__">+ Novo canônico</option>'+
             '</select>'+
+            '<input type="number" min="1" value="1" style="width:56px;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);text-align:center" id="mult-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" title="Multiplicador kit">'+
             '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" onclick="associarSKU(this.dataset.sku)">Associar</button>'+
           '</div>').join('')+
           '</div></div>';
@@ -4522,10 +4531,11 @@ async function loadCorrelacao(){
       el.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><div class="empty-title">Nenhuma correlação cadastrada</div><div class="empty-sub">Faça upload de uma planilha de correlação</div></div>';
       return;
     }
-    el.innerHTML='<table><thead><tr><th>SKU de Venda</th><th>SKU Canônico</th><th></th></tr></thead><tbody>'+
+    el.innerHTML='<table><thead><tr><th>SKU de Venda</th><th>SKU Canônico</th><th style="text-align:center">Multiplicador</th><th></th></tr></thead><tbody>'+
       _correlacao.map(c=>'<tr>'+
         '<td style="color:var(--text2);font-size:12px">'+c.sku_venda+'</td>'+
         '<td style="font-weight:500;color:var(--accent)">'+c.sku_canonico+'</td>'+
+        '<td style="text-align:center">×'+(c.multiplicador||1)+'</td>'+
         '<td><button class="btn btn-danger btn-sm" onclick="excluirCorrelacao(this.dataset.id)" data-id="'+c.id+'">✕</button></td>'+
       '</tr>').join('')+
       '</tbody></table>';
@@ -4543,8 +4553,11 @@ async function associarSKU(skuVenda){
     if(!skuCan||!skuCan.trim())return;
     skuCan=skuCan.trim().toUpperCase();
   }
+  const multKey='mult-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
+  const multEl=document.getElementById(multKey);
+  const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
-    await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan});
+    await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
     // Atualizar vendas com esse SKU
     await sbPatch('vendas','empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda),{sku:skuCan,sku_original:skuVenda});
     loadCorrelacao();
