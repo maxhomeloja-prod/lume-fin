@@ -4417,44 +4417,46 @@ function editarEntradaCaixa(id){
 let _opDetalheAtual = null;
 
 function imprimirOP(){
-  const op=_opDetalheAtual;
+  var op=_opDetalheAtual;
   if(!op)return;
-  const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
-  const faccao=tercMap[op.terceiro_id]||'—';
-  const empresa=EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome||'';
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>OP ${op.numero}</title>
-  <style>
-    body{font-family:Arial,sans-serif;padding:32px;color:#111;max-width:600px;margin:0 auto}
-    h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin-bottom:24px}
-    .label{color:#666;font-size:11px;text-transform:uppercase;margin-bottom:2px}.val{font-size:15px;font-weight:500}
-    .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:16px 0}
-    .card{border:1px solid #ddd;border-radius:6px;padding:12px}
-    .footer{margin-top:32px;border-top:1px solid #ddd;padding-top:16px;font-size:11px;color:#999}
-    @media print{body{padding:16px}}
-  </style></head><body>
-  <h1>Ordem de Produção #${op.numero}</h1>
-  <div class="sub">${empresa}</div>
-  <div class="grid">
-    <div class="card"><div class="label">SKU</div><div class="val">${op.sku||'—'}</div></div>
-    <div class="card"><div class="label">Facção</div><div class="val">${faccao}</div></div>
-    <div class="card"><div class="label">Situação</div><div class="val">${op.situacao||'—'}</div></div>
-    <div class="card"><div class="label">Quantidade</div><div class="val">${op.quantidade||0} pçs</div></div>
-    <div class="card"><div class="label">Entregue</div><div class="val">${op.quantidade_entregue||0} pçs</div></div>
-    <div class="card"><div class="label">Preço Unit.</div><div class="val">${op.preco_unitario?'R$ '+op.preco_unitario.toFixed(2).replace('.',','):'—'}</div></div>
-  </div>
-  ${op.descricao?'<div class="card" style="margin-bottom:16px"><div class="label">Descrição</div><div>'+op.descricao+'</div></div>':''}
-  ${op.observacao?'<div class="card" style="margin-bottom:16px"><div class="label">Observação</div><div>'+op.observacao+'</div></div>':''}
-  <div class="grid">
-    <div class="card"><div class="label">Abertura</div><div>${op.data_abertura||'—'}</div></div>
-    <div class="card"><div class="label">Previsão</div><div>${op.data_previsao||'—'}</div></div>
-    <div class="card"><div class="label">Conclusão</div><div>${op.data_conclusao||'—'}</div></div>
-  </div>
-  <div class="footer">Impresso em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</div>
-  </body></html>\`;
-  const w=window.open('','_blank','width=700,height=900');
+  var tercMap={};_terceiros.forEach(function(t){tercMap[t.id]=t.nome;});
+  var faccao=tercMap[op.terceiro_id]||'—';
+  var empresa=(EMPRESAS.find(function(e){return e.id===EMPRESA_ID;})||{}).nome||'';
+  var preco=op.preco_unitario?'R$ '+op.preco_unitario.toFixed(2).replace('.',','):'—';
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>OP '+op.numero+'</title>'
+    +'<style>'
+    +'body{font-family:Arial,sans-serif;padding:32px;color:#111;max-width:600px;margin:0 auto}'
+    +'h1{font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:13px;margin-bottom:24px}'
+    +'.label{color:#666;font-size:11px;text-transform:uppercase;margin-bottom:2px}'
+    +'.val{font-size:15px;font-weight:500}'
+    +'.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:16px 0}'
+    +'.card{border:1px solid #ddd;border-radius:6px;padding:12px}'
+    +'.footer{margin-top:32px;border-top:1px solid #ddd;padding-top:16px;font-size:11px;color:#999}'
+    +'@media print{body{padding:16px}}'
+    +'</style></head><body>'
+    +'<h1>Ordem de Producao #'+op.numero+'</h1>'
+    +'<div class="sub">'+empresa+'</div>'
+    +'<div class="grid">'
+    +'<div class="card"><div class="label">SKU</div><div class="val">'+(op.sku||'—')+'</div></div>'
+    +'<div class="card"><div class="label">Faccao</div><div class="val">'+faccao+'</div></div>'
+    +'<div class="card"><div class="label">Situacao</div><div class="val">'+(op.situacao||'—')+'</div></div>'
+    +'<div class="card"><div class="label">Quantidade</div><div class="val">'+(op.quantidade||0)+' pcs</div></div>'
+    +'<div class="card"><div class="label">Entregue</div><div class="val">'+(op.quantidade_entregue||0)+' pcs</div></div>'
+    +'<div class="card"><div class="label">Preco Unit.</div><div class="val">'+preco+'</div></div>'
+    +'</div>'
+    +(op.descricao?'<div class="card" style="margin-bottom:16px"><div class="label">Descricao</div><div>'+op.descricao+'</div></div>':'')
+    +(op.observacao?'<div class="card" style="margin-bottom:16px"><div class="label">Observacao</div><div>'+op.observacao+'</div></div>':'')
+    +'<div class="grid">'
+    +'<div class="card"><div class="label">Abertura</div><div>'+(op.data_abertura||'—')+'</div></div>'
+    +'<div class="card"><div class="label">Previsao</div><div>'+(op.data_previsao||'—')+'</div></div>'
+    +'<div class="card"><div class="label">Conclusao</div><div>'+(op.data_conclusao||'—')+'</div></div>'
+    +'</div>'
+    +'<div class="footer">Impresso em '+new Date().toLocaleDateString('pt-BR')+' as '+new Date().toLocaleTimeString('pt-BR')+'</div>'
+    +'</body></html>';
+  var w=window.open('','_blank','width=700,height=900');
   w.document.write(html);w.document.close();w.focus();
-  setTimeout(()=>w.print(),500);
+  setTimeout(function(){w.print();},500);
 }
 
 function abrirDetalhesOP(id){
