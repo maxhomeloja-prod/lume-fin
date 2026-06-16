@@ -4680,7 +4680,7 @@ async function verificarNovoCanonico(sel){
   sel.value=skuFormatado;
 }
 
-function associarSKU(skuVenda){
+async function associarSKU(skuVenda){
   const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const sel=document.getElementById(key);
   if(!sel)return;
