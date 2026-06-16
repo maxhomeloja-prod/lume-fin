@@ -1587,6 +1587,7 @@ function irPara(pagina){
     'correlacao':loadCorrelacao,'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
   };
   if(loaders[pagina])loaders[pagina]();
+
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -4630,7 +4631,7 @@ async function loadCorrelacao(){
           '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
           semCorr.map(sku=>'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px">'+
             '<span style="font-weight:500">'+sku+'</span>'+
-            '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'">'+
+            '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" onchange="verificarNovoCanonico(this)">'+
               '<option value="">Selecionar canônico...</option>'+
               skusCanonicos.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+
               '<option value="__novo__">+ Novo canônico</option>'+
@@ -4660,17 +4661,31 @@ async function loadCorrelacao(){
   }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
 }
 
-async function associarSKU(skuVenda){
+async function verificarNovoCanonico(sel){
+  if(sel.value!=='__novo__')return;
+  const novoSku=prompt('Digite o novo SKU canônico:','');
+  if(!novoSku||!novoSku.trim()){
+    sel.value='';
+    return;
+  }
+  const skuFormatado=novoSku.trim().toUpperCase();
+  // Verificar se já existe essa opção
+  const jaExiste=[...sel.options].some(o=>o.value===skuFormatado);
+  if(!jaExiste){
+    const novaOpt=document.createElement('option');
+    novaOpt.value=skuFormatado;
+    novaOpt.textContent=skuFormatado;
+    sel.insertBefore(novaOpt,sel.querySelector('option[value="__novo__"]'));
+  }
+  sel.value=skuFormatado;
+}
+
+function associarSKU(skuVenda){
   const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const sel=document.getElementById(key);
   if(!sel)return;
   let skuCan=sel.value;
-  if(!skuCan){alert('Selecione ou crie um SKU canônico');return;}
-  if(skuCan==='__novo__'){
-    skuCan=prompt('Digite o novo SKU canônico:','');
-    if(!skuCan||!skuCan.trim())return;
-    skuCan=skuCan.trim().toUpperCase();
-  }
+  if(!skuCan||skuCan==='__novo__'){alert('Selecione ou crie um SKU canônico');return;}
   const multKey='mult-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const multEl=document.getElementById(multKey);
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
