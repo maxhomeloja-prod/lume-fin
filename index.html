@@ -4691,8 +4691,12 @@ async function associarSKU(skuVenda){
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
     await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
-    // Atualizar vendas com esse SKU
-    await sbPatch('vendas','empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda),{sku:skuCan,sku_original:skuVenda});
+    // Buscar vendas com esse SKU para multiplicar quantidade individualmente (evita corrida em PATCH em massa)
+    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
+    for(const v of vendasAfetadas){
+      const qtdNova=v.quantidade*multiplicador;
+      await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova});
+    }
     loadCorrelacao();
   }catch(e){alert('Erro: '+e.message);}
 }
