@@ -2622,10 +2622,8 @@ async function finalizarVendaManual(){
   const clienteNome=document.getElementById('venda-cliente').value.trim();
   const pedidoIdComum='MANUAL-'+Date.now();
   try{
-    const cliId=await garantirCliente(clienteNome);
     for(const item of _vendaCarrinho){
-      const prod=await garantirProduto(item.sku,'');
-      await sbPost('vendas',{empresa_id:EMPRESA_ID,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||null,produto_id:prod.id,sku:item.sku,cliente_id:cliId,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario});
+      await sbPost('vendas',{empresa_id:EMPRESA_ID,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'MANUAL',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
     }
     const itensSalvos=[..._vendaCarrinho];
     _vendaCarrinho=[];
