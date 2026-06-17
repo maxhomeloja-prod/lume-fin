@@ -2686,6 +2686,24 @@ async function uploadVendas(input){
     await new Promise(r=>setTimeout(r,50)); // respirar o browser
   }
   txt.textContent='✅ '+ok+' vendas importadas'+(erros?', '+erros+' erros com dados inválidos':'');
+
+  // Gerar 1 recibo por cliente para as linhas que tinham cliente preenchido
+  const porCliente={};
+  batch.forEach(v=>{
+    if(!v.cliente_nome)return;
+    if(!porCliente[v.cliente_nome])porCliente[v.cliente_nome]=[];
+    porCliente[v.cliente_nome].push(v);
+  });
+  const clientesEncontrados=Object.keys(porCliente);
+  if(clientesEncontrados.length){
+    const periodoTxt='Importação de '+fDate(hoje);
+    clientesEncontrados.forEach(nomeCliente=>{
+      const html=gerarHTMLFechamento(porCliente[nomeCliente], nomeCliente, periodoTxt);
+      const win=window.open('','_blank');
+      if(win){win.document.write(html);win.document.close();}
+    });
+  }
+
   setTimeout(()=>{prog.style.display='none';loadVendas();verificarBOMPendencias();},3000);
 }
 
@@ -3334,19 +3352,12 @@ async function loadPerfil(){
 }
 
 
-function gerarFechamentoCliente(){
-  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
-  if(!clienteFiltro){alert('Digite o nome do cliente no filtro antes de gerar o fechamento');return;}
-  if(!_vendas.length){alert('Nenhuma venda encontrada para esse cliente no período selecionado');return;}
-
-  const de=document.getElementById('fven-de')?.value;
-  const ate=document.getElementById('fven-ate')?.value;
-  const periodoTxt=(de?fDate(de):'início')+' a '+(ate?fDate(ate):'hoje');
+function gerarHTMLFechamento(vendasCliente, nomeCliente, periodoTxt){
   const empNome=(EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome)||'Empresa';
 
   // Consolidado por SKU
   const consolidado={};
-  _vendas.forEach(v=>{
+  vendasCliente.forEach(v=>{
     const sku=v.sku||'—';
     if(!consolidado[sku])consolidado[sku]={quantidade:0,valor:0};
     consolidado[sku].quantidade+=v.quantidade||0;
@@ -3354,8 +3365,8 @@ function gerarFechamentoCliente(){
   });
   const skusOrdenados=Object.keys(consolidado).sort();
 
-  const totalGeral=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
-  const totalQtdGeral=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
+  const totalGeral=vendasCliente.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
+  const totalQtdGeral=vendasCliente.reduce((s,v)=>s+(v.quantidade||0),0);
 
   const linhasConsolidado=skusOrdenados.map(sku=>{
     const c=consolidado[sku];
@@ -3366,7 +3377,7 @@ function gerarFechamentoCliente(){
     </tr>`;
   }).join('');
 
-  const linhasDetalhe=_vendas.map(v=>`<tr>
+  const linhasDetalhe=vendasCliente.map(v=>`<tr>
       <td style="padding:5px 8px;border-bottom:1px solid #eee">${fDate(v.data_pedido)}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eee">${v.sku||'—'}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fN(v.quantidade)}</td>
@@ -3374,8 +3385,8 @@ function gerarFechamentoCliente(){
       <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(v.valor_total||v.valor_unitario*v.quantidade)}</td>
     </tr>`).join('');
 
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Fechamento — ${clienteFiltro}</title>
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Fechamento — ${nomeCliente}</title>
   <style>body{font-family:Arial,sans-serif;max-width:680px;margin:20px auto;font-size:13px;padding:0 16px}
   h2{color:#1e9be8;margin-bottom:4px}
   h3{color:#1e3a5f;margin-top:28px;border-bottom:2px solid #1e3a5f;padding-bottom:6px}
@@ -3389,7 +3400,7 @@ function gerarFechamentoCliente(){
   <h2>${empNome}</h2>
   <p style="color:#888;margin-top:0">Fechamento de Vendas — Venda Direta</p>
   <div class="info">
-    <b>Cliente:</b> ${clienteFiltro}<br>
+    <b>Cliente:</b> ${nomeCliente}<br>
     <b>Período:</b> ${periodoTxt}
   </div>
 
@@ -3408,6 +3419,18 @@ function gerarFechamentoCliente(){
 
   <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
+}
+
+function gerarFechamentoCliente(){
+  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
+  if(!clienteFiltro){alert('Digite o nome do cliente no filtro antes de gerar o fechamento');return;}
+  if(!_vendas.length){alert('Nenhuma venda encontrada para esse cliente no período selecionado');return;}
+
+  const de=document.getElementById('fven-de')?.value;
+  const ate=document.getElementById('fven-ate')?.value;
+  const periodoTxt=(de?fDate(de):'início')+' a '+(ate?fDate(ate):'hoje');
+
+  const html=gerarHTMLFechamento(_vendas, clienteFiltro, periodoTxt);
 
   const win=window.open('','_blank');
   if(win){win.document.write(html);win.document.close();}
