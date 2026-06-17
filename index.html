@@ -2244,7 +2244,7 @@ function abrirEntregaOPDireto(op){
 function calcEntrega(){
   const op=_opEntregaAtual;if(!op)return;
   const qtd=parseInt(document.getElementById('entrega-qtd').value)||0;
-  const valor=qtd*(op.valor_unitario||0);
+  const valor=qtd*(op.preco_unitario||0);
   document.getElementById('entrega-valor').value=valor.toFixed(2);
 }
 
@@ -2252,7 +2252,7 @@ async function confirmarEntrega(){
   const op=_opEntregaAtual;if(!op)return;
   const qtd=parseInt(document.getElementById('entrega-qtd').value);
   if(!qtd||qtd<=0)return alert('Informe a quantidade');
-  const valor=qtd*(op.valor_unitario||0);
+  const valor=qtd*(op.preco_unitario||0);
   const obs=document.getElementById('entrega-obs').value.trim();
   try{
     // Buscar categoria Facção
@@ -2260,10 +2260,10 @@ async function confirmarEntrega(){
 
     // Criar lançamento financeiro automático
     let lanId=null;
-    if(valor>0&&op.valor_unitario){
+    if(valor>0&&op.preco_unitario){
       const terc=_terceiros.find(t=>t.id===op.terceiro_id);
       const lan=await sbPost('lancamentos_externos',{
-        empresa_id:EMPRESA_ID,
+        empresa_id:op.empresa_id,
         data:new Date().toISOString().split('T')[0],
         data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
         descricao:`Entrega OP ${op.numero} — ${op.sku} (${qtd} peças)`,
@@ -2277,7 +2277,7 @@ async function confirmarEntrega(){
 
     // Registrar entrega
     await sbPost('entregas_op',{
-      empresa_id:EMPRESA_ID,op_id:op.id,
+      empresa_id:op.empresa_id,op_id:op.id,
       terceiro_id:op.terceiro_id||null,
       quantidade:qtd,valor_total:valor,
       observacao:obs||null,lancamento_id:lanId
@@ -4047,7 +4047,7 @@ async function carregarOPsFaccao(){
     }
     const corSit={ABERTA:'#1e9be8',EM_PRODUCAO:'#ffb020',PARCIAL:'#a78bfa'};
     el.innerHTML='<div class="op-cards">'+ops.map(op=>{
-      const preco=precosMap[op.sku.toUpperCase()]||op.valor_unitario||0;
+      const preco=precosMap[op.sku.toUpperCase()]||op.preco_unitario||0;
       const pct=op.quantidade>0?Math.min(100,Math.round(op.quantidade_entregue/op.quantidade*100)):0;
       const cor=corSit[op.situacao]||'#4a7a9b';
       return '<div class="op-card" onclick="faccaoSelecionarOP(this.dataset.opid)" data-opid="'+op.id+'">'+
@@ -4101,7 +4101,7 @@ async function faccaoSelecionarOP(idOrEl){const id=typeof idOrEl==='string'?idOr
   const op=ops[0];if(!op)return;
   // Buscar preço
   const precos=await sbGet('precos_faccao','?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+op.sku+'&limit=1').catch(()=>[]);
-  op._preco=precos[0]?.preco||op.valor_unitario||0;
+  op._preco=precos[0]?.preco||op.preco_unitario||0;
   _faccaoOPSelecionada=op;
   const aberto=op.quantidade-op.quantidade_entregue;
   document.getElementById('fac-busca').value='';
@@ -4570,10 +4570,10 @@ function abrirDetalhesOP(id){
   document.getElementById('mod-op-bar').style.width = pct + '%';
   document.getElementById('mod-op-bar').style.background = corSit[op.situacao] || 'var(--green)';
   document.getElementById('mod-op-faccao').textContent = tercMap[op.terceiro_id] || '—';
-  document.getElementById('mod-op-preco').textContent = op.valor_unitario ? fBRL(op.valor_unitario) : '—';
+  document.getElementById('mod-op-preco').textContent = op.preco_unitario ? fBRL(op.preco_unitario) : '—';
   document.getElementById('mod-op-abertura').textContent = fDate(op.criado_em?.split('T')[0]);
   document.getElementById('mod-op-prev-info').textContent = op.data_previsao ? fDate(op.data_previsao) : '—';
-  document.getElementById('mod-op-valor-total').textContent = op.valor_unitario ? fBRL(op.quantidade * op.valor_unitario) : '—';
+  document.getElementById('mod-op-valor-total').textContent = op.preco_unitario ? fBRL(op.quantidade * op.preco_unitario) : '—';
   const obsWrap = document.getElementById('mod-op-obs-wrap');
   const obsTxt = document.getElementById('mod-op-obs-txt');
   if(op.observacao){ if(obsWrap)obsWrap.style.display=''; if(obsTxt)obsTxt.textContent=op.observacao; }
