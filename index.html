@@ -745,7 +745,9 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fven-de" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fven-ate" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fven-canal" onchange="loadVendas()"><option value="">Todos</option></select></div>
-        <div class="filter-group"><span class="filter-label">SKU</span><input class="filter-control" type="text" id="fven-sku" placeholder="Buscar SKU..." style="width:160px" oninput="loadVendas()"><option value="">Todos</option></select></div>
+        <div class="filter-group"><span class="filter-label">SKU</span><input class="filter-control" type="text" id="fven-sku" placeholder="Buscar SKU..." style="width:160px" oninput="loadVendas()"></div>
+        <div class="filter-group"><span class="filter-label">Cliente</span><input class="filter-control" type="text" id="fven-cliente" placeholder="Buscar cliente..." style="width:180px" oninput="loadVendas()"></div>
+        <button class="btn btn-secondary btn-sm" onclick="gerarFechamentoCliente()">📄 Gerar Fechamento</button>
       </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="ven-rec">—</div></div>
@@ -3334,6 +3336,85 @@ async function loadPerfil(){
 }
 
 
+function gerarFechamentoCliente(){
+  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
+  if(!clienteFiltro){alert('Digite o nome do cliente no filtro antes de gerar o fechamento');return;}
+  if(!_vendas.length){alert('Nenhuma venda encontrada para esse cliente no período selecionado');return;}
+
+  const de=document.getElementById('fven-de')?.value;
+  const ate=document.getElementById('fven-ate')?.value;
+  const periodoTxt=(de?fDate(de):'início')+' a '+(ate?fDate(ate):'hoje');
+  const empNome=(EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome)||'Empresa';
+
+  // Consolidado por SKU
+  const consolidado={};
+  _vendas.forEach(v=>{
+    const sku=v.sku||'—';
+    if(!consolidado[sku])consolidado[sku]={quantidade:0,valor:0};
+    consolidado[sku].quantidade+=v.quantidade||0;
+    consolidado[sku].valor+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+  });
+  const skusOrdenados=Object.keys(consolidado).sort();
+
+  const totalGeral=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
+  const totalQtdGeral=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
+
+  const linhasConsolidado=skusOrdenados.map(sku=>{
+    const c=consolidado[sku];
+    return `<tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:500">${sku}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fN(c.quantidade)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(c.valor)}</td>
+    </tr>`;
+  }).join('');
+
+  const linhasDetalhe=_vendas.map(v=>`<tr>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee">${fDate(v.data_pedido)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee">${v.sku||'—'}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fN(v.quantidade)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(v.valor_unitario)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(v.valor_total||v.valor_unitario*v.quantidade)}</td>
+    </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Fechamento — ${clienteFiltro}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:680px;margin:20px auto;font-size:13px;padding:0 16px}
+  h2{color:#1e9be8;margin-bottom:4px}
+  h3{color:#1e3a5f;margin-top:28px;border-bottom:2px solid #1e3a5f;padding-bottom:6px}
+  .info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}
+  .total{background:#0d1b2a;color:white;font-weight:bold}
+  .total td{padding:8px}
+  @media print{button{display:none}}</style></head>
+  <body>
+  <h2>${empNome}</h2>
+  <p style="color:#888;margin-top:0">Fechamento de Vendas — Venda Direta</p>
+  <div class="info">
+    <b>Cliente:</b> ${clienteFiltro}<br>
+    <b>Período:</b> ${periodoTxt}
+  </div>
+
+  <h3>Consolidado por SKU</h3>
+  <table>
+    <thead><tr><th>SKU</th><th style="text-align:right">Qtd Total</th><th style="text-align:right">Valor Total</th></tr></thead>
+    <tbody>${linhasConsolidado}</tbody>
+    <tfoot><tr class="total"><td>TOTAL GERAL</td><td style="text-align:right">${fN(totalQtdGeral)}</td><td style="text-align:right">${fBRL(totalGeral)}</td></tr></tfoot>
+  </table>
+
+  <h3>Detalhamento por Venda</h3>
+  <table>
+    <thead><tr><th>Data</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead>
+    <tbody>${linhasDetalhe}</tbody>
+  </table>
+
+  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+}
+
 async function loadVendas(){
   if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
   const _empIdsVen=EMPRESAS.map(e=>e.id).join(',');
@@ -3341,6 +3422,7 @@ async function loadVendas(){
   const ate=document.getElementById('fven-ate')?.value;
   const canal=document.getElementById('fven-canal')?.value;
   const sku=document.getElementById('fven-sku')?.value;
+  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim().toLowerCase();
   document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     let qBase='?empresa_id=in.('+_empIdsVen+')&order=data_pedido.desc&limit=2000';
@@ -3348,14 +3430,12 @@ async function loadVendas(){
     if(ate)qBase+='&data_pedido=lte.'+ate;
     const todasVendas=await sbGet('vendas',qBase);
     const canais=[...new Set(todasVendas.map(v=>v.marketplace).filter(Boolean))].sort();
-    const skus=[...new Set(todasVendas.map(v=>v.sku).filter(Boolean))].sort();
     const selCanal=document.getElementById('fven-canal');
-    const selSku=document.getElementById('fven-sku');
     if(selCanal){const cv=selCanal.value;selCanal.innerHTML='<option value="">Todos</option>'+canais.map(c=>'<option value="'+c+'">'+c+'</option>').join('');selCanal.value=cv;}
-    if(selSku){const sv=selSku.value;selSku.innerHTML='<option value="">Todos</option>'+skus.map(s=>'<option value="'+s+'">'+s+'</option>').join('');selSku.value=sv;}
     _vendas=todasVendas.filter(v=>{
       if(canal&&v.marketplace!==canal)return false;
       if(sku&&!(v.sku||'').toUpperCase().includes(sku.toUpperCase()))return false;
+      if(clienteFiltro&&!(v.cliente_nome||'').toLowerCase().includes(clienteFiltro))return false;
       return true;
     });
     const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
