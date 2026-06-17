@@ -525,6 +525,7 @@ tr:hover td{background:var(--surface2);}
         <div class="nav-dropdown" id="dd-config">
           <button class="nav-dd-item" onclick="irPara('perfil')">👤 Meu Perfil</button>
           <button class="nav-dd-item" onclick="irPara('plano')">⭐ Plano & Pagamento</button>
+          <button class="nav-dd-item" onclick="irPara('seguranca')">🔒 Política de Segurança</button>
         </div>
       </div>
 
@@ -1044,6 +1045,57 @@ tr:hover td{background:var(--surface2);}
     <div id="page-perfil" class="page">
       <div class="page-header"><div><div class="page-title">Meu Perfil</div><div class="page-sub">Dados cadastrais e conta</div></div></div>
       <div id="perfil-content"></div>
+    </div>
+
+    <!-- SEGURANCA -->
+    <div id="page-seguranca" class="page">
+      <div class="page-header"><div><div class="page-title">Política de Segurança da Informação e Privacidade de Dados</div><div class="page-sub">Lume Gestão Empresarial — Versão 1.0, Junho de 2026</div></div></div>
+      <div style="max-width:760px;line-height:1.7;font-size:14px">
+
+        <h3 style="color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:24px">1. Introdução e Escopo</h3>
+        <p>Esta Política de Segurança da Informação e Privacidade de Dados ("Política") estabelece os princípios, diretrizes e controles adotados pela Lume Gestão Empresarial ("Lume") na proteção dos dados pessoais e empresariais processados através do sistema Lume Financeiro, incluindo suas integrações com plataformas de marketplace (Shopee, TikTok Shop, Mercado Livre e similares).</p>
+        <p>O Lume é uma plataforma de gestão empresarial multi-tenant que oferece módulos financeiros, de produção e de integração com canais de venda para empresas do setor de manufatura e comércio. Esta Política se aplica a todos os dados processados em nome dos clientes ("Vendedores") que utilizam o sistema.</p>
+
+        <h3 style="color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:24px">2. Segurança da Informação</h3>
+        <p><strong>2.1 Arquitetura e Infraestrutura</strong><br>
+        O Lume opera sobre infraestrutura de nuvem gerenciada (Cloudflare Workers e Supabase/AWS), com proteção nativa contra ataques de negação de serviço (DDoS), criptografia em repouso, e toda comunicação criptografada em trânsito via TLS/HTTPS.</p>
+        <p><strong>2.2 Controle de Acesso</strong><br>
+        O acesso aos dados é regido pelo princípio do menor privilégio: autenticação via Supabase Auth com senhas criptografadas, Row-Level Security (RLS) no banco de dados garantindo isolamento entre empresas (tenants), autenticação adicional por PIN para acesso via WhatsApp com bloqueio automático após tentativas inválidas, e segredos de integração armazenados de forma criptografada, nunca em código-fonte.</p>
+        <p><strong>2.3 Classificação e Proteção de Dados</strong><br>
+        Os dados são classificados em operacionais, financeiros e pessoais de terceiros, cada categoria com controles proporcionais à sua sensibilidade, tratados conforme a Lei Geral de Proteção de Dados (LGPD).</p>
+        <p><strong>2.4 Gerenciamento de Vulnerabilidades</strong><br>
+        O patching de infraestrutura é gerenciado automaticamente pelos provedores (Cloudflare, Supabase). Dependências de software são mantidas atualizadas e logs de aplicação são monitorados para identificação de comportamento anômalo.</p>
+
+        <h3 style="color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:24px">3. Privacidade e Proteção de Dados Pessoais</h3>
+        <p><strong>3.1 Finalidade do Tratamento</strong><br>
+        Os dados pessoais são utilizados exclusivamente para viabilizar a gestão comercial, financeira e de produção dos Vendedores, incluindo a sincronização de pedidos de marketplaces integrados. Não há comercialização ou uso para finalidades publicitárias.</p>
+        <p><strong>3.2 Armazenamento e Localização dos Dados</strong><br>
+        Os dados são armazenados em infraestrutura gerenciada (Supabase), hospedada em data centers nos Estados Unidos e/ou Brasil.</p>
+        <p><strong>3.3 Direitos do Titular de Dados</strong><br>
+        Em conformidade com a LGPD, garantimos aos titulares: acesso, correção, exclusão e portabilidade de dados pessoais. O Lume auxilia Vendedores e plataformas integradas (incluindo TikTok Shop) no atendimento a essas solicitações dentro de prazo razoável.</p>
+        <p><strong>3.4 Retenção e Exclusão de Dados</strong><br>
+        Os dados são retidos durante a vigência contratual. Ao término da relação, mediante solicitação formal, todos os dados do Vendedor serão excluídos, salvo obrigação legal de retenção.</p>
+
+        <h3 style="color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:24px">4. Gestão e Resposta a Incidentes de Segurança</h3>
+        <p><strong>4.1 Processo de Resposta a Incidentes</strong><br>
+        1. Identificação — monitoramento contínuo de logs.<br>
+        2. Contenção — isolamento imediato do vetor de comprometimento.<br>
+        3. Avaliação de impacto — determinação do escopo afetado.<br>
+        4. Comunicação — notificação a Vendedores afetados e, quando exigido, à ANPD e plataformas integradas, dentro dos prazos legais.<br>
+        5. Remediação — correções técnicas para prevenir recorrência.</p>
+        <p><strong>4.2 Histórico de Incidentes</strong><br>
+        Até a data de publicação desta Política, o Lume não registrou violações de segurança que tenham resultado em exposição de dados pessoais, nem recebeu reclamações de autoridades reguladoras relacionadas ao tratamento de dados.</p>
+
+        <h3 style="color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:8px;margin-top:24px">5. Contato, Governança e Atualizações</h3>
+        <p><strong>5.1 Responsável pela Proteção de Dados (DPO)</strong><br>
+        Para questões relacionadas a esta Política, exercício de direitos de titulares de dados, ou comunicação de incidentes, contate: <strong id="dpo-email">[email do DPO]</strong></p>
+        <p><strong>5.2 Revisão e Atualização</strong><br>
+        Esta Política é revisada no mínimo anualmente, ou sempre que houver alteração relevante na arquitetura técnica ou na legislação aplicável.</p>
+        <p><strong>5.3 Legislação Aplicável</strong><br>
+        Esta Política é regida pela Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 — LGPD) e demais normas aplicáveis no território brasileiro.</p>
+
+        <p style="margin-top:32px;color:var(--text3);font-size:12px">Última atualização: Junho de 2026 — Versão 1.0</p>
+      </div>
     </div>
 
     <!-- PLANO -->
