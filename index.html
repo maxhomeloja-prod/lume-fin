@@ -1576,12 +1576,13 @@ async function carregarBase(){
   CATEGORIAS.forEach(c=>{if(c.nome.includes('Transferência')||c.nome.includes('Outras'))CATS_ESPECIAIS.add(c.id);});
   preencherSelects();
 
-  if(EMPRESA_ID){
-    try{const _empIds=EMPRESAS.map(e=>e.id).join(',');CONTAS=await sbGet('contas_bancarias',`?empresa_id=in.(${_empIds})&ativa=eq.true&order=banco`);}catch(e){CONTAS=[];}
+  if(EMPRESAS.length){
+    const _empIds=EMPRESAS.map(e=>e.id).join(',');
+    try{CONTAS=await sbGet('contas_bancarias',`?empresa_id=in.(${_empIds})&ativa=eq.true&order=banco`);}catch(e){CONTAS=[];}
     const sel2=document.getElementById('fcat-conta');
     if(sel2)sel2.innerHTML='<option value="">Todas</option>'+CONTAS.map(c=>`<option value="${c.id}">${c.banco} · ${c.nome_conta}</option>`).join('');
-    try{_terceiros=await sbGet('terceiros',`?empresa_id=eq.${EMPRESA_ID}&ativo=eq.true&order=nome`);}catch(e){_terceiros=[];}
-    try{const pf=await sbGet('precos_faccao',`?empresa_id=eq.${EMPRESA_ID}&ativo=eq.true&limit=1000`);_precosOp={};pf.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});}catch(e){_precosOp={};}
+    try{_terceiros=await sbGet('terceiros',`?empresa_id=in.(${_empIds})&ativo=eq.true&order=nome`);}catch(e){_terceiros=[];}
+    try{const pf=await sbGet('precos_faccao',`?empresa_id=in.(${_empIds})&ativo=eq.true&limit=1000`);_precosOp={};pf.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});}catch(e){_precosOp={};}
     await verificarPerfil();
     await verificarBOMPendencias();
   }
@@ -2034,7 +2035,8 @@ async function uploadPrecos(input){
 // ── OPs ────────────────────────────────────────────────────────
 let _ops=[];
 async function loadOPs(){
-  if(!EMPRESA_ID){semEmpresaMsg('ops-content');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('ops-content');return;}
+  const _empIdsOP=EMPRESAS.map(e=>e.id).join(',');
   const sit=document.getElementById('fop-sit')?.value;
   const terc=document.getElementById('fop-terc')?.value;
   const sku=document.getElementById('fop-sku')?.value.trim().toUpperCase();
@@ -2048,7 +2050,7 @@ async function loadOPs(){
   const dl=document.getElementById('op-sku-list');
   if(dl){const skus=Object.keys(_precosOp);dl.innerHTML=skus.map(s=>`<option value="${s}">`).join('');}
 
-  let q=`?empresa_id=eq.${EMPRESA_ID}&order=criado_em.desc&limit=200`;
+  let q=`?empresa_id=in.(${_empIdsOP})&order=criado_em.desc&limit=200`;
   if(sit)q+=`&situacao=eq.${sit}`;
   if(terc)q+=`&terceiro_id=eq.${terc}`;
   if(sku)q+=`&sku=ilike.*${sku}*`;
@@ -3214,14 +3216,15 @@ async function loadPerfil(){
 
 
 async function loadVendas(){
-  if(!EMPRESA_ID){semEmpresaMsg('ven-table');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
+  const _empIdsVen=EMPRESAS.map(e=>e.id).join(',');
   const de=document.getElementById('fven-de')?.value;
   const ate=document.getElementById('fven-ate')?.value;
   const canal=document.getElementById('fven-canal')?.value;
   const sku=document.getElementById('fven-sku')?.value;
   document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    let qBase='?empresa_id=eq.'+EMPRESA_ID+'&order=data_pedido.desc&limit=2000';
+    let qBase='?empresa_id=in.('+_empIdsVen+')&order=data_pedido.desc&limit=2000';
     if(de)qBase+='&data_pedido=gte.'+de;
     if(ate)qBase+='&data_pedido=lte.'+ate;
     const todasVendas=await sbGet('vendas',qBase);
