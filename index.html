@@ -1143,7 +1143,6 @@ tr:hover td{background:var(--surface2);}
 <div class="modal-overlay" id="modal-terceiro">
   <div class="modal"><div class="modal-title">Terceiro / Facção</div><div class="modal-sub">Cadastre um parceiro de produção</div>
     <input type="hidden" id="terc-id">
-    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="terc-empresa"></select></div>
     <div class="form-group"><label class="form-label">Nome</label><input class="form-control" type="text" id="terc-nome"></div>
     <div class="form-group"><label class="form-label">E-mail</label><input class="form-control" type="email" id="terc-email" placeholder="Para acesso ao sistema"></div>
     <div class="form-group"><label class="form-label">Senha de Acesso</label><input class="form-control" type="text" id="terc-senha" placeholder="Senha para o terceiro entrar e ver suas OPs"></div>
@@ -1154,7 +1153,7 @@ tr:hover td{background:var(--surface2);}
 <div class="modal-overlay" id="modal-preco">
   <div class="modal"><div class="modal-title">Preço de Facção</div><div class="modal-sub">Valor por SKU</div>
     <input type="hidden" id="preco-id">
-    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="preco-empresa"></select></div>
+    <div class="form-group"><label class="form-label">Terceiro</label><select class="form-control" id="preco-terceiro"></select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">SKU</label><input class="form-control" type="text" id="preco-sku"></div>
       <div class="form-group"><label class="form-label">Preço (R$)</label><input class="form-control" type="number" id="preco-val" step="0.01"></div>
@@ -1207,16 +1206,24 @@ tr:hover td{background:var(--surface2);}
       <div class="form-group"><label class="form-label">Data</label><input class="form-control" type="date" id="venda-data"></div>
       <div class="form-group"><label class="form-label">Canal</label><input class="form-control" type="text" id="venda-canal" placeholder="Shopee, Loja, etc."></div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">SKU</label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
-      <div class="form-group"><label class="form-label">Cliente (opcional)</label><input class="form-control" type="text" id="venda-cliente" list="venda-cli-list"><datalist id="venda-cli-list"></datalist></div>
+    <div class="form-group"><label class="form-label">Cliente (opcional)</label><input class="form-control" type="text" id="venda-cliente" list="venda-cli-list"><datalist id="venda-cli-list"></datalist></div>
+
+    <div style="border-top:1px solid var(--border);margin:14px 0 10px;padding-top:10px">
+      <div class="card-title" style="margin:0 0 8px">Itens da venda</div>
+      <div id="venda-itens-lista" style="margin-bottom:10px"></div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2"><label class="form-label">SKU</label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
+        <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="venda-qtd" value="1" oninput="calcVenda()"></div>
+        <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="calcVenda()"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <button class="btn btn-secondary btn-sm" onclick="adicionarItemVenda()">+ Adicionar item</button>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;color:var(--text2)" id="venda-total-item"></div>
+      </div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="venda-qtd" value="1" oninput="calcVenda()"></div>
-      <div class="form-group"><label class="form-label">Preço Unitário (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="calcVenda()"></div>
-    </div>
-    <div style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:20px;color:var(--green);font-weight:600" id="venda-total"></div>
-    <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-venda')">Cancelar</button><button class="btn btn-primary" onclick="salvarVendaManual()">Salvar</button></div>
+
+    <div style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:var(--green);font-weight:600;margin-top:10px" id="venda-total">Total: R$ 0,00</div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-venda')">Cancelar</button><button class="btn btn-primary" onclick="finalizarVendaManual()">Finalizar Venda</button></div>
   </div>
 </div>
 
@@ -1945,22 +1952,16 @@ async function desativarConta(id){
 
 // ── TERCEIROS ──────────────────────────────────────────────────
 async function loadTerceiros(){
-  if(!EMPRESAS.length){semEmpresaMsg('terceiros-lista');return;}
-  const _empIdsTerc=EMPRESAS.map(e=>e.id).join(',');
-  const empNomeMap={};EMPRESAS.forEach(e=>{empNomeMap[e.id]=e.nome;});
   try{
-    _terceiros=await sbGet('terceiros',`?empresa_id=in.(${_empIdsTerc})&order=nome`);
+    _terceiros=await sbGet('terceiros',`?order=nome`);
     const el=document.getElementById('terceiros-lista');
     if(!_terceiros.length){el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Nenhum terceiro cadastrado</div></div>';return;}
-    el.innerHTML='<div class="card"><table><thead><tr><th>Nome</th><th>Empresa</th><th>E-mail</th><th>Status</th><th></th></tr></thead><tbody>'+_terceiros.map(t=>`<tr><td style="font-weight:500">${t.nome}</td><td style="color:var(--text3);font-size:12px">${empNomeMap[t.empresa_id]||'—'}</td><td style="color:var(--text2)">${t.email||'—'}</td><td><span class="badge ${t.ativo?'badge-green':'badge-gray'}">${t.ativo?'ATIVO':'INATIVO'}</span></td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalTerceiro('${t.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirTerceiro('${t.id}')">✕</button></td></tr>`).join('')+'</tbody></table></div>';
+    el.innerHTML='<div class="card"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Status</th><th></th></tr></thead><tbody>'+_terceiros.map(t=>`<tr><td style="font-weight:500">${t.nome}</td><td style="color:var(--text2)">${t.email||'—'}</td><td><span class="badge ${t.ativo?'badge-green':'badge-gray'}">${t.ativo?'ATIVO':'INATIVO'}</span></td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalTerceiro('${t.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirTerceiro('${t.id}')">✕</button></td></tr>`).join('')+'</tbody></table></div>';
   }catch(e){}
 }
 function abrirModalTerceiro(id){
   document.getElementById('terc-id').value=id||'';
   const t=id?_terceiros.find(x=>x.id===id):null;
-  const selEmp=document.getElementById('terc-empresa');
-  selEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  if(t)selEmp.value=t.empresa_id;
   document.getElementById('terc-nome').value=t?.nome||'';
   document.getElementById('terc-email').value=t?.email||'';
   document.getElementById('terc-senha').value='';
@@ -1968,13 +1969,11 @@ function abrirModalTerceiro(id){
 }
 async function salvarTerceiro(){
   const id=document.getElementById('terc-id').value;
-  const empresaIdSel=document.getElementById('terc-empresa').value;
   const nome=document.getElementById('terc-nome').value.trim();
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
-  if(!empresaIdSel)return alert('Selecione a empresa');
   if(!nome)return alert('Informe o nome');
-  const body={empresa_id:empresaIdSel,nome,email:email||null,ativo:true};
+  const body={nome,email:email||null,ativo:true};
   if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
   try{
     if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
@@ -1991,23 +1990,21 @@ async function excluirTerceiro(id){
 
 // ── PREÇOS FACÇÃO ──────────────────────────────────────────────
 async function loadPrecosFaccao(){
-  if(!EMPRESAS.length){semEmpresaMsg('precos-lista');return;}
-  const _empIdsPreco=EMPRESAS.map(e=>e.id).join(',');
-  const empNomeMapPreco={};EMPRESAS.forEach(e=>{empNomeMapPreco[e.id]=e.nome;});
+  const tercNomeMap={};_terceiros.forEach(t=>{tercNomeMap[t.id]=t.nome;});
   try{
-    _precosFaccaoFull=await sbGet('precos_faccao',`?empresa_id=in.(${_empIdsPreco})&order=sku`);
+    _precosFaccaoFull=await sbGet('precos_faccao',`?order=sku`);
     _precosOp={};_precosFaccaoFull.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});
     const el=document.getElementById('precos-lista');
     if(!_precosFaccaoFull.length){el.innerHTML='<div class="empty"><div class="empty-icon">💲</div><div class="empty-title">Nenhum preço cadastrado</div></div>';return;}
-    el.innerHTML='<table><thead><tr><th>SKU</th><th>Empresa</th><th>Descrição</th><th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'+_precosFaccaoFull.map(p=>`<tr><td style="font-weight:500">${p.sku}</td><td style="color:var(--text3);font-size:12px">${empNomeMapPreco[p.empresa_id]||'—'}</td><td style="color:var(--text2)">${p.descricao||'—'}</td><td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
+    el.innerHTML='<table><thead><tr><th>SKU</th><th>Terceiro</th><th>Descrição</th><th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'+_precosFaccaoFull.map(p=>`<tr><td style="font-weight:500">${p.sku}</td><td style="color:var(--text3);font-size:12px">${tercNomeMap[p.terceiro_id]||'—'}</td><td style="color:var(--text2)">${p.descricao||'—'}</td><td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
   }catch(e){}
 }
 function abrirModalPreco(id){
   document.getElementById('preco-id').value=id||'';
   const p=id?_precosFaccaoFull.find(x=>x.id===id):null;
-  const selEmp=document.getElementById('preco-empresa');
-  selEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  if(p)selEmp.value=p.empresa_id;
+  const selTerc=document.getElementById('preco-terceiro');
+  selTerc.innerHTML='<option value="">Sem terceiro específico</option>'+_terceiros.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
+  if(p)selTerc.value=p.terceiro_id||'';
   document.getElementById('preco-sku').value=p?.sku||'';
   document.getElementById('preco-val').value=p?.preco||'';
   document.getElementById('preco-desc').value=p?.descricao||'';
@@ -2015,15 +2012,14 @@ function abrirModalPreco(id){
 }
 async function salvarPreco(){
   const id=document.getElementById('preco-id').value;
-  const empresaIdSel=document.getElementById('preco-empresa').value;
+  const terceiroIdSel=document.getElementById('preco-terceiro').value||null;
   const sku=document.getElementById('preco-sku').value.trim().toUpperCase();
   const preco=parseFloat(document.getElementById('preco-val').value);
   const desc=document.getElementById('preco-desc').value.trim();
-  if(!empresaIdSel)return alert('Selecione a empresa');
   if(!sku||!preco)return alert('Informe SKU e preço');
   try{
-    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{empresa_id:empresaIdSel,sku,preco,descricao:desc||null});
-    else await sbPost('precos_faccao',{empresa_id:empresaIdSel,sku,preco,descricao:desc||null,ativo:true});
+    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null});
+    else await sbPost('precos_faccao',{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null,ativo:true});
     fecharModal('modal-preco');
     loadPrecosFaccao();
   }catch(e){alert('Erro: '+e.message);}
@@ -2184,7 +2180,7 @@ async function salvarOP(){
   const qtd=parseInt(document.getElementById('op-qtd').value);
   if(!sku||!qtd)return alert('Informe SKU e quantidade');
   const body={
-    empresa_id:EMPRESA_ID,sku,
+    sku,
     descricao:document.getElementById('op-desc').value.trim()||sku,
     quantidade:qtd,
     preco_unitario:parseFloat(document.getElementById('op-preco').value)||0,
@@ -2197,7 +2193,7 @@ async function salvarOP(){
   try{
     if(id){await sbPatch('ordens_producao',`id=eq.${id}`,body);}
     else{
-      const numero=await sbRpc('proximo_numero_op',{p_empresa_id:EMPRESA_ID});
+      const numero=await sbRpc('proximo_numero_op_global',{});
       body.numero=numero;
       body.quantidade_entregue=0;
       await sbPost('ordens_producao',body);
@@ -2254,6 +2250,7 @@ async function confirmarEntrega(){
   if(!qtd||qtd<=0)return alert('Informe a quantidade');
   const valor=qtd*(op.preco_unitario||0);
   const obs=document.getElementById('entrega-obs').value.trim();
+  const EMP_MAXHOME='06af0934-2b30-4981-ab0a-ce75725858df'; // padrão para lançamentos financeiros de pagamento a terceiros
   try{
     // Buscar categoria Facção
     const catFaccao=CATEGORIAS.find(c=>c.nome.toLowerCase().includes('facção')||c.nome.toLowerCase().includes('faccao'));
@@ -2263,7 +2260,7 @@ async function confirmarEntrega(){
     if(valor>0&&op.preco_unitario){
       const terc=_terceiros.find(t=>t.id===op.terceiro_id);
       const lan=await sbPost('lancamentos_externos',{
-        empresa_id:op.empresa_id,
+        empresa_id:EMP_MAXHOME,
         data:new Date().toISOString().split('T')[0],
         data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
         descricao:`Entrega OP ${op.numero} — ${op.sku} (${qtd} peças)`,
@@ -2275,9 +2272,9 @@ async function confirmarEntrega(){
       lanId=lan[0]?.id;
     }
 
-    // Registrar entrega
+    // Registrar entrega (sem vínculo de empresa — segue o padrão da OP)
     await sbPost('entregas_op',{
-      empresa_id:op.empresa_id,op_id:op.id,
+      op_id:op.id,
       terceiro_id:op.terceiro_id||null,
       quantidade:qtd,valor_total:valor,
       observacao:obs||null,lancamento_id:lanId
@@ -2354,7 +2351,7 @@ async function loadPagamentosOP(){
       const fpDe=document.getElementById('fpag-de')?.value;
       const fpAte=document.getElementById('fpag-ate')?.value;
       const fpStatus=document.getElementById('fpag-status')?.value;
-      let qFac='?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
+      let qFac='?empresa_id=eq.06af0934-2b30-4981-ab0a-ce75725858df&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
       if(fpDe)qFac+='&data_vencimento=gte.'+fpDe;
       if(fpAte)qFac+='&data_vencimento=lte.'+fpAte;
       if(fpStatus)qFac+='&situacao=eq.'+fpStatus;
@@ -2511,7 +2508,9 @@ async function abrirModalVendaManual(){
   document.getElementById('venda-data').value=new Date().toISOString().split('T')[0];
   ['venda-sku','venda-canal','venda-cliente'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('venda-qtd').value='1';document.getElementById('venda-preco').value='';
-  document.getElementById('venda-total').textContent='';document.getElementById('venda-sku-hint').textContent='';
+  document.getElementById('venda-total-item').textContent='';document.getElementById('venda-sku-hint').textContent='';
+  _vendaCarrinho=[];
+  renderVendaCarrinho();
   abrirModal('modal-venda');
 }
 function onVendaSkuInput(){
@@ -2522,22 +2521,114 @@ function onVendaSkuInput(){
   else if(sku){hint.textContent='+ Novo produto será criado';hint.style.color='var(--amber)';}
   else hint.textContent='';
 }
+let _vendaCarrinho=[];
+
 function calcVenda(){
   const qtd=parseFloat(document.getElementById('venda-qtd').value)||0;
   const preco=parseFloat(document.getElementById('venda-preco').value)||0;
   const total=qtd*preco;
-  document.getElementById('venda-total').textContent=total>0?`Total: ${fBRL(total)}`:'';
+  document.getElementById('venda-total-item').textContent=total>0?`Item: ${fBRL(total)}`:'';
 }
-async function salvarVendaManual(){
+
+function adicionarItemVenda(){
   const sku=document.getElementById('venda-sku').value.trim().toUpperCase();
   const qtd=parseInt(document.getElementById('venda-qtd').value);
   const preco=parseFloat(document.getElementById('venda-preco').value);
-  if(!sku||!qtd||!preco)return alert('Preencha SKU, quantidade e preço');
+  if(!sku||!qtd||!preco){alert('Preencha SKU, quantidade e preço do item');return;}
+  _vendaCarrinho.push({sku,quantidade:qtd,valor_unitario:preco});
+  document.getElementById('venda-sku').value='';
+  document.getElementById('venda-qtd').value='1';
+  document.getElementById('venda-preco').value='';
+  document.getElementById('venda-sku-hint').textContent='';
+  document.getElementById('venda-total-item').textContent='';
+  renderVendaCarrinho();
+}
+
+function removerItemVenda(idx){
+  _vendaCarrinho.splice(idx,1);
+  renderVendaCarrinho();
+}
+
+function renderVendaCarrinho(){
+  const el=document.getElementById('venda-itens-lista');
+  if(!_vendaCarrinho.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:6px 0">Nenhum item adicionado ainda</div>';}
+  else{
+    el.innerHTML=_vendaCarrinho.map((i,idx)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface2);border-radius:var(--radius);margin-bottom:6px;font-size:13px">
+      <span><strong>${i.sku}</strong> — ${i.quantidade} un × ${fBRL(i.valor_unitario)}</span>
+      <span style="display:flex;align-items:center;gap:10px"><span style="color:var(--green);font-weight:600">${fBRL(i.quantidade*i.valor_unitario)}</span><button class="btn btn-danger btn-sm" onclick="removerItemVenda(${idx})">✕</button></span>
+    </div>`).join('');
+  }
+  const total=_vendaCarrinho.reduce((s,i)=>s+i.quantidade*i.valor_unitario,0);
+  document.getElementById('venda-total').textContent='Total: '+fBRL(total);
+}
+// Marketplaces conhecidos — qualquer canal fora dessa lista é considerado venda direta
+const MARKETPLACES_CONHECIDOS=['shopee','tiktok','tiktok shop','mercado livre','mercadolivre','shein','kwai','magalu','magazine luiza'];
+function ehVendaDireta(canal){
+  if(!canal)return true; // canal vazio também é considerado venda direta
+  const c=canal.trim().toLowerCase();
+  return !MARKETPLACES_CONHECIDOS.some(m=>c.includes(m));
+}
+
+// Gera comprovante simples em PDF (via impressão do navegador) para vendas diretas
+function gerarPDFVenda(itens, cliente, dataVenda){
+  const empNome=(EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome)||'Empresa';
+  const dataFmt=(dataVenda||new Date().toISOString().split('T')[0]).split('-').reverse().join('/');
+  const total=itens.reduce((s,i)=>s+(i.quantidade*i.valor_unitario),0);
+  const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0);
+
+  const linhas=itens.map(i=>`
+    <tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.sku}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.quantidade}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(i.valor_unitario)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(i.quantidade*i.valor_unitario)}</td>
+    </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Comprovante de Venda</title>
+  <style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}
+  h2{color:#1e9be8;margin-bottom:4px}
+  .info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse}
+  th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}
+  .total{background:#0d1b2a;color:white;font-weight:bold}
+  .total td{padding:8px}
+  @media print{button{display:none}}</style></head>
+  <body>
+  <h2>${empNome}</h2>
+  <p style="color:#888;margin-top:0">Comprovante de Venda</p>
+  <div class="info">
+    <b>Data:</b> ${dataFmt}<br>
+    ${cliente?'<b>Cliente:</b> '+cliente+'<br>':''}
+  </div>
+  <table>
+    <thead><tr><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr class="total"><td>TOTAL</td><td style="text-align:right">${totalQtd}</td><td></td><td style="text-align:right">${fBRL(total)}</td></tr></tfoot>
+  </table>
+  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+}
+
+async function finalizarVendaManual(){
+  if(!_vendaCarrinho.length)return alert('Adicione pelo menos um item à venda');
+  const canal=document.getElementById('venda-canal').value.trim();
+  const dataVenda=document.getElementById('venda-data').value;
+  const clienteNome=document.getElementById('venda-cliente').value.trim();
+  const pedidoIdComum='MANUAL-'+Date.now();
   try{
-    const prod=await garantirProduto(sku,'');
-    const cliId=await garantirCliente(document.getElementById('venda-cliente').value.trim());
-    await sbPost('vendas',{empresa_id:EMPRESA_ID,data_pedido:document.getElementById('venda-data').value,marketplace:document.getElementById('venda-canal').value.trim()||null,produto_id:prod.id,sku,cliente_id:cliId,cliente_nome:document.getElementById('venda-cliente').value.trim()||null,quantidade:qtd,valor_unitario:preco});
+    const cliId=await garantirCliente(clienteNome);
+    for(const item of _vendaCarrinho){
+      const prod=await garantirProduto(item.sku,'');
+      await sbPost('vendas',{empresa_id:EMPRESA_ID,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||null,produto_id:prod.id,sku:item.sku,cliente_id:cliId,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario});
+    }
+    const itensSalvos=[..._vendaCarrinho];
+    _vendaCarrinho=[];
     fecharModal('modal-venda');loadVendas();
+    if(ehVendaDireta(canal))gerarPDFVenda(itensSalvos,clienteNome,dataVenda);
   }catch(e){alert('Erro: '+e.message);}
 }
 function downloadPlanilhaVendas(){
@@ -3332,7 +3423,7 @@ async function loginFaccao(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
     // Verificar se é terceiro
-    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome,empresa_id',{
+    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome',{
       headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
     });
     const tercs=await rTerc.json();
@@ -4029,13 +4120,11 @@ async function carregarOPsFaccao(){
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     const ops=await sbGet('ordens_producao',
-      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
-      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '?terceiro_id=eq.'+FACCAO_LOGADO.id+
       '&situacao=in.(ABERTA,EM_PRODUCAO,PARCIAL)'+
       '&order=criado_em.desc&limit=100');
     const precos=await sbGet('precos_faccao',
-      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
-      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '?terceiro_id=eq.'+FACCAO_LOGADO.id+
       '&ativo=eq.true&limit=500').catch(()=>[]);
     const precosMap={};
     precos.forEach(p=>precosMap[p.sku.toUpperCase()]=p.preco);
@@ -4074,8 +4163,7 @@ async function faccaoBuscar(){
   if(!q){el.innerHTML='';return;}
   try{
     const ops=await sbGet('ordens_producao',
-      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
-      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '?terceiro_id=eq.'+FACCAO_LOGADO.id+
       '&situacao=in.(ABERTA,EM_PRODUCAO,PARCIAL)'+
       '&or=(sku.ilike.*'+q+'*,numero.ilike.*'+q+'*)'+
       '&limit=10');
@@ -4100,7 +4188,7 @@ async function faccaoSelecionarOP(idOrEl){const id=typeof idOrEl==='string'?idOr
   const ops=await sbGet('ordens_producao','?id=eq.'+id).catch(()=>[]);
   const op=ops[0];if(!op)return;
   // Buscar preço
-  const precos=await sbGet('precos_faccao','?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+'&terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+op.sku+'&limit=1').catch(()=>[]);
+  const precos=await sbGet('precos_faccao','?terceiro_id=eq.'+FACCAO_LOGADO.id+'&sku=eq.'+op.sku+'&limit=1').catch(()=>[]);
   op._preco=precos[0]?.preco||op.preco_unitario||0;
   _faccaoOPSelecionada=op;
   const aberto=op.quantidade-op.quantidade_entregue;
@@ -4173,8 +4261,7 @@ async function faccaoBuscarPrecoSKU(sku){
   try{
     // Tentar exact match primeiro, depois ilike
     let rows=await sbGet('precos_faccao',
-      '?empresa_id=eq.'+FACCAO_LOGADO.empresa_id+
-      '&terceiro_id=eq.'+FACCAO_LOGADO.id+
+      '?terceiro_id=eq.'+FACCAO_LOGADO.id+
       '&sku=ilike.'+encodeURIComponent(sku.trim())+'&limit=1');
     if(rows[0]?.preco&&el){
       el.value=rows[0].preco;
@@ -4230,8 +4317,8 @@ async function confirmarEntregaFaccao(){
   const obs=document.getElementById('fac-conf-obs').value.trim();
   const dataEntrega=document.getElementById('fac-conf-data')?.value||new Date().toISOString().split('T')[0];
   const venc=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0];
+  const EMP_MAXHOME='06af0934-2b30-4981-ab0a-ce75725858df'; // padrão para lançamentos financeiros de pagamento a terceiros
   try{
-    const empresaId=FACCAO_LOGADO.empresa_id;
     const totalValor=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
     const totalQtd=_faccaoCarrinho.reduce((s,i)=>s+i.qtd,0);
     // Descrição resumida da nota
@@ -4240,7 +4327,7 @@ async function confirmarEntregaFaccao(){
 
     // 1 lançamento único por entrega
     await sbPost('lancamentos_externos',{
-      empresa_id:empresaId,
+      empresa_id:EMP_MAXHOME,
       data:dataEntrega,
       data_vencimento:venc,
       descricao:descLan,
@@ -4255,7 +4342,6 @@ async function confirmarEntregaFaccao(){
     // Registrar cada entrega individualmente
     for(const item of _faccaoCarrinho){
       const entrega={
-        empresa_id:empresaId,
         op_id:item.avulso?null:item.op.id,
         terceiro_id:FACCAO_LOGADO.id,
         sku:item.avulso?item.sku:item.op.sku,
@@ -4513,7 +4599,6 @@ function imprimirOP(){
   if(!op)return;
   var tercMap={};_terceiros.forEach(function(t){tercMap[t.id]=t.nome;});
   var faccao=tercMap[op.terceiro_id]||'—';
-  var empresa=(EMPRESAS.find(function(e){return e.id===EMPRESA_ID;})||{}).nome||'';
   var preco=op.preco_unitario?'R$ '+op.preco_unitario.toFixed(2).replace('.',','):'—';
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'
     +'<title>OP '+op.numero+'</title>'
@@ -4528,7 +4613,6 @@ function imprimirOP(){
     +'@media print{body{padding:16px}}'
     +'</style></head><body>'
     +'<h1>Ordem de Producao #'+op.numero+'</h1>'
-    +'<div class="sub">'+empresa+'</div>'
     +'<div class="grid">'
     +'<div class="card"><div class="label">SKU</div><div class="val">'+(op.sku||'—')+'</div></div>'
     +'<div class="card"><div class="label">Faccao</div><div class="val">'+faccao+'</div></div>'
