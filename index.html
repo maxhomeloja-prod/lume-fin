@@ -758,7 +758,8 @@ tr:hover td{background:var(--surface2);}
     <div id="page-correlacao" class="page">
       <div class="page-header">
         <div><div class="page-title">Correlação SKU</div><div class="page-sub">Mapeamento de SKUs de venda para SKUs canônicos</div></div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="form-control" id="corr-upload-empresa" style="width:160px;padding:6px 10px;font-size:12px"></select>
           <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaCorrelacao()">⬇ Modelo</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-correlacao').click()">📂 Upload</button>
           <input type="file" id="upload-correlacao" accept=".csv" style="display:none" onchange="uploadCorrelacao(this)">
@@ -827,6 +828,7 @@ tr:hover td{background:var(--surface2);}
         <div>
           <div class="card" style="margin-bottom:16px">
             <div class="card-title">Produto</div>
+            <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="calc-empresa"></select></div>
             <div class="form-group"><label class="form-label">Nome do Produto</label><input class="form-control" id="calc-nome" placeholder="Ex: Lençol Casal 3 Peças"></div>
             <div class="card-title" style="margin-top:16px">Materiais</div>
             <div id="calc-materiais-lista"></div>
@@ -1139,6 +1141,7 @@ tr:hover td{background:var(--surface2);}
 <div class="modal-overlay" id="modal-terceiro">
   <div class="modal"><div class="modal-title">Terceiro / Facção</div><div class="modal-sub">Cadastre um parceiro de produção</div>
     <input type="hidden" id="terc-id">
+    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="terc-empresa"></select></div>
     <div class="form-group"><label class="form-label">Nome</label><input class="form-control" type="text" id="terc-nome"></div>
     <div class="form-group"><label class="form-label">E-mail</label><input class="form-control" type="email" id="terc-email" placeholder="Para acesso ao sistema"></div>
     <div class="form-group"><label class="form-label">Senha de Acesso</label><input class="form-control" type="text" id="terc-senha" placeholder="Senha para o terceiro entrar e ver suas OPs"></div>
@@ -1149,6 +1152,7 @@ tr:hover td{background:var(--surface2);}
 <div class="modal-overlay" id="modal-preco">
   <div class="modal"><div class="modal-title">Preço de Facção</div><div class="modal-sub">Valor por SKU</div>
     <input type="hidden" id="preco-id">
+    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="preco-empresa"></select></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">SKU</label><input class="form-control" type="text" id="preco-sku"></div>
       <div class="form-group"><label class="form-label">Preço (R$)</label><input class="form-control" type="number" id="preco-val" step="0.01"></div>
@@ -1423,7 +1427,7 @@ const CATS_ESPECIAIS = new Set(['405619d5-a208-478b-b09a-ab28e73307e0','6d58abb5
 
 // ── Estado ─────────────────────────────────────────────────
 let SESSION=null, EMPRESA_ID=null, EMPRESAS=[], CATEGORIAS=[], CONTAS=[];
-let _catsProduto=[], _produtos=[], _clientes=[], _terceiros=[], _precosOp={};
+let _catsProduto=[], _produtos=[], _clientes=[], _terceiros=[], _precosOp={}, _precosFaccaoFull=[];
 let _transacoesPendentes=[], _balTransacoes=[], _lancamentos=[];
 let _caixaEntradas=[], _caixaSaidas=[], _vendas=[], _abcData=[], _abcFiltro='all';
 let _opViewMode='cards', _bomLinhas=0, _opEntregaAtual=null, _lanEditId=null;
@@ -1641,7 +1645,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'correlacao':loadCorrelacao,'estoque':()=>{},'calc':()=>{if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
+    'correlacao':loadCorrelacao,'estoque':()=>{},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -1939,17 +1943,22 @@ async function desativarConta(id){
 
 // ── TERCEIROS ──────────────────────────────────────────────────
 async function loadTerceiros(){
-  if(!EMPRESA_ID){semEmpresaMsg('terceiros-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('terceiros-lista');return;}
+  const _empIdsTerc=EMPRESAS.map(e=>e.id).join(',');
+  const empNomeMap={};EMPRESAS.forEach(e=>{empNomeMap[e.id]=e.nome;});
   try{
-    _terceiros=await sbGet('terceiros',`?empresa_id=eq.${EMPRESA_ID}&order=nome`);
+    _terceiros=await sbGet('terceiros',`?empresa_id=in.(${_empIdsTerc})&order=nome`);
     const el=document.getElementById('terceiros-lista');
     if(!_terceiros.length){el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Nenhum terceiro cadastrado</div></div>';return;}
-    el.innerHTML='<div class="card"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Status</th><th></th></tr></thead><tbody>'+_terceiros.map(t=>`<tr><td style="font-weight:500">${t.nome}</td><td style="color:var(--text2)">${t.email||'—'}</td><td><span class="badge ${t.ativo?'badge-green':'badge-gray'}">${t.ativo?'ATIVO':'INATIVO'}</span></td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalTerceiro('${t.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirTerceiro('${t.id}')">✕</button></td></tr>`).join('')+'</tbody></table></div>';
+    el.innerHTML='<div class="card"><table><thead><tr><th>Nome</th><th>Empresa</th><th>E-mail</th><th>Status</th><th></th></tr></thead><tbody>'+_terceiros.map(t=>`<tr><td style="font-weight:500">${t.nome}</td><td style="color:var(--text3);font-size:12px">${empNomeMap[t.empresa_id]||'—'}</td><td style="color:var(--text2)">${t.email||'—'}</td><td><span class="badge ${t.ativo?'badge-green':'badge-gray'}">${t.ativo?'ATIVO':'INATIVO'}</span></td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalTerceiro('${t.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirTerceiro('${t.id}')">✕</button></td></tr>`).join('')+'</tbody></table></div>';
   }catch(e){}
 }
 function abrirModalTerceiro(id){
   document.getElementById('terc-id').value=id||'';
   const t=id?_terceiros.find(x=>x.id===id):null;
+  const selEmp=document.getElementById('terc-empresa');
+  selEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  if(t)selEmp.value=t.empresa_id;
   document.getElementById('terc-nome').value=t?.nome||'';
   document.getElementById('terc-email').value=t?.email||'';
   document.getElementById('terc-senha').value='';
@@ -1957,11 +1966,13 @@ function abrirModalTerceiro(id){
 }
 async function salvarTerceiro(){
   const id=document.getElementById('terc-id').value;
+  const empresaIdSel=document.getElementById('terc-empresa').value;
   const nome=document.getElementById('terc-nome').value.trim();
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
+  if(!empresaIdSel)return alert('Selecione a empresa');
   if(!nome)return alert('Informe o nome');
-  const body={empresa_id:entEmpId,nome,email:email||null,ativo:true};
+  const body={empresa_id:empresaIdSel,nome,email:email||null,ativo:true};
   if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
   try{
     if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
@@ -1978,30 +1989,39 @@ async function excluirTerceiro(id){
 
 // ── PREÇOS FACÇÃO ──────────────────────────────────────────────
 async function loadPrecosFaccao(){
-  if(!EMPRESA_ID){semEmpresaMsg('precos-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('precos-lista');return;}
+  const _empIdsPreco=EMPRESAS.map(e=>e.id).join(',');
+  const empNomeMapPreco={};EMPRESAS.forEach(e=>{empNomeMapPreco[e.id]=e.nome;});
   try{
-    const precos=await sbGet('precos_faccao',`?empresa_id=eq.${EMPRESA_ID}&order=sku`);
-    _precosOp={};precos.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});
+    _precosFaccaoFull=await sbGet('precos_faccao',`?empresa_id=in.(${_empIdsPreco})&order=sku`);
+    _precosOp={};_precosFaccaoFull.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});
     const el=document.getElementById('precos-lista');
-    if(!precos.length){el.innerHTML='<div class="empty"><div class="empty-icon">💲</div><div class="empty-title">Nenhum preço cadastrado</div></div>';return;}
-    el.innerHTML='<table><thead><tr><th>SKU</th><th>Descrição</th><th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'+precos.map(p=>`<tr><td style="font-weight:500">${p.sku}</td><td style="color:var(--text2)">${p.descricao||'—'}</td><td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
+    if(!_precosFaccaoFull.length){el.innerHTML='<div class="empty"><div class="empty-icon">💲</div><div class="empty-title">Nenhum preço cadastrado</div></div>';return;}
+    el.innerHTML='<table><thead><tr><th>SKU</th><th>Empresa</th><th>Descrição</th><th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'+_precosFaccaoFull.map(p=>`<tr><td style="font-weight:500">${p.sku}</td><td style="color:var(--text3);font-size:12px">${empNomeMapPreco[p.empresa_id]||'—'}</td><td style="color:var(--text2)">${p.descricao||'—'}</td><td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
   }catch(e){}
 }
 function abrirModalPreco(id){
   document.getElementById('preco-id').value=id||'';
-  if(id){const p=Object.entries(_precosOp).find(([k])=>k===id);document.getElementById('preco-sku').value='';document.getElementById('preco-val').value='';}
-  else{document.getElementById('preco-sku').value='';document.getElementById('preco-val').value='';document.getElementById('preco-desc').value='';}
+  const p=id?_precosFaccaoFull.find(x=>x.id===id):null;
+  const selEmp=document.getElementById('preco-empresa');
+  selEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  if(p)selEmp.value=p.empresa_id;
+  document.getElementById('preco-sku').value=p?.sku||'';
+  document.getElementById('preco-val').value=p?.preco||'';
+  document.getElementById('preco-desc').value=p?.descricao||'';
   abrirModal('modal-preco');
 }
 async function salvarPreco(){
   const id=document.getElementById('preco-id').value;
+  const empresaIdSel=document.getElementById('preco-empresa').value;
   const sku=document.getElementById('preco-sku').value.trim().toUpperCase();
   const preco=parseFloat(document.getElementById('preco-val').value);
   const desc=document.getElementById('preco-desc').value.trim();
+  if(!empresaIdSel)return alert('Selecione a empresa');
   if(!sku||!preco)return alert('Informe SKU e preço');
   try{
-    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{sku,preco,descricao:desc||null});
-    else await sbPost('precos_faccao',{empresa_id:EMPRESA_ID,sku,preco,descricao:desc||null,ativo:true});
+    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{empresa_id:empresaIdSel,sku,preco,descricao:desc||null});
+    else await sbPost('precos_faccao',{empresa_id:empresaIdSel,sku,preco,descricao:desc||null,ativo:true});
     fecharModal('modal-preco');
     loadPrecosFaccao();
   }catch(e){alert('Erro: '+e.message);}
@@ -2472,11 +2492,12 @@ async function garantirCliente(nome){
   return c?.id||null;
 }
 async function carregarProdutosClientes(){
-  if(!EMPRESA_ID)return;
+  if(!EMPRESAS.length)return;
+  const _empIdsPC=EMPRESAS.map(e=>e.id).join(',');
   [_produtos,_clientes,_catsProduto]=await Promise.all([
-    sbGet('produtos',`?empresa_id=eq.${EMPRESA_ID}&ativo=eq.true&order=sku`).catch(()=>[]),
-    sbGet('clientes',`?empresa_id=eq.${EMPRESA_ID}&order=nome`).catch(()=>[]),
-    sbGet('categorias_produto',`?empresa_id=eq.${EMPRESA_ID}&order=nome`).catch(()=>[])
+    sbGet('produtos',`?empresa_id=in.(${_empIdsPC})&ativo=eq.true&order=sku`).catch(()=>[]),
+    sbGet('clientes',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[]),
+    sbGet('categorias_produto',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[])
   ]);
   const dl=document.getElementById('venda-sku-list');if(dl)dl.innerHTML=_produtos.map(p=>`<option value="${p.sku}">`).join('');
   const dlC=document.getElementById('venda-cli-list');if(dlC)dlC.innerHTML=_clientes.map(c=>`<option value="${c.nome}">`).join('');
@@ -2577,14 +2598,15 @@ async function uploadVendas(input){
 
 // ── BOM ───────────────────────────────────────────────────────
 async function loadBOM(){
-  if(!EMPRESA_ID){semEmpresaMsg('bom-pendencias');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('bom-pendencias');return;}
+  const _empIdsBOM=EMPRESAS.map(e=>e.id).join(',');
   await carregarProdutosClientes();
   const[vTodas,bomEx]=await Promise.all([
-    sbGet('vendas',`?empresa_id=eq.${EMPRESA_ID}&select=sku&limit=5000`).catch(()=>[]),
-    sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&select=sku`).catch(()=>[])
+    sbGet('vendas',`?empresa_id=in.(${_empIdsBOM})&select=sku&limit=5000`).catch(()=>[]),
+    sbGet('estrutura_produto',`?empresa_id=in.(${_empIdsBOM})&select=sku`).catch(()=>[])
   ]);
   // BOM usa APENAS SKUs canônicos
-  const corrs=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&select=sku_canonico&limit=2000').catch(()=>[]);
+  const corrs=await sbGet('correlacao_sku','?empresa_id=in.('+_empIdsBOM+')&select=sku_canonico&limit=2000').catch(()=>[]);
   const skusCanonicos=[...new Set(corrs.map(c=>c.sku_canonico))].sort();
   if(!skusCanonicos.length){
     document.getElementById('bom-pendencias').innerHTML='<div class="card"><div class="empty"><div class="empty-icon">🔗</div><div class="empty-title">Cadastre correlações SKU primeiro</div><div class="empty-sub">A estrutura de materiais é baseada nos SKUs canônicos. Vá em <strong>Vendas → Correlação SKU</strong> para cadastrar.</div></div></div>';
@@ -2601,7 +2623,7 @@ async function loadBOM(){
   if(pend.length){elP.innerHTML=`<div class="card"><div class="card-title" style="color:var(--red)">⚠ ${pend.length} SKU${pend.length>1?'s':''} sem estrutura</div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px">${pend.map(sku=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:10px"><span style="font-size:12px;font-weight:500">${sku}</span><span class="badge badge-gray">${estimarCategoria(sku)}</span><button class="btn btn-primary btn-sm" onclick="abrirModalBOM('${sku}')">Cadastrar</button></div>`).join('')}</div></div>`;}
   else elP.innerHTML='<div class="card"><div class="empty" style="padding:20px">✓ Todos os SKUs com estrutura cadastrada</div></div>';
   if(cad.length){
-    const estruturas=await sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&order=sku`).catch(()=>[]);
+    const estruturas=await sbGet('estrutura_produto',`?empresa_id=in.(${_empIdsBOM})&order=sku`).catch(()=>[]);
     const porSku={};estruturas.forEach(e=>{if(!porSku[e.sku])porSku[e.sku]=[];porSku[e.sku].push(e);});
     document.getElementById('bom-cadastrados').innerHTML='<div class="card"><div class="card-title">Estruturas Cadastradas</div>'+cad.map(sku=>`<div data-sku="${sku}" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden"><div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2)"><div><span style="font-weight:600">${sku}</span><span class="badge badge-gray" style="margin-left:8px">${estimarCategoria(sku)}</span></div><button class="btn btn-secondary btn-sm" onclick="abrirModalBOM('${sku}',true)">✎ Editar</button></div>
 <div style="font-size:11px;color:var(--text3);margin-bottom:4px;padding:0 4px">Custo base: <strong style="color:var(--green)">${(()=>{const cb=(porSku[sku]||[]).reduce((s,m)=>s+(m.valor_unitario?m.quantidade*m.valor_unitario:0),0);return cb?fBRL(cb):'—';})()}</strong></div>
@@ -2609,9 +2631,10 @@ async function loadBOM(){
   }else document.getElementById('bom-cadastrados').innerHTML='';
 }
 async function verificarBOMPendencias(){
-  if(!EMPRESA_ID)return;
+  if(!EMPRESAS.length)return;
+  const _empIdsBP=EMPRESAS.map(e=>e.id).join(',');
   try{
-    const[vTodas,bomEx]=await Promise.all([sbGet('vendas',`?empresa_id=eq.${EMPRESA_ID}&select=sku&limit=5000`),sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&select=sku`)]);
+    const[vTodas,bomEx]=await Promise.all([sbGet('vendas',`?empresa_id=in.(${_empIdsBP})&select=sku&limit=5000`),sbGet('estrutura_produto',`?empresa_id=in.(${_empIdsBP})&select=sku`)]);
     const pend=[...new Set(vTodas.map(v=>v.sku))].filter(s=>!new Set(bomEx.map(b=>b.sku)).has(s)).length;
     const badge=document.getElementById('badge-bom');
     if(badge){badge.textContent=pend;badge.style.display=pend>0?'':'none';}
@@ -2621,7 +2644,8 @@ async function abrirModalBOM(sku,editar=false){
   document.getElementById('modal-bom-sku').textContent=sku;
   document.getElementById('bom-sku-val').value=sku;
   _bomLinhas=0;document.getElementById('bom-linhas').innerHTML='';popularDatalistMateriais();
-  if(editar){const e=await sbGet('estrutura_produto',`?empresa_id=eq.${EMPRESA_ID}&sku=eq.${encodeURIComponent(sku)}`).catch(()=>[]);e.forEach(x=>addLinhaBOM(x));}
+  // Estrutura de materiais é vinculada apenas ao SKU, independente da empresa
+  if(editar){const e=await sbGet('estrutura_produto',`?sku=eq.${encodeURIComponent(sku)}`).catch(()=>[]);e.forEach(x=>addLinhaBOM(x));}
   else addLinhaBOM();
   abrirModal('modal-bom');
 }
@@ -2640,8 +2664,9 @@ async function salvarBOM(){
   linhas.forEach(el=>{const n=el.id.split('-').pop();const mat=el.value.trim();const qtd=parseFloat(document.getElementById(`bom-q-${n}`)?.value);const un=document.getElementById(`bom-u-${n}`)?.value||'un';const preco=parseFloat(document.getElementById(`bom-p-${n}`)?.value)||null;if(mat&&qtd)itens.push({material_nome:mat,quantidade:qtd,unidade:un,valor_unitario:preco});});
   if(!itens.length)return alert('Adicione pelo menos um material');
   try{
-    await sbDelete('estrutura_produto',`empresa_id=eq.${EMPRESA_ID}&sku=eq.${encodeURIComponent(sku)}`);
-    for(const item of itens)await sbPost('estrutura_produto',{empresa_id:EMPRESA_ID,sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,valor_unitario:item.valor_unitario});
+    // Estrutura de materiais é vinculada apenas ao SKU, independente da empresa
+    await sbDelete('estrutura_produto',`sku=eq.${encodeURIComponent(sku)}`);
+    for(const item of itens)await sbPost('estrutura_produto',{sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,valor_unitario:item.valor_unitario});
     fecharModal('modal-bom');loadBOM();
   }catch(e){alert('Erro: '+e.message);}
 }
@@ -2650,13 +2675,14 @@ async function salvarBOM(){
 let _chartDaily=null,_chartCanal=null,_chartPizza=null;
 
 async function loadABC(){
-  if(!EMPRESA_ID){semEmpresaMsg('abc-tbody');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('abc-tbody');return;}
+  const _empIdsABC=EMPRESAS.map(e=>e.id).join(',');
   const de=document.getElementById('fabc-de')?.value;
   const ate=document.getElementById('fabc-ate')?.value;
   const canal=document.getElementById('fabc-canal')?.value;
   const skuFiltro=document.getElementById('fabc-sku')?.value.trim().toUpperCase();
   // Buscar todas para popular select de canal
-  let qBase='?empresa_id=eq.'+EMPRESA_ID+'&limit=10000';
+  let qBase='?empresa_id=in.('+_empIdsABC+')&limit=10000';
   if(de)qBase+='&data_pedido=gte.'+de;
   if(ate)qBase+='&data_pedido=lte.'+ate;
   try{
@@ -3402,7 +3428,8 @@ function renderBOMFiltrado(){
 let _estoqueMP = [], _estoqueSKU = [];
 
 async function calcularEstoqueModelo(){
-  if(!EMPRESA_ID){return;}
+  if(!EMPRESAS.length){return;}
+  const _empIdsEst=EMPRESAS.map(e=>e.id).join(',');
   const de=document.getElementById('fest-de')?.value;
   const ate=document.getElementById('fest-ate')?.value;
   const dias=parseInt(document.getElementById('fest-dias')?.value)||30;
@@ -3411,7 +3438,7 @@ async function calcularEstoqueModelo(){
   el.innerHTML='<div class="loading"><div class="spinner"></div> Calculando...</div>';
   try{
     // Buscar vendas do período base
-    const vendas=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&data_pedido=gte.'+de+'&data_pedido=lte.'+ate+'&limit=10000');
+    const vendas=await sbGet('vendas','?empresa_id=in.('+_empIdsEst+')&data_pedido=gte.'+de+'&data_pedido=lte.'+ate+'&limit=10000');
     if(!vendas.length){el.innerHTML='<div class="empty">Nenhuma venda no período base</div>';return;}
     // Calcular dias no período
     const d1=new Date(de+'T12:00:00'), d2=new Date(ate+'T12:00:00');
@@ -3434,7 +3461,7 @@ async function calcularEstoqueModelo(){
     _estoqueSKU=projecaoSKU;
     // Buscar BOM de todos os SKUs
     const skusUnicos=[...new Set(projecaoSKU.map(s=>s.sku))];
-    const bom=await sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&limit=10000');
+    const bom=await sbGet('estrutura_produto','?empresa_id=in.('+_empIdsEst+')&limit=10000');
     const bomPorSku={};
     bom.forEach(b=>{if(!bomPorSku[b.sku])bomPorSku[b.sku]=[];bomPorSku[b.sku].push(b);});
     // Calcular necessidade de MP
@@ -3597,7 +3624,8 @@ function limparCalculadora(){
 }
 
 async function salvarSimulacao(){
-  if(!EMPRESA_ID){alert('Configure uma empresa primeiro');return;}
+  const empresaIdSel=document.getElementById('calc-empresa')?.value;
+  if(!empresaIdSel){alert('Selecione a empresa');return;}
   const nome=document.getElementById('calc-nome').value.trim()||'Simulação';
   const res=document.getElementById('calc-res-content').innerHTML;
   if(!res||res.includes('Preencha')){alert('Calcule primeiro');return;}
@@ -3618,7 +3646,7 @@ async function salvarSimulacao(){
   };
   try{
     await sbPost('calc_simulacoes',{
-      empresa_id:EMPRESA_ID,
+      empresa_id:empresaIdSel,
       nome,
       materiais:mats,
       politica,
@@ -3631,9 +3659,10 @@ async function salvarSimulacao(){
 
 async function renderHistoricoCalc(){
   const el=document.getElementById('calc-historico-lista');
-  if(!el||!EMPRESA_ID)return;
+  if(!el||!EMPRESAS.length)return;
+  const _empIdsCalc=EMPRESAS.map(e=>e.id).join(',');
   try{
-    const sims=await sbGet('calc_simulacoes','?empresa_id=eq.'+EMPRESA_ID+'&order=criado_em.desc&limit=20');
+    const sims=await sbGet('calc_simulacoes','?empresa_id=in.('+_empIdsCalc+')&order=criado_em.desc&limit=20');
     if(!sims.length){
       el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Nenhuma simulação salva</div>';
       document.getElementById('calc-historico-wrap').style.display='none';
@@ -3758,8 +3787,9 @@ function acSelect(inputId, el){
 
 // Funções de fetch para cada contexto
 async function acFetchFornecedores(q){
-  if(!EMPRESA_ID)return[];
-  const rows=await sbGet('lancamentos_externos','?empresa_id=eq.'+EMPRESA_ID+'&select=fornecedor&not.fornecedor.is.null&limit=200');
+  if(!EMPRESAS.length)return[];
+  const _empIdsAcF=EMPRESAS.map(e=>e.id).join(',');
+  const rows=await sbGet('lancamentos_externos','?empresa_id=in.('+_empIdsAcF+')&select=fornecedor&not.fornecedor.is.null&limit=200');
   return[...new Set(rows.map(r=>r.fornecedor).filter(Boolean))].sort();
 }
 async function acFetchClientes(q){
@@ -3768,14 +3798,15 @@ async function acFetchClientes(q){
   return[...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
 }
 async function acFetchMateriais(q){
-  if(!EMPRESA_ID)return[];
-  const rows=await sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&select=material_nome&limit=500');
+  // Estrutura de materiais é vinculada ao SKU, independente da empresa
+  const rows=await sbGet('estrutura_produto','?select=material_nome&limit=500');
   return[...new Set(rows.map(r=>r.material_nome).filter(Boolean))].sort();
 }
 async function acFetchFornClientes(q){
-  if(!EMPRESA_ID)return[];
+  if(!EMPRESAS.length)return[];
+  const _empIdsAcFC=EMPRESAS.map(e=>e.id).join(',');
   const [lans,caixaE]=await Promise.all([
-    sbGet('lancamentos_externos','?empresa_id=eq.'+EMPRESA_ID+'&select=fornecedor,cliente&limit=300'),
+    sbGet('lancamentos_externos','?empresa_id=in.('+_empIdsAcFC+')&select=fornecedor,cliente&limit=300'),
     sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=cliente&limit=200')
   ]);
   const set=new Set();
@@ -4441,8 +4472,8 @@ function atualizarTotaisCaixa(){
 }
 
 function popularDatalistMateriais(){
-  if(!EMPRESA_ID)return;
-  sbGet('estrutura_produto','?empresa_id=eq.'+EMPRESA_ID+'&select=material_nome&limit=500').then(rows=>{
+  // Estrutura de materiais é vinculada ao SKU, independente da empresa
+  sbGet('estrutura_produto','?select=material_nome&limit=500').then(rows=>{
     const dl=document.getElementById('bom-materiais-list');
     if(dl){const nomes=[...new Set(rows.map(r=>r.material_nome).filter(Boolean))];dl.innerHTML=nomes.map(n=>'<option value="'+n+'">').join('');}
   }).catch(()=>{});
@@ -4667,16 +4698,21 @@ async function editarLancamentoEntrega(lanId){
 let _correlacao = [];
 
 async function loadCorrelacao(){
-  if(!EMPRESA_ID){semEmpresaMsg('corr-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('corr-lista');return;}
+  const _empIdsCorr=EMPRESAS.map(e=>e.id).join(',');
+  const empNomeMapCorr={};EMPRESAS.forEach(e=>{empNomeMapCorr[e.id]=e.nome;});
+  const selUpEmp=document.getElementById('corr-upload-empresa');
+  if(selUpEmp&&!selUpEmp.children.length)selUpEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   const el=document.getElementById('corr-lista');
   if(!el)return;
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    _correlacao=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&order=sku_canonico.asc&limit=2000');
+    _correlacao=await sbGet('correlacao_sku','?empresa_id=in.('+_empIdsCorr+')&order=sku_canonico.asc&limit=2000');
 
-    // SKUs sem correlação — buscar SKUs únicos das vendas que não têm correlação
-    const vendaSkus=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&select=sku&limit=5000');
-    const skusVenda=[...new Set(vendaSkus.map(v=>v.sku).filter(Boolean))];
+    // SKUs sem correlação — buscar SKUs únicos das vendas que não têm correlação (mantendo qual empresa cada SKU pendente pertence)
+    const vendaSkusRaw=await sbGet('vendas','?empresa_id=in.('+_empIdsCorr+')&select=sku,empresa_id&limit=5000');
+    const empresaPorSkuVenda={};vendaSkusRaw.forEach(v=>{if(v.sku&&!empresaPorSkuVenda[v.sku])empresaPorSkuVenda[v.sku]=v.empresa_id;});
+    const skusVenda=[...new Set(vendaSkusRaw.map(v=>v.sku).filter(Boolean))];
     const skusMapeados=new Set(_correlacao.map(c=>c.sku_venda));
     const semCorr=skusVenda.filter(s=>!skusMapeados.has(s));
 
@@ -4690,13 +4726,14 @@ async function loadCorrelacao(){
           '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
           semCorr.map(sku=>'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px">'+
             '<span style="font-weight:500">'+sku+'</span>'+
+            '<span style="color:var(--text3);font-size:10px">'+(empNomeMapCorr[empresaPorSkuVenda[sku]]||'—')+'</span>'+
             '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" onchange="verificarNovoCanonico(this)">'+
               '<option value="">Selecionar canônico...</option>'+
               skusCanonicos.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+
               '<option value="__novo__">+ Novo canônico</option>'+
             '</select>'+
             '<input type="number" min="1" value="1" style="width:56px;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);text-align:center" id="mult-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" title="Multiplicador kit">'+
-            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" onclick="associarSKU(this.dataset.sku)">Associar</button>'+
+            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" data-empresa="'+(empresaPorSkuVenda[sku]||'')+'" onclick="associarSKU(this.dataset.sku,this.dataset.empresa)">Associar</button>'+
           '</div>').join('')+
           '</div></div>';
       }else{
@@ -4709,10 +4746,11 @@ async function loadCorrelacao(){
       el.innerHTML='<div class="empty"><div class="empty-icon">🔗</div><div class="empty-title">Nenhuma correlação cadastrada</div><div class="empty-sub">Faça upload de uma planilha de correlação</div></div>';
       return;
     }
-    el.innerHTML='<table><thead><tr><th>SKU de Venda</th><th>SKU Canônico</th><th style="text-align:center">Multiplicador</th><th></th></tr></thead><tbody>'+
+    el.innerHTML='<table><thead><tr><th>SKU de Venda</th><th>SKU Canônico</th><th>Empresa</th><th style="text-align:center">Multiplicador</th><th></th></tr></thead><tbody>'+
       _correlacao.map(c=>'<tr>'+
         '<td style="color:var(--text2);font-size:12px">'+c.sku_venda+'</td>'+
         '<td style="font-weight:500;color:var(--accent)">'+c.sku_canonico+'</td>'+
+        '<td style="color:var(--text3);font-size:12px">'+(empNomeMapCorr[c.empresa_id]||'—')+'</td>'+
         '<td style="text-align:center">×'+(c.multiplicador||1)+'</td>'+
         '<td><button class="btn btn-danger btn-sm" onclick="excluirCorrelacao(this.dataset.id)" data-id="'+c.id+'">✕</button></td>'+
       '</tr>').join('')+
@@ -4739,19 +4777,20 @@ async function verificarNovoCanonico(sel){
   sel.value=skuFormatado;
 }
 
-async function associarSKU(skuVenda){
+async function associarSKU(skuVenda,empresaIdVenda){
   const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const sel=document.getElementById(key);
   if(!sel)return;
   let skuCan=sel.value;
   if(!skuCan||skuCan==='__novo__'){alert('Selecione ou crie um SKU canônico');return;}
+  if(!empresaIdVenda){alert('Não foi possível identificar a empresa dessa venda');return;}
   const multKey='mult-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const multEl=document.getElementById(multKey);
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
-    await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
-    // Buscar vendas com esse SKU para multiplicar quantidade individualmente (evita corrida em PATCH em massa)
-    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
+    await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
+    // Buscar vendas com esse SKU (na empresa de origem) para multiplicar quantidade individualmente
+    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
     for(const v of vendasAfetadas){
       const qtdNova=v.quantidade*multiplicador;
       await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova});
@@ -4767,7 +4806,7 @@ async function excluirCorrelacao(id){
 }
 
 function downloadPlanilhaCorrelacao(){
-  const csv='sku_venda,sku_canonico\nLENÇOL_CASAL_BEGE_V2,LENCOL_CASAL_BEGE\nLENÇOL-CASAL-BEGE-NOVO,LENCOL_CASAL_BEGE\n';
+  const csv='sku_venda,sku_canonico,multiplicador\nLENÇOL_CASAL_BEGE_V2,LENCOL_CASAL_BEGE,1\nLENÇOL-CASAL-BEGE-NOVO,LENCOL_CASAL_BEGE,1\nK10-SO-MR,L001-SO-MR,10\n';
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='correlacao_sku_modelo.csv';a.click();
@@ -4776,6 +4815,8 @@ function downloadPlanilhaCorrelacao(){
 
 async function uploadCorrelacao(input){
   const file=input.files[0];if(!file)return;input.value='';
+  const empresaIdUp=document.getElementById('corr-upload-empresa')?.value;
+  if(!empresaIdUp){alert('Selecione a empresa antes de enviar a planilha');return;}
   const prog=document.getElementById('prog-corr');
   const txt=document.getElementById('prog-corr-txt');
   const bar=document.getElementById('prog-corr-bar');
@@ -4786,15 +4827,19 @@ async function uploadCorrelacao(input){
   let ok=0,erros=0;
   for(let i=0;i<linhas.length;i++){
     const cols=linhas[i].split(',').map(c=>c.trim().replace(/"/g,''));
-    const[skuVenda,skuCan]=cols;
+    const[skuVenda,skuCan,multCol]=cols;
     if(!skuVenda||!skuCan)continue;
+    const multiplicador=parseInt(multCol)||1;
     try{
-      // Upsert correlação
-      const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+EMPRESA_ID+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
-      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan.toUpperCase()});}
-      else{await sbPost('correlacao_sku',{empresa_id:EMPRESA_ID,sku_venda:skuVenda,sku_canonico:skuCan.toUpperCase()});}
-      // Atualizar vendas com esse SKU preservando original
-      await sbPatch('vendas','empresa_id=eq.'+EMPRESA_ID+'&sku=eq.'+encodeURIComponent(skuVenda),{sku:skuCan.toUpperCase(),sku_original:skuVenda});
+      // Upsert correlação (vinculada à empresa selecionada para este upload)
+      const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
+      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan.toUpperCase(),multiplicador});}
+      else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan.toUpperCase(),multiplicador});}
+      // Atualizar vendas com esse SKU preservando original, multiplicando a quantidade individualmente por registro
+      const vendasAfetadasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
+      for(const v of vendasAfetadasUp){
+        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan.toUpperCase(),sku_original:skuVenda,quantidade:v.quantidade*multiplicador});
+      }
       ok++;
     }catch(e){erros++;}
     bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
