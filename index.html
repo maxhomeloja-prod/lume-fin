@@ -2663,8 +2663,8 @@ async function uploadVendas(input){
     if(!sku||!qtd||isNaN(preco)||preco<=0){erros++;continue;}
     const cliNome=iCli>=0?cols[iCli]?.trim():'';
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
-    const canal=iCanal>=0&&cols[iCanal]?.trim()?cols[iCanal].trim():null;
-    batch.push({empresa_id:EMPRESA_ID,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
+    const canal=iCanal>=0&&cols[iCanal]?.trim()?cols[iCanal].trim():'MANUAL';
+    batch.push({empresa_id:EMPRESA_ID,pedido_id:'IMPORT-'+Date.now()+'-'+i,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
   }
   // Inserir em lotes de 500
   const LOTE=500;
