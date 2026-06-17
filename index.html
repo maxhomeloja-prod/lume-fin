@@ -2196,6 +2196,7 @@ async function salvarOP(){
       const numero=await sbRpc('proximo_numero_op_global',{});
       body.numero=numero;
       body.quantidade_entregue=0;
+      body.empresa_id=EMPRESAS[0]?.id; // primeira empresa do owner logado — mantém RLS de segurança funcionando para QUALQUER cliente do Lume, sem expor escolha de empresa no formulário
       await sbPost('ordens_producao',body);
     }
     fecharModal('modal-op');loadOPs();
@@ -2250,7 +2251,6 @@ async function confirmarEntrega(){
   if(!qtd||qtd<=0)return alert('Informe a quantidade');
   const valor=qtd*(op.preco_unitario||0);
   const obs=document.getElementById('entrega-obs').value.trim();
-  const EMP_MAXHOME='06af0934-2b30-4981-ab0a-ce75725858df'; // padrão para lançamentos financeiros de pagamento a terceiros
   try{
     // Buscar categoria Facção
     const catFaccao=CATEGORIAS.find(c=>c.nome.toLowerCase().includes('facção')||c.nome.toLowerCase().includes('faccao'));
@@ -2260,7 +2260,7 @@ async function confirmarEntrega(){
     if(valor>0&&op.preco_unitario){
       const terc=_terceiros.find(t=>t.id===op.terceiro_id);
       const lan=await sbPost('lancamentos_externos',{
-        empresa_id:EMP_MAXHOME,
+        empresa_id:op.empresa_id,
         data:new Date().toISOString().split('T')[0],
         data_vencimento:new Date(Date.now()+7*864e5).toISOString().split('T')[0],
         descricao:`Entrega OP ${op.numero} — ${op.sku} (${qtd} peças)`,
@@ -2351,7 +2351,7 @@ async function loadPagamentosOP(){
       const fpDe=document.getElementById('fpag-de')?.value;
       const fpAte=document.getElementById('fpag-ate')?.value;
       const fpStatus=document.getElementById('fpag-status')?.value;
-      let qFac='?empresa_id=eq.06af0934-2b30-4981-ab0a-ce75725858df&fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
+      let qFac='?fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
       if(fpDe)qFac+='&data_vencimento=gte.'+fpDe;
       if(fpAte)qFac+='&data_vencimento=lte.'+fpAte;
       if(fpStatus)qFac+='&situacao=eq.'+fpStatus;
@@ -4317,27 +4317,43 @@ async function confirmarEntregaFaccao(){
   const obs=document.getElementById('fac-conf-obs').value.trim();
   const dataEntrega=document.getElementById('fac-conf-data')?.value||new Date().toISOString().split('T')[0];
   const venc=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0];
-  const EMP_MAXHOME='06af0934-2b30-4981-ab0a-ce75725858df'; // padrão para lançamentos financeiros de pagamento a terceiros
+
+  // A notinha pode misturar OPs de empresas diferentes (e itens avulsos sem OP) — cada empresa precisa de seu próprio lançamento financeiro
+  const empresaPadrao=_faccaoCarrinho.find(i=>!i.avulso&&i.op?.empresa_id)?.op.empresa_id||null;
+  if(!empresaPadrao){btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';alert('Não foi possível identificar a empresa para este lançamento (nenhum item do carrinho está vinculado a uma OP). Adicione ao menos um item com OP antes de confirmar.');return;}
+
+  const grupos={}; // empresa_id -> {itens:[...]}
+  _faccaoCarrinho.forEach(item=>{
+    const empId=item.avulso?empresaPadrao:(item.op?.empresa_id||empresaPadrao);
+    if(!grupos[empId])grupos[empId]={itens:[]};
+    grupos[empId].itens.push(item);
+  });
+
   try{
     const totalValor=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
     const totalQtd=_faccaoCarrinho.reduce((s,i)=>s+i.qtd,0);
-    // Descrição resumida da nota
-    const itensDesc=_faccaoCarrinho.map(i=>i.avulso?i.sku:(i.op.numero+'/'+i.op.sku)).join(', ');
-    const descLan='Entrega '+FACCAO_LOGADO.nome+' — '+totalQtd+' peças ('+itensDesc+')';
 
-    // 1 lançamento único por entrega
-    await sbPost('lancamentos_externos',{
-      empresa_id:EMP_MAXHOME,
-      data:dataEntrega,
-      data_vencimento:venc,
-      descricao:descLan,
-      valor:totalValor,
-      tipo_lancamento:'PAGAR',
-      meio_pagamento:'PIX',
-      situacao:'EM_ABERTO',
-      fornecedor:FACCAO_LOGADO.nome||null,
-      observacao:obs||null
-    });
+    // 1 lançamento financeiro por empresa presente no carrinho
+    for(const empId of Object.keys(grupos)){
+      const itensGrupo=grupos[empId].itens;
+      const valorGrupo=itensGrupo.reduce((s,i)=>s+i.valor,0);
+      const qtdGrupo=itensGrupo.reduce((s,i)=>s+i.qtd,0);
+      const itensDescGrupo=itensGrupo.map(i=>i.avulso?i.sku:(i.op.numero+'/'+i.op.sku)).join(', ');
+      const descLanGrupo='Entrega '+FACCAO_LOGADO.nome+' — '+qtdGrupo+' peças ('+itensDescGrupo+')';
+
+      await sbPost('lancamentos_externos',{
+        empresa_id:empId,
+        data:dataEntrega,
+        data_vencimento:venc,
+        descricao:descLanGrupo,
+        valor:valorGrupo,
+        tipo_lancamento:'PAGAR',
+        meio_pagamento:'PIX',
+        situacao:'EM_ABERTO',
+        fornecedor:FACCAO_LOGADO.nome||null,
+        observacao:obs||null
+      });
+    }
 
     // Registrar cada entrega individualmente
     for(const item of _faccaoCarrinho){
