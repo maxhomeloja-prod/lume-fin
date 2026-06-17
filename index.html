@@ -2608,7 +2608,7 @@ function gerarPDFVenda(itens, cliente, dataVenda){
     <tbody>${linhas}</tbody>
     <tfoot><tr class="total"><td>TOTAL</td><td style="text-align:right">${totalQtd}</td><td></td><td style="text-align:right">${fBRL(total)}</td></tr></tfoot>
   </table>
-  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
 
   const win=window.open('','_blank');
@@ -3408,7 +3408,7 @@ function gerarFechamentoCliente(){
     <tbody>${linhasDetalhe}</tbody>
   </table>
 
-  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
 
   const win=window.open('','_blank');
@@ -4511,7 +4511,7 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
     <tbody>${linhas}</tbody>
     <tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(total)}</td></tr></tfoot>
   </table>
-  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
 
   const win=window.open('','_blank');
