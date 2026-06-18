@@ -1133,7 +1133,7 @@ tr:hover td{background:var(--surface2);}
 
 
 <!-- MODAIS -->
-<div class="modal-overlay" id="modal-sel-empresa">
+<div class="modal-overlay" id="modal-sel-empresa" style="z-index:9999">
   <div class="modal"><div class="modal-title">Qual empresa?</div><div class="modal-sub">Este registro precisa ser vinculado a uma empresa</div>
     <div class="form-group"><select class="form-control" id="sel-empresa-acao"></select></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="_resolverSelEmpresa(null)">Cancelar</button><button class="btn btn-primary" onclick="_resolverSelEmpresa(document.getElementById('sel-empresa-acao').value)">Confirmar</button></div>
@@ -3254,6 +3254,9 @@ function renderCaixaSai(){
   document.getElementById('cx-sai-wrap').innerHTML='<table><thead><tr><th>Data</th><th>Fornecedor</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'+_caixaSaidas.map(s=>`<tr class="caixa-saida"><td>${fDate(s.data||s.criado_em?.split('T')[0])}</td><td>${s.fornecedor||'—'}</td><td style="color:var(--text2)">${s.descricao||'—'}</td><td style="color:var(--text3)">${getNomeCat(s.categoria_id)}</td><td style="text-align:right;color:var(--red)">${fBRL(s.valor_total)}</td><td><button class="btn btn-danger btn-sm" onclick="reverterSaida('${s.id}')">↩</button></td></tr>`).join('')+'</tbody></table>';
 }
 function abrirModalEntrada(){
+  ['ent-valor','ent-cliente','ent-descricao','ent-venc','ent-banco','ent-num-cheque','ent-nome-cheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ent-tipo').value='DINHEIRO';
+  document.getElementById('ent-cat').value='';
   toggleEntFields();
   const sel=document.getElementById('ent-empresa');
   if(sel){sel.innerHTML='<option value="">Selecione...</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');}
@@ -3275,6 +3278,9 @@ async function salvarEntrada(){
 }
 async function excluirEntrada(id){if(!confirm('Excluir?'))return;await sbDelete('caixa_entradas',`id=eq.${id}`);loadCaixa();}
 function abrirModalSaida(){
+  ['sai-forn','sai-valor'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('sai-cat').value='';
+  document.getElementById('sai-data').value=new Date().toISOString().split('T')[0];
   abrirModal('modal-saida');
   acInit('sai-forn',acFetchFornecedores);
   const disp=_caixaEntradas.filter(e=>e.valor_disponivel>0);
@@ -3926,7 +3932,8 @@ function acInit(inputId, fetchFn){
     wrap.appendChild(list);
   }
   const list=document.getElementById('ac-list-'+inputId);
-  let items=[], timer=null;
+  let items=[], timer=null, suprimirReabertura=false;
+  _acTimers[inputId]=()=>{suprimirReabertura=true;};
 
   async function carregar(){
     try{items=await fetchFn(inp.value.trim());}catch(e){items=[];}
@@ -3949,7 +3956,10 @@ function acInit(inputId, fetchFn){
   }
 
   inp.addEventListener('focus',()=>{if(items.length===0)carregar();else renderizar();});
-  inp.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>carregar(),200);});
+  inp.addEventListener('input',()=>{
+    if(suprimirReabertura){suprimirReabertura=false;return;}
+    clearTimeout(timer);timer=setTimeout(()=>carregar(),200);
+  });
   inp.addEventListener('blur',()=>{setTimeout(()=>list.classList.remove('open'),150);});
   inp.addEventListener('keydown',function(e){
     const its=list.querySelectorAll('.ac-item');
@@ -3969,7 +3979,9 @@ function acInit(inputId, fetchFn){
   });
 }
 
+let _acTimers={};
 function acSelect(inputId, el){
+  if(_acTimers[inputId])_acTimers[inputId]();
   const inp=document.getElementById(inputId);
   if(inp){inp.value=el.getAttribute('data-val');inp.dispatchEvent(new Event('input'));}
   document.getElementById('ac-list-'+inputId)?.classList.remove('open');
