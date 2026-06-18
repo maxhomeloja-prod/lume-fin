@@ -3060,7 +3060,7 @@ async function loadBalancete(){
       sbGet('caixa_saidas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
     ]);
     _balTransacoes=[
-      ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.valor,tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
+      ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.tipo==='DEBIT'?-Math.abs(t.valor):Math.abs(t.valor),tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
       ...caixaEnt.filter(e=>{const d=e.data||e.criado_em?.split('T')[0];return(!de||d>=de)&&(!ate||d<=ate);}).map(e=>({data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
       ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
