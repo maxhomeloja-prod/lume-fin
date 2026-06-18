@@ -1133,6 +1133,13 @@ tr:hover td{background:var(--surface2);}
 
 
 <!-- MODAIS -->
+<div class="modal-overlay" id="modal-sel-empresa">
+  <div class="modal"><div class="modal-title">Qual empresa?</div><div class="modal-sub">Este registro precisa ser vinculado a uma empresa</div>
+    <div class="form-group"><select class="form-control" id="sel-empresa-acao"></select></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="_resolverSelEmpresa(null)">Cancelar</button><button class="btn btn-primary" onclick="_resolverSelEmpresa(document.getElementById('sel-empresa-acao').value)">Confirmar</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-empresa">
   <div class="modal"><div class="modal-title">Empresa</div><div class="modal-sub">Dados cadastrais</div>
     <input type="hidden" id="emp-id">
@@ -1581,10 +1588,8 @@ async function iniciarApp(){
 
 async function carregarBase(){
   try{EMPRESAS=await sbGet('empresas','?ativa=eq.true&owner_id=eq.'+SESSION.user.id+'&order=nome');}catch(e){EMPRESAS=[];}
-  const saved=localStorage.getItem('lume_empresa_id');
-  EMPRESA_ID=(saved&&EMPRESAS.find(e=>e.id===saved))?saved:EMPRESAS[0]?.id;
-  const sel=document.getElementById('sel-empresa');
-  if(sel){sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(EMPRESA_ID)sel.value=EMPRESA_ID;}
+  EMPRESA_ID=null; // ao logar, sistema sempre inicia em modo "Todas" — nenhuma empresa pré-selecionada
+  localStorage.removeItem('lume_empresa_id'); // não confiar em estado salvo de sessões anteriores naquele navegador
   atualizarEmpresaUI();
 
   try{CATEGORIAS=await sbGet('categorias','?ativa=eq.true&order=tipo,nome');}catch(e){CATEGORIAS=[];}
@@ -1642,7 +1647,7 @@ function irPara(pagina){
   const page=document.getElementById('page-'+pagina);
   if(page)page.classList.add('active');
 
-  if(!EMPRESA_ID){
+  if(!EMPRESAS.length){
     const wraps={'ops':'ops-content','entregas':'entregas-lista','vendas':'ven-table','bom':'bom-pendencias','abc':'abc-tbody','categorizacao':'cat-wrap','lancamentos':'lan-wrap','balancete':'bal-corpo','caixa':'cx-ent-wrap','pagamentos-op':'pagamentos-op-lista'};
     if(wraps[pagina]){const el=document.getElementById(wraps[pagina]);if(el)el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Cadastre uma empresa primeiro</div><div class="empty-sub"><button class="btn btn-primary btn-sm" onclick="irPara(\'empresas\')">Ir para Empresas</button></div></div>';}
     if(pagina==='empresas')loadEmpresas();
@@ -1830,10 +1835,6 @@ async function salvarEmpresa(){
     else{await sbPost('empresas',{nome,cnpj,ativa:true,owner_id:SESSION.user.id});}
     fecharModal('modal-empresa');
     EMPRESAS=await sbGet('empresas','?ativa=eq.true&owner_id=eq.'+SESSION.user.id+'&order=nome');
-    if(!EMPRESA_ID&&EMPRESAS.length>0){EMPRESA_ID=EMPRESAS[0].id;localStorage.setItem('lume_empresa_id',EMPRESA_ID);await carregarBase();}
-    const sel=document.getElementById('sel-empresa');
-    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-    if(EMPRESA_ID)sel.value=EMPRESA_ID;
     atualizarEmpresaUI();
     loadEmpresas();
   }catch(e){alert('Erro: '+e.message);}
@@ -1841,7 +1842,7 @@ async function salvarEmpresa(){
 
 // ── CONTAS BANCÁRIAS ───────────────────────────────────────────
 async function loadContas(){
-  if(!EMPRESA_ID){semEmpresaMsg('contas-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('contas-lista');return;}
   try{
     const empQ=buildEmpresaQuery('fcontas-empresa');
     const contas=await sbGet('contas_bancarias','?'+empQ+'&order=banco');
@@ -1853,7 +1854,7 @@ async function loadContas(){
 }
 async function abrirConectarBanco(){
   try{
-    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:EMPRESA_ID})});
+    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:SESSION.user.id})});
     const d=await r.json();
     if(!d.accessToken)throw new Error('Token não gerado');
     await carregarPluggyScript();
@@ -1888,8 +1889,6 @@ async function processarConexaoBanco(item){
   const sel = document.getElementById('mvc-empresa-sel');
   sel.innerHTML = '<option value="">Selecione...</option>' +
     EMPRESAS.map(e => '<option value="'+e.id+'">'+e.nome+'</option>').join('');
-  // Pré-selecionar empresa atual
-  if(EMPRESA_ID) sel.value = EMPRESA_ID;
   document.getElementById('mvc-banco-nome').textContent =
     (item.connector?.name || 'Banco') + ' — ' + (item.accounts?.[0]?.name || 'Nova conta');
   abrirModal('modal-vincular-empresa-conta');
@@ -1934,7 +1933,7 @@ async function confirmarVincularConta(){
 }
 async function reconectarBanco(itemId){
   try{
-    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:EMPRESA_ID,itemId})});
+    const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:SESSION.user.id,itemId})});
     const d=await r.json();
     if(!d.accessToken)throw new Error('Token não gerado');
     await carregarPluggyScript();
@@ -2044,7 +2043,7 @@ async function uploadPrecos(input){
   for(let i=0;i<linhas.length;i++){
     const[sku,desc,preco]=linhas[i].split(',').map(c=>c.trim().replace(/"/g,''));
     if(!sku||!preco)continue;
-    try{await sbPost('precos_faccao',{empresa_id:EMPRESA_ID,sku:sku.toUpperCase(),descricao:desc||null,preco:parseFloat(preco.replace(',','.')),ativo:true});ok++;}catch(e){}
+    try{await sbPost('precos_faccao',{sku:sku.toUpperCase(),descricao:desc||null,preco:parseFloat(preco.replace(',','.')),ativo:true});ok++;}catch(e){}
     bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
     txt.textContent=`Processando ${i+1}/${linhas.length}...`;
   }
@@ -2296,7 +2295,7 @@ async function confirmarEntrega(){
 
 // ── ENTREGAS ───────────────────────────────────────────────────
 async function loadEntregas(){
-  if(!EMPRESA_ID){semEmpresaMsg('entregas-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('entregas-lista');return;}
   try{
     const de=document.getElementById('fent-de')?.value;
     const ate=document.getElementById('fent-ate')?.value;
@@ -2383,7 +2382,7 @@ async function loadPagamentosOP(){
     return;
   }
   // Modo empresa: mostrar todos os lançamentos de facção
-  if(!EMPRESA_ID){semEmpresaMsg('pagamentos-op-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('pagamentos-op-lista');return;}
   try{
     const fpDe2=document.getElementById('fpag-de')?.value;
     const fpAte2=document.getElementById('fpag-ate')?.value;
@@ -2443,6 +2442,8 @@ function downloadPlanilhaOPs(){
 }
 async function uploadOPs(input){
   const file=input.files[0];if(!file)return;input.value='';
+  const empresaSel=await pedirEmpresaParaSalvar();
+  if(!empresaSel)return;
   const prog=document.getElementById('prog-ops');
   const txt=document.getElementById('prog-ops-txt');
   const bar=document.getElementById('prog-ops-bar');
@@ -2456,12 +2457,12 @@ async function uploadOPs(input){
     const[sku,desc,qtdS,precoS,tercNome,prev,obs]=cols;
     if(!sku||!qtdS)continue;
     try{
-      const numero=await sbRpc('proximo_numero_op',{p_empresa_id:EMPRESA_ID});
+      const numero=await sbRpc('proximo_numero_op_global',{});
       const tercId=tercNome?tercMap[tercNome.toUpperCase()]||null:null;
       await sbPost('ordens_producao',{
-        empresa_id:EMPRESA_ID,numero,sku:sku.toUpperCase(),
+        empresa_id:empresaSel,numero,sku:sku.toUpperCase(),
         descricao:desc||sku,quantidade:parseInt(qtdS),
-        valor_unitario:precoS?parseFloat(precoS.replace(',','.')):(_precosOp[sku.toUpperCase()]||0),
+        preco_unitario:precoS?parseFloat(precoS.replace(',','.')):(_precosOp[sku.toUpperCase()]||0),
         situacao:'ABERTA',terceiro_id:tercId,
         data_previsao:prev||null,observacao:obs||null,
         quantidade_entregue:0,criado_por:SESSION.user.id
@@ -2476,22 +2477,6 @@ async function uploadOPs(input){
 }
 
 // ── VENDAS ────────────────────────────────────────────────────
-async function garantirCategoriaProd(nome){
-  let c=_catsProduto.find(x=>x.nome===nome);
-  if(!c){const r=await sbPost('categorias_produto',{empresa_id:EMPRESA_ID,nome});c=r[0];_catsProduto.push(c);}
-  return c.id;
-}
-async function garantirProduto(sku,desc){
-  let p=_produtos.find(x=>x.sku.toUpperCase()===sku.toUpperCase());
-  if(!p){const catId=await garantirCategoriaProd(estimarCategoria(sku));const r=await sbPost('produtos',{empresa_id:EMPRESA_ID,sku:sku.toUpperCase(),descricao:desc||sku,categoria_id:catId,ativo:true});p=r[0];_produtos.push(p);}
-  return p;
-}
-async function garantirCliente(nome){
-  if(!nome?.trim())return null;
-  let c=_clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase().trim());
-  if(!c){const r=await sbPost('clientes',{empresa_id:EMPRESA_ID,nome:nome.trim()});c=r[0];_clientes.push(c);}
-  return c?.id||null;
-}
 async function carregarProdutosClientes(){
   if(!EMPRESAS.length)return;
   const _empIdsPC=EMPRESAS.map(e=>e.id).join(',');
@@ -2572,8 +2557,8 @@ function ehVendaDireta(canal){
 }
 
 // Gera comprovante simples em PDF (via impressão do navegador) para vendas diretas
-function gerarPDFVenda(itens, cliente, dataVenda){
-  const empNome=(EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome)||'Empresa';
+function gerarPDFVenda(itens, cliente, dataVenda, empresaId){
+  const empNome=(EMPRESAS.find(e=>e.id===empresaId)?.nome)||'Empresa';
   const dataFmt=(dataVenda||new Date().toISOString().split('T')[0]).split('-').reverse().join('/');
   const total=itens.reduce((s,i)=>s+(i.quantidade*i.valor_unitario),0);
   const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0);
@@ -2621,14 +2606,16 @@ async function finalizarVendaManual(){
   const dataVenda=document.getElementById('venda-data').value;
   const clienteNome=document.getElementById('venda-cliente').value.trim();
   const pedidoIdComum='MANUAL-'+Date.now();
+  const empresaSel=await pedirEmpresaParaSalvar();
+  if(!empresaSel)return; // cancelado pelo usuário
   try{
     for(const item of _vendaCarrinho){
-      await sbPost('vendas',{empresa_id:EMPRESA_ID,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'MANUAL',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
+      await sbPost('vendas',{empresa_id:empresaSel,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'MANUAL',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
     }
     const itensSalvos=[..._vendaCarrinho];
     _vendaCarrinho=[];
     fecharModal('modal-venda');loadVendas();
-    if(ehVendaDireta(canal))gerarPDFVenda(itensSalvos,clienteNome,dataVenda);
+    if(ehVendaDireta(canal))gerarPDFVenda(itensSalvos,clienteNome,dataVenda,empresaSel);
   }catch(e){alert('Erro: '+e.message);}
 }
 function downloadPlanilhaVendas(){
@@ -2638,6 +2625,8 @@ function downloadPlanilhaVendas(){
 }
 async function uploadVendas(input){
   const file=input.files[0];if(!file)return;input.value='';
+  const empresaSel=await pedirEmpresaParaSalvar();
+  if(!empresaSel)return;
   await carregarProdutosClientes();
   const prog=document.getElementById('prog-vendas');
   const txt=document.getElementById('prog-vendas-txt');
@@ -2664,7 +2653,7 @@ async function uploadVendas(input){
     const cliNome=iCli>=0?cols[iCli]?.trim():'';
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
     const canal=iCanal>=0&&cols[iCanal]?.trim()?cols[iCanal].trim():'MANUAL';
-    batch.push({empresa_id:EMPRESA_ID,pedido_id:'IMPORT-'+Date.now()+'-'+i,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
+    batch.push({empresa_id:empresaSel,pedido_id:'IMPORT-'+Date.now()+'-'+i,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
   }
   // Inserir em lotes de 500
   const LOTE=500;
@@ -2976,9 +2965,11 @@ function renderABCChart(){
 
 // ── FINANCEIRO ────────────────────────────────────────────────
 async function sincronizarBanco(){
+  const empresaSel=await pedirEmpresaParaSalvar();
+  if(!empresaSel)return;
   const btn=document.getElementById('btn-sync');btn.textContent='⏳ Sincronizando...';btn.disabled=true;
   try{
-    const r=await fetch(`${WORKER}/sync?empresa_id=${EMPRESA_ID}`);
+    const r=await fetch(`${WORKER}/sync?empresa_id=${empresaSel}`);
     const d=await r.json();const novas=d.total_novas||0;
     btn.textContent=`✓ ${novas} novas`;
     setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},3000);
@@ -2987,7 +2978,7 @@ async function sincronizarBanco(){
 }
 
 async function loadCategorizacao(){
-  if(!EMPRESA_ID){semEmpresaMsg('cat-wrap');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('cat-wrap');return;}
   const wrap=document.getElementById('cat-wrap');
   if(!wrap)return;
   wrap.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
@@ -3036,7 +3027,7 @@ async function confirmarTodas(){
 }
 
 async function loadBalancete(){
-  if(!EMPRESA_ID){semEmpresaMsg('bal-corpo');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('bal-corpo');return;}
   const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
@@ -3140,7 +3131,7 @@ function renderBalancete(){
 }
 
 async function loadLancamentos(){
-  if(!EMPRESA_ID){semEmpresaMsg('lan-wrap');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('lan-wrap');return;}
   const tipo=document.getElementById('flan-tipo')?.value;
   const sit=document.getElementById('flan-sit')?.value;
   const de=document.getElementById('flan-de')?.value;
@@ -3223,7 +3214,9 @@ async function salvarLancamento(){
   const id=document.getElementById('lan-id').value;
   const tipo=document.getElementById('lan-tipo').value;
   const cf=document.getElementById('lan-cf').value.trim();
-  const body={empresa_id:EMPRESA_ID,data:new Date().toISOString().split('T')[0],data_vencimento:document.getElementById('lan-venc').value,descricao:document.getElementById('lan-desc').value.trim(),valor:parseFloat(document.getElementById('lan-valor').value),tipo_lancamento:tipo,meio_pagamento:document.getElementById('lan-meio').value,situacao:'EM_ABERTO',categoria_id:document.getElementById('lan-cat').value||null,fornecedor:tipo==='PAGAR'?cf:null,cliente:tipo==='RECEBER'?cf:null,observacao:document.getElementById('lan-obs').value.trim()||null};
+  let empresaSel=EMPRESA_ID;
+  if(!id){empresaSel=await pedirEmpresaParaSalvar();if(!empresaSel)return;}
+  const body={empresa_id:empresaSel,data:new Date().toISOString().split('T')[0],data_vencimento:document.getElementById('lan-venc').value,descricao:document.getElementById('lan-desc').value.trim(),valor:parseFloat(document.getElementById('lan-valor').value),tipo_lancamento:tipo,meio_pagamento:document.getElementById('lan-meio').value,situacao:'EM_ABERTO',categoria_id:document.getElementById('lan-cat').value||null,fornecedor:tipo==='PAGAR'?cf:null,cliente:tipo==='RECEBER'?cf:null,observacao:document.getElementById('lan-obs').value.trim()||null};
   try{if(id)await sbPatch('lancamentos_externos',`id=eq.${id}`,body);else await sbPost('lancamentos_externos',body);fecharModal('modal-lancamento');loadLancamentos();}catch(e){alert('Erro: '+e.message);}
 }
 
@@ -3263,7 +3256,7 @@ function renderCaixaSai(){
 function abrirModalEntrada(){
   toggleEntFields();
   const sel=document.getElementById('ent-empresa');
-  if(sel){sel.innerHTML='<option value="">Selecione...</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'"'+(e.id===EMPRESA_ID?' selected':'')+'>'+e.nome+'</option>').join('');}
+  if(sel){sel.innerHTML='<option value="">Selecione...</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');}
   const dataEl=document.getElementById('ent-data');
   if(dataEl)dataEl.value=new Date().toISOString().split('T')[0];
   abrirModal('modal-entrada');
@@ -3272,12 +3265,13 @@ function abrirModalEntrada(){
 function toggleEntFields(){const t=document.getElementById('ent-tipo')?.value;const f=document.getElementById('ent-cheque-fields');if(f)f.style.display=t==='CHEQUE'?'':'none';}
 async function salvarEntrada(){
   const tipo=document.getElementById('ent-tipo').value;const valor=parseFloat(document.getElementById('ent-valor').value);
-  const entEmpId=document.getElementById('ent-empresa')?.value||EMPRESA_ID;
+  const entEmpId=document.getElementById('ent-empresa')?.value;
+  if(!entEmpId)return alert('Selecione a empresa');
   const hoje=document.getElementById('ent-data')?.value||new Date().toISOString().split('T')[0];
   const editId=document.getElementById('modal-entrada').dataset.editId||null;
   const descricao=document.getElementById('ent-descricao')?.value.trim()||
     (tipo==='CHEQUE'?'Cheque recebido':'Entrada de caixa')+' — '+(document.getElementById('ent-cliente')?.value.trim()||hoje);
-  try{await sbPost('caixa_entradas',{user_id:SESSION?.user?.id,data:hoje,tipo,descricao,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
+  try{await sbPost('caixa_entradas',{empresa_id:entEmpId,user_id:SESSION?.user?.id,data:hoje,tipo,descricao,cliente:document.getElementById('ent-cliente').value.trim(),valor_original:valor,valor_disponivel:valor,categoria_id:document.getElementById('ent-cat').value||null,data_vencimento:tipo==='CHEQUE'?document.getElementById('ent-venc').value:null,banco_emissor:tipo==='CHEQUE'?document.getElementById('ent-banco').value.trim():null,numero_cheque:tipo==='CHEQUE'?document.getElementById('ent-num-cheque').value.trim():null,nome_cheque:tipo==='CHEQUE'?document.getElementById('ent-nome-cheque').value.trim():null});fecharModal('modal-entrada');loadCaixa();}catch(e){alert('Erro: '+e.message);}
 }
 async function excluirEntrada(id){if(!confirm('Excluir?'))return;await sbDelete('caixa_entradas',`id=eq.${id}`);loadCaixa();}
 function abrirModalSaida(){
@@ -3298,9 +3292,11 @@ async function salvarSaida(){
   const vp=parseFloat(document.getElementById('sai-valor').value);if(!vp||vp<=0)return alert('Informe o valor');
   const sel=[];_caixaEntradas.filter(e=>e.valor_disponivel>0).forEach(e=>{const chk=document.getElementById(`sc-${e.id}`);if(chk?.checked){const val=document.getElementById(`sv-${e.id}`);const usado=val?Math.min(parseFloat(val.value)||0,e.valor_disponivel):e.valor_disponivel;sel.push({entrada:e,usado});}});
   if(sel.reduce((s,x)=>s+x.usado,0)<vp)return alert('Cobertura insuficiente');
+  const empresaSel=await pedirEmpresaParaSalvar();
+  if(!empresaSel)return;
   try{
     const saiDesc=document.getElementById('sai-desc')?.value?.trim()||('Pagamento — '+document.getElementById('sai-forn').value.trim());
-const[saida]=await sbPost('caixa_saidas',{empresa_id:EMPRESA_ID,data:document.getElementById('sai-data').value,descricao:saiDesc,fornecedor:document.getElementById('sai-forn').value.trim(),valor_total:vp,categoria_id:document.getElementById('sai-cat').value||null});
+const[saida]=await sbPost('caixa_saidas',{empresa_id:empresaSel,data:document.getElementById('sai-data').value,descricao:saiDesc,fornecedor:document.getElementById('sai-forn').value.trim(),valor_total:vp,categoria_id:document.getElementById('sai-cat').value||null});
     for(const{entrada,usado}of sel){await sbPost('caixa_movimentos',{saida_id:saida.id,entrada_id:entrada.id,valor_utilizado:usado});await sbPatch('caixa_entradas',`id=eq.${entrada.id}`,{valor_disponivel:Math.max(0,entrada.valor_disponivel-usado)});}
     fecharModal('modal-saida');loadCaixa();
   }catch(e){alert('Erro: '+e.message);}
@@ -3353,7 +3349,7 @@ async function loadPerfil(){
 
 
 function gerarHTMLFechamento(vendasCliente, nomeCliente, periodoTxt){
-  const empNome=(EMPRESAS.find(e=>e.id===EMPRESA_ID)?.nome)||'Empresa';
+  const empNome=(EMPRESAS.find(e=>e.id===vendasCliente[0]?.empresa_id)?.nome)||'Empresa';
 
   // Consolidado por SKU
   const consolidado={};
@@ -3987,7 +3983,7 @@ async function acFetchFornecedores(q){
   return[...new Set(rows.map(r=>r.fornecedor).filter(Boolean))].sort();
 }
 async function acFetchClientes(q){
-  if(!EMPRESA_ID)return[];
+  if(!EMPRESAS.length)return[];
   const rows=await sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=cliente&not.cliente.is.null&limit=200');
   return[...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
 }
@@ -4096,7 +4092,7 @@ function renderLanCharts(lancamentos){
 let _mktSelecionado = null;
 
 async function loadMarketplaces(){
-  if(!EMPRESA_ID){semEmpresaMsg('mkt-lista');return;}
+  if(!EMPRESAS.length){semEmpresaMsg('mkt-lista');return;}
   const el=document.getElementById('mkt-lista');
   if(!el)return;
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
@@ -4138,7 +4134,6 @@ function selecionarMarketplace(mkt){
   const sel=document.getElementById('mkt-emp-sel');
   sel.innerHTML='<option value="">Selecione...</option>'+
     EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
-  sel.value=EMPRESA_ID||'';
   const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre'};
   document.getElementById('mkt-emp-titulo').textContent='Conectar '+nomes[mkt];
   document.getElementById('mkt-emp-nome-mkt').textContent=nomes[mkt];
@@ -4539,9 +4534,27 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
   if(win){win.document.write(html);win.document.close();}
 }
 
+let _resolverSelEmpresaFn=null;
+function _resolverSelEmpresa(valor){
+  fecharModal('modal-sel-empresa');
+  if(_resolverSelEmpresaFn)_resolverSelEmpresaFn(valor||null);
+  _resolverSelEmpresaFn=null;
+}
+function pedirEmpresaParaSalvar(){
+  // Se o owner só tem 1 empresa, não há ambiguidade — usa direto sem perguntar
+  if(EMPRESAS.length===1)return Promise.resolve(EMPRESAS[0].id);
+  if(!EMPRESAS.length)return Promise.resolve(null);
+  return new Promise(resolve=>{
+    _resolverSelEmpresaFn=resolve;
+    const sel=document.getElementById('sel-empresa-acao');
+    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    abrirModal('modal-sel-empresa');
+  });
+}
+
 function atualizarEmpresaUI(){
   const emp=EMPRESAS.find(e=>e.id===EMPRESA_ID);
-  const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'—';
+  const el=document.getElementById('tb-empresa');if(el)el.textContent=emp?.nome||'Todas as empresas';
   const opts='<option value="">Todas</option>'+EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
   ['fcat-empresa','fbal-empresa','flan-empresa','fcontas-empresa','fcx-empresa'].forEach(id=>{
     const sel=document.getElementById(id);if(sel)sel.innerHTML=opts;
