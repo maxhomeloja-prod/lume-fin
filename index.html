@@ -3086,11 +3086,11 @@ function renderBalancete(){
     if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,trans:[]};
     agrupado[key].total+=t.valor;
     agrupado[key].trans.push(t);
-    if(!ehEsp){countT++;if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=Math.abs(t.valor);}
+    if(!ehEsp){countT++;if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=t.valor;}
   });
-  var saldo=totalRec-totalDesp;
+  var saldo=totalRec+totalDesp; // totalDesp já é negativo, então soma direta = receita - despesa
   document.getElementById('bal-rec').textContent=fBRL(totalRec);
-  document.getElementById('bal-desp').textContent=fBRL(totalDesp);
+  document.getElementById('bal-desp').textContent=fBRL(Math.abs(totalDesp));
   document.getElementById('bal-count').textContent=fN(countT);
   var sEl=document.getElementById('bal-saldo');sEl.textContent=fBRL(saldo);sEl.className='kpi-value '+(saldo>=0?'green':'red');
 
@@ -3112,7 +3112,8 @@ function renderBalancete(){
 
   function secao(titulo,itens,cls,totalRecBase){
     if(!itens.length)return'';
-    var sub=itens.reduce(function(s,i){return s+Math.abs(i.total);},0);
+    var sub=itens.reduce(function(s,i){return s+i.total;},0); // soma direta (valores negativos para despesas)
+    var subAbs=Math.abs(sub);
     var linhas=itens.map(function(item,idx){
       var rowId='balr'+idx+''+titulo.charCodeAt(0);
       var pct=(totalRecBase>0&&Math.abs(item.total)>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((Math.abs(item.total)/totalRecBase)*100).toFixed(1)+'%)</span>':'';
@@ -3122,11 +3123,11 @@ function renderBalancete(){
         '</div>';
       return header+buildDetalhes(item.trans,rowId);
     }).join('');
-    var pctTotal=(totalRecBase>0&&sub>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((sub/totalRecBase)*100).toFixed(1)+'%)</span>':'';
+    var pctTotal=(totalRecBase>0&&subAbs>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((subAbs/totalRecBase)*100).toFixed(1)+'%)</span>':'';
     return '<div class="bal-section"><div class="bal-section-title">'+titulo+'</div>'+
       '<div class="bal-table">'+linhas+
       '<div class="bal-row bal-subtotal"><span class="bal-row-name">Total '+titulo+'</span>'+
-      '<span class="bal-row-val '+cls+'">'+fBRL(sub)+pctTotal+'</span></div></div></div>';
+      '<span class="bal-row-val '+cls+'">'+fBRL(subAbs)+pctTotal+'</span></div></div></div>';
   }
 
   document.getElementById('bal-corpo').innerHTML=
