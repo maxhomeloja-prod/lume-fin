@@ -2550,6 +2550,13 @@ function renderVendaCarrinho(){
 }
 // Marketplaces conhecidos — qualquer canal fora dessa lista é considerado venda direta
 const MARKETPLACES_CONHECIDOS=['shopee','tiktok','tiktok shop','mercado livre','mercadolivre','shein','kwai','magalu','magazine luiza'];
+// Normaliza texto de canal digitado/importado manualmente: remove espaços extras e capitaliza cada palavra
+// (ex: "venda direta", "VENDA DIRETA", "  Venda  Direta " todos viram "Venda Direta")
+function normalizarCanal(canal){
+  if(!canal)return canal;
+  return canal.trim().replace(/\s+/g,' ').split(' ').map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
+}
+
 function ehVendaDireta(canal){
   if(!canal)return true; // canal vazio também é considerado venda direta
   const c=canal.trim().toLowerCase();
@@ -2602,7 +2609,7 @@ function gerarPDFVenda(itens, cliente, dataVenda, empresaId){
 
 async function finalizarVendaManual(){
   if(!_vendaCarrinho.length)return alert('Adicione pelo menos um item à venda');
-  const canal=document.getElementById('venda-canal').value.trim();
+  const canal=normalizarCanal(document.getElementById('venda-canal').value.trim());
   const dataVenda=document.getElementById('venda-data').value;
   const clienteNome=document.getElementById('venda-cliente').value.trim();
   const pedidoIdComum='MANUAL-'+Date.now();
@@ -2610,7 +2617,7 @@ async function finalizarVendaManual(){
   if(!empresaSel)return; // cancelado pelo usuário
   try{
     for(const item of _vendaCarrinho){
-      await sbPost('vendas',{empresa_id:empresaSel,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'MANUAL',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
+      await sbPost('vendas',{empresa_id:empresaSel,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'Venda Direta',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
     }
     const itensSalvos=[..._vendaCarrinho];
     _vendaCarrinho=[];
@@ -2652,7 +2659,7 @@ async function uploadVendas(input){
     if(!sku||!qtd||isNaN(preco)||preco<=0){erros++;continue;}
     const cliNome=iCli>=0?cols[iCli]?.trim():'';
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
-    const canal=iCanal>=0&&cols[iCanal]?.trim()?cols[iCanal].trim():'MANUAL';
+    const canal=iCanal>=0&&cols[iCanal]?.trim()?normalizarCanal(cols[iCanal].trim()):'Venda Direta';
     batch.push({empresa_id:empresaSel,pedido_id:'IMPORT-'+Date.now()+'-'+i,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
   }
   // Inserir em lotes de 500
