@@ -1985,12 +1985,26 @@ async function salvarTerceiro(){
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
   if(!nome)return alert('Informe o nome');
+  if(!id&&email&&!senha)return alert('Informe uma senha para criar o acesso de login');
   const body={nome,email:email||null,ativo:true};
   if(!id)body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
-  if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
   try{
-    if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
-    else await sbPost('terceiros',body);
+    let tercId=id;
+    if(id){
+      await sbPatch('terceiros',`id=eq.${id}`,body);
+    }else{
+      const[novo]=await sbPost('terceiros',body);
+      tercId=novo.id;
+    }
+    // Se foi informado e-mail+senha, criar/atualizar a conta de login real (Supabase Auth) via worker
+    if(email&&senha){
+      const rLogin=await fetch('https://lume-mkt.maxhome-loja.workers.dev/terceiro/criar-login',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({terceiro_id:tercId,email,senha})
+      });
+      const dLogin=await rLogin.json();
+      if(!rLogin.ok)throw new Error('Cadastro salvo, mas acesso de login falhou: '+(dLogin.error||'erro desconhecido'));
+    }
     fecharModal('modal-terceiro');
     loadTerceiros();
   }catch(e){alert('Erro: '+e.message);}
