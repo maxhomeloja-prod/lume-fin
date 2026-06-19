@@ -1711,13 +1711,14 @@ async function loadDashboard(){
     const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
     const fd=d=>d.toISOString().split('T')[0];
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    const[vendas,ops,lans,saldos]=await Promise.all([
-      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=gte.${fd(ini)}&select=valor_total`),
+    const empIdsArr=EMPRESAS.map(e=>e.id);
+    const[kpisVendas,ops,lans,saldos]=await Promise.all([
+      sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:fd(ini),p_ate:null}),
       sbGet('ordens_producao',`?empresa_id=in.(${empIds})&situacao=neq.CANCELADA&select=situacao,quantidade`),
       sbGet('lancamentos_externos',`?empresa_id=in.(${empIds})&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&select=valor`),
       sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`)
     ]);
-    const rec=vendas.reduce((s,v)=>s+(v.valor_total||0),0);
+    const rec=kpisVendas[0]?.total_receita||0;
     const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').length;
     const pagar=lans.reduce((s,l)=>s+l.valor,0);
     const saldo=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
@@ -3229,9 +3230,10 @@ async function salvarLancamento(){
   const id=document.getElementById('lan-id').value;
   const tipo=document.getElementById('lan-tipo').value;
   const cf=document.getElementById('lan-cf').value.trim();
-  let empresaSel=EMPRESA_ID;
+  let empresaSel=null;
   if(!id){empresaSel=await pedirEmpresaParaSalvar();if(!empresaSel)return;}
-  const body={empresa_id:empresaSel,data:new Date().toISOString().split('T')[0],data_vencimento:document.getElementById('lan-venc').value,descricao:document.getElementById('lan-desc').value.trim(),valor:parseFloat(document.getElementById('lan-valor').value),tipo_lancamento:tipo,meio_pagamento:document.getElementById('lan-meio').value,situacao:'EM_ABERTO',categoria_id:document.getElementById('lan-cat').value||null,fornecedor:tipo==='PAGAR'?cf:null,cliente:tipo==='RECEBER'?cf:null,observacao:document.getElementById('lan-obs').value.trim()||null};
+  const body={data:new Date().toISOString().split('T')[0],data_vencimento:document.getElementById('lan-venc').value,descricao:document.getElementById('lan-desc').value.trim(),valor:parseFloat(document.getElementById('lan-valor').value),tipo_lancamento:tipo,meio_pagamento:document.getElementById('lan-meio').value,situacao:'EM_ABERTO',categoria_id:document.getElementById('lan-cat').value||null,fornecedor:tipo==='PAGAR'?cf:null,cliente:tipo==='RECEBER'?cf:null,observacao:document.getElementById('lan-obs').value.trim()||null};
+  if(!id)body.empresa_id=empresaSel; // só define empresa na criação — edição preserva a empresa original do lançamento
   try{if(id)await sbPatch('lancamentos_externos',`id=eq.${id}`,body);else await sbPost('lancamentos_externos',body);fecharModal('modal-lancamento');loadLancamentos();}catch(e){alert('Erro: '+e.message);}
 }
 
