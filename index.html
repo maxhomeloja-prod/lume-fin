@@ -5025,11 +5025,12 @@ async function associarSKU(skuVenda,empresaIdVenda){
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
     await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
-    // Buscar vendas com esse SKU (na empresa de origem) para multiplicar quantidade individualmente
-    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
+    // Buscar vendas com esse SKU (na empresa de origem) para ajustar quantidade e preço unitário
+    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade,valor_unitario');
     for(const v of vendasAfetadas){
       const qtdNova=v.quantidade*multiplicador;
-      await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova});
+      const precoUnitNovo=v.valor_unitario/multiplicador; // divide o preço para não inflar o valor_total (quantidade × preço)
+      await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
     }
     loadCorrelacao();
   }catch(e){alert('Erro: '+e.message);}
@@ -5071,10 +5072,10 @@ async function uploadCorrelacao(input){
       const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
       if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan.toUpperCase(),multiplicador});}
       else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan.toUpperCase(),multiplicador});}
-      // Atualizar vendas com esse SKU preservando original, multiplicando a quantidade individualmente por registro
-      const vendasAfetadasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade');
+      // Atualizar vendas com esse SKU preservando original, ajustando quantidade e preço unitário
+      const vendasAfetadasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade,valor_unitario');
       for(const v of vendasAfetadasUp){
-        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan.toUpperCase(),sku_original:skuVenda,quantidade:v.quantidade*multiplicador});
+        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan.toUpperCase(),sku_original:skuVenda,quantidade:v.quantidade*multiplicador,valor_unitario:v.valor_unitario/multiplicador});
       }
       ok++;
     }catch(e){erros++;}
