@@ -756,6 +756,7 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-tkt">—</div></div>
       </div>
       <div class="card"><div class="tbl-wrap" id="ven-table"></div></div>
+      <div id="ven-paginacao" style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px;color:var(--text2);font-size:13px"></div>
     </div>
 
     <!-- CORRELAÇÃO SKU -->
@@ -1459,6 +1460,15 @@ async function sbGet(t,q=''){
   if(!r.ok){const e=await r.text();console.error(`sbGet ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
   return r.json();
 }
+// Busca uma página específica de resultados (offset/limit reais via header Range do PostgREST)
+async function sbGetPaginado(t,q='',offset=0,pageSize=100){
+  const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),Range:`${offset}-${offset+pageSize-1}`,Prefer:'count=exact'}});
+  if(!r.ok){const e=await r.text();console.error(`sbGetPaginado ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
+  const rows=await r.json();
+  const range=r.headers.get('content-range'); // formato "0-99/1234"
+  const total=range?parseInt(range.split('/')[1])||0:0;
+  return{rows,total};
+}
 async function sbPost(t,b){
   const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
   if(!r.ok){
@@ -1661,7 +1671,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'correlacao':loadCorrelacao,'estoque':()=>{},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
+    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -2783,30 +2793,27 @@ let _chartDaily=null,_chartCanal=null,_chartPizza=null;
 
 async function loadABC(){
   if(!EMPRESAS.length){semEmpresaMsg('abc-tbody');return;}
-  const _empIdsABC=EMPRESAS.map(e=>e.id).join(',');
+  const _empIdsABC=EMPRESAS.map(e=>e.id);
   const de=document.getElementById('fabc-de')?.value;
   const ate=document.getElementById('fabc-ate')?.value;
   const canal=document.getElementById('fabc-canal')?.value;
-  const skuFiltro=document.getElementById('fabc-sku')?.value.trim().toUpperCase();
-  // Buscar todas para popular select de canal
-  let qBase='?empresa_id=in.('+_empIdsABC+')&limit=10000';
-  if(de)qBase+='&data_pedido=gte.'+de;
-  if(ate)qBase+='&data_pedido=lte.'+ate;
+  const skuFiltro=document.getElementById('fabc-sku')?.value.trim();
   try{
-    const todasVendas=await sbGet('vendas',qBase);
-    // Popular select canal
-    const canaisABC=[...new Set(todasVendas.map(v=>v.marketplace).filter(Boolean))].sort();
+    // Dados já agregados por SKU+dia+canal no banco — nunca traz vendas brutas, escala para qualquer volume
+    const agregado=await sbRpc('vendas_agregado_sku_dia',{
+      p_empresa_ids:_empIdsABC,p_de:de||null,p_ate:ate||null,
+      p_canal:canal||null,p_sku:skuFiltro||null
+    });
+    // Popular select canal a partir do próprio agregado (já é pequeno, não precisa de outra RPC aqui)
+    const canaisABC=[...new Set(agregado.map(v=>v.marketplace).filter(Boolean))].sort();
     const selABC=document.getElementById('fabc-canal');
     if(selABC){const cv=selABC.value;selABC.innerHTML='<option value="">Todos</option>'+canaisABC.map(c=>'<option value="'+c+'">'+c+'</option>').join('');selABC.value=cv;}
-    // Filtrar
-    let vendas=todasVendas;
-    if(canal)vendas=vendas.filter(v=>v.marketplace===canal);
-    if(skuFiltro)vendas=vendas.filter(v=>v.sku&&v.sku.toUpperCase().includes(skuFiltro));
+
     const porSku={};
-    vendas.forEach(v=>{
+    agregado.forEach(v=>{
       if(!porSku[v.sku])porSku[v.sku]={rec:0,qtd:0};
-      porSku[v.sku].rec+=(v.valor_total||v.valor_unitario*v.quantidade||0);
-      porSku[v.sku].qtd+=v.quantidade;
+      porSku[v.sku].rec+=v.val;
+      porSku[v.sku].qtd+=v.qtd;
     });
     const sorted=Object.entries(porSku).sort((a,b)=>b[1].rec-a[1].rec);
     const total=sorted.reduce((s,[,v])=>s+v.rec,0);
@@ -2823,25 +2830,25 @@ async function loadABC(){
     });
     renderABCTabela('all');
     renderABCChart();
-    renderChartMensal(vendas);
-    renderChartDiario(vendas);
-    renderChartCanal(vendas);
-    renderChartPizza(vendas);
+    renderChartMensal(agregado);
+    renderChartDiario(agregado);
+    renderChartCanal(agregado);
+    renderChartPizza(agregado);
   }catch(e){console.error('loadABC erro:',e);}
 }
 
-function renderChartDiario(vendas){
+function renderChartDiario(agregado){
   const ctx=document.getElementById('chart-daily');
   if(!ctx)return;
   const porDataCat={};
   const cats=new Set();
-  vendas.forEach(v=>{
+  agregado.forEach(v=>{
     const d=v.data_pedido;if(!d)return;
     const cat=estimarCategoria(v.sku);
     cats.add(cat);
     if(!porDataCat[d])porDataCat[d]={};
     if(!porDataCat[d][cat])porDataCat[d][cat]=0;
-    porDataCat[d][cat]+=v.quantidade||0;
+    porDataCat[d][cat]+=v.qtd||0;
   });
   const datas=Object.keys(porDataCat).sort();
   const catList=[...cats].sort();
@@ -2891,19 +2898,19 @@ function renderChartDiario(vendas){
 }
 
 
-function renderChartCanal(vendas){
+function renderChartCanal(agregado){
   const ctx=document.getElementById('chart-canal');
   if(!ctx)return;
   // Venda diária por canal — valor
   const porDataCanal={};
   const canais=new Set();
-  vendas.forEach(v=>{
+  agregado.forEach(v=>{
     const d=v.data_pedido;if(!d)return;
     const c=v.marketplace||'Sem canal';
     canais.add(c);
     if(!porDataCanal[d])porDataCanal[d]={};
     if(!porDataCanal[d][c])porDataCanal[d][c]=0;
-    porDataCanal[d][c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porDataCanal[d][c]+=v.val||0;
   });
   const datas=Object.keys(porDataCanal).sort();
   const canalList=[...canais].sort();
@@ -2928,15 +2935,15 @@ function renderChartCanal(vendas){
   });
 }
 
-function renderChartPizza(vendas){
+function renderChartPizza(agregado){
   const ctx=document.getElementById('chart-pizza');
   if(!ctx)return;
   // Volume MONETÁRIO por canal
   const porCanal={};
-  vendas.forEach(v=>{
+  agregado.forEach(v=>{
     const c=v.marketplace||'Sem canal';
     if(!porCanal[c])porCanal[c]=0;
-    porCanal[c]+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porCanal[c]+=v.val||0;
   });
   const labels=Object.keys(porCanal).sort();
   const data=labels.map(c=>porCanal[c]);
@@ -3431,56 +3438,92 @@ function gerarHTMLFechamento(vendasCliente, nomeCliente, periodoTxt){
   </body></html>`;
 }
 
-function gerarFechamentoCliente(){
+async function gerarFechamentoCliente(){
   const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
   if(!clienteFiltro){alert('Digite o nome do cliente no filtro antes de gerar o fechamento');return;}
-  if(!_vendas.length){alert('Nenhuma venda encontrada para esse cliente no período selecionado');return;}
-
   const de=document.getElementById('fven-de')?.value;
   const ate=document.getElementById('fven-ate')?.value;
   const periodoTxt=(de?fDate(de):'início')+' a '+(ate?fDate(ate):'hoje');
 
-  const html=gerarHTMLFechamento(_vendas, clienteFiltro, periodoTxt);
-
-  const win=window.open('','_blank');
-  if(win){win.document.write(html);win.document.close();}
+  const btn=event?.target;if(btn){btn.disabled=true;btn.textContent='Gerando...';}
+  try{
+    const _empIdsVen=EMPRESAS.map(e=>e.id);
+    let qFiltros='&cliente_nome=ilike.*'+encodeURIComponent(clienteFiltro)+'*';
+    if(de)qFiltros+='&data_pedido=gte.'+de;
+    if(ate)qFiltros+='&data_pedido=lte.'+ate;
+    const qBase='?empresa_id=in.('+_empIdsVen.join(',')+')'+qFiltros+'&order=data_pedido.desc';
+    // Busca todas as vendas do cliente no período, paginando internamente (até 50 páginas = 5000 vendas, suficiente para um fechamento individual)
+    let todasVendasCliente=[],offset=0;
+    while(offset<5000){
+      const{rows,total}=await sbGetPaginado('vendas',qBase,offset,1000);
+      todasVendasCliente=todasVendasCliente.concat(rows);
+      offset+=1000;
+      if(offset>=total||!rows.length)break;
+    }
+    if(!todasVendasCliente.length){alert('Nenhuma venda encontrada para esse cliente no período selecionado');return;}
+    const html=gerarHTMLFechamento(todasVendasCliente, clienteFiltro, periodoTxt);
+    const win=window.open('','_blank');
+    if(win){win.document.write(html);win.document.close();}
+  }catch(e){alert('Erro ao gerar fechamento: '+e.message);}
+  finally{if(btn){btn.disabled=false;btn.textContent='📄 Gerar Fechamento';}}
 }
 
-async function loadVendas(){
+let _venPaginaAtual=0;
+const VEN_PAGE_SIZE=100;
+
+async function loadVendas(resetarPagina=true){
   if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
-  const _empIdsVen=EMPRESAS.map(e=>e.id).join(',');
-  const de=document.getElementById('fven-de')?.value;
-  const ate=document.getElementById('fven-ate')?.value;
+  if(resetarPagina)_venPaginaAtual=0;
+  const _empIdsVen=EMPRESAS.map(e=>e.id);
+  let de=document.getElementById('fven-de')?.value;
+  let ate=document.getElementById('fven-ate')?.value;
+  // Período padrão: mês atual, quando nenhum filtro de data foi definido pelo usuário
+  if(!de&&!ate){
+    const hoje=new Date();
+    de=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];
+    ate=hoje.toISOString().split('T')[0];
+    const deEl=document.getElementById('fven-de'),ateEl=document.getElementById('fven-ate');
+    if(deEl)deEl.value=de;
+    if(ateEl)ateEl.value=ate;
+  }
   const canal=document.getElementById('fven-canal')?.value;
-  const sku=document.getElementById('fven-sku')?.value;
-  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim().toLowerCase();
+  const sku=document.getElementById('fven-sku')?.value.trim();
+  const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
   document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    let qBase='?empresa_id=in.('+_empIdsVen+')&order=data_pedido.desc&limit=2000';
-    if(de)qBase+='&data_pedido=gte.'+de;
-    if(ate)qBase+='&data_pedido=lte.'+ate;
-    const todasVendas=await sbGet('vendas',qBase);
-    const canais=[...new Set(todasVendas.map(v=>v.marketplace).filter(Boolean))].sort();
-    const selCanal=document.getElementById('fven-canal');
-    if(selCanal){const cv=selCanal.value;selCanal.innerHTML='<option value="">Todos</option>'+canais.map(c=>'<option value="'+c+'">'+c+'</option>').join('');selCanal.value=cv;}
-    _vendas=todasVendas.filter(v=>{
-      if(canal&&v.marketplace!==canal)return false;
-      if(sku&&!(v.sku||'').toUpperCase().includes(sku.toUpperCase()))return false;
-      if(clienteFiltro&&!(v.cliente_nome||'').toLowerCase().includes(clienteFiltro))return false;
-      return true;
-    });
-    const rec=_vendas.reduce((s,v)=>s+(v.valor_total||v.valor_unitario*v.quantidade||0),0);
-    const uni=_vendas.reduce((s,v)=>s+(v.quantidade||0),0);
-    const pedidos=[...new Set(_vendas.map(v=>v.pedido_id))].length;
-    document.getElementById('ven-rec').textContent=fBRL(rec);
-    document.getElementById('ven-ped').textContent=fN(_vendas.length);
-    document.getElementById('ven-uni').textContent=fN(uni);
-    document.getElementById('ven-tkt').textContent=_vendas.length?fBRL(rec/_vendas.length):'—';
+    // Monta querystring comum (filtros aplicados no banco, não no navegador)
+    let qFiltros='&data_pedido=gte.'+de+'&data_pedido=lte.'+ate;
+    if(canal)qFiltros+='&marketplace=eq.'+encodeURIComponent(canal);
+    if(sku)qFiltros+='&sku=ilike.*'+encodeURIComponent(sku)+'*';
+    if(clienteFiltro)qFiltros+='&cliente_nome=ilike.*'+encodeURIComponent(clienteFiltro)+'*';
 
-    if(!_vendas.length){
+    // KPIs agregados calculados no banco via RPC — nunca traz as linhas cruas
+    const kpis=await sbRpc('vendas_kpis',{
+      p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate,
+      p_canal:canal||null,p_sku:sku||null,p_cliente:clienteFiltro||null
+    });
+    const k=kpis[0]||{total_receita:0,total_unidades:0,total_pedidos:0,total_linhas:0};
+    document.getElementById('ven-rec').textContent=fBRL(k.total_receita);
+    document.getElementById('ven-ped').textContent=fN(k.total_pedidos);
+    document.getElementById('ven-uni').textContent=fN(k.total_unidades);
+    document.getElementById('ven-tkt').textContent=k.total_linhas?fBRL(k.total_receita/k.total_linhas):'—';
+
+    // Canais distintos do período (para popular o filtro), via RPC — não depende da página atual
+    sbRpc('vendas_canais_distintos',{p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate}).then(canais=>{
+      const selCanal=document.getElementById('fven-canal');
+      if(selCanal){const cv=selCanal.value;selCanal.innerHTML='<option value="">Todos</option>'+canais.map(c=>'<option value="'+c.marketplace+'">'+c.marketplace+'</option>').join('');selCanal.value=cv;}
+    }).catch(()=>{});
+
+    if(!k.total_linhas){
       document.getElementById('ven-table').innerHTML='<div class="empty"><div class="empty-icon">🛒</div><div class="empty-title">Nenhuma venda encontrada</div></div>';
+      document.getElementById('ven-paginacao').innerHTML='';
       return;
     }
+
+    // Página atual da tabela — só essa fatia é trazida e renderizada
+    const qBase='?empresa_id=in.('+_empIdsVen.join(',')+')'+qFiltros+'&order=data_pedido.desc';
+    const{rows:_vendas,total}=await sbGetPaginado('vendas',qBase,_venPaginaAtual*VEN_PAGE_SIZE,VEN_PAGE_SIZE);
+
     const hdr='<table><thead><tr><th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>'
       +'<th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th>'
       +'<th style="text-align:right">Total</th><th></th></tr></thead><tbody>';
@@ -3497,9 +3540,25 @@ async function loadVendas(){
         +'</tr>';
     }).join('');
     document.getElementById('ven-table').innerHTML=hdr+trows+'</tbody></table>';
+
+    // Paginação
+    const totalPaginas=Math.max(1,Math.ceil(total/VEN_PAGE_SIZE));
+    const paginaHumana=_venPaginaAtual+1;
+    const inicio=_venPaginaAtual*VEN_PAGE_SIZE+1;
+    const fim=Math.min(total,inicio+VEN_PAGE_SIZE-1);
+    document.getElementById('ven-paginacao').innerHTML=
+      '<span>Mostrando '+fN(inicio)+'–'+fN(fim)+' de '+fN(total)+' vendas (página '+paginaHumana+' de '+fN(totalPaginas)+')</span>'+
+      '<span style="display:flex;gap:8px">'+
+      '<button class="btn btn-secondary btn-sm" '+(_venPaginaAtual<=0?'disabled':'')+' onclick="venMudarPagina(-1)">‹ Anterior</button>'+
+      '<button class="btn btn-secondary btn-sm" '+(paginaHumana>=totalPaginas?'disabled':'')+' onclick="venMudarPagina(1)">Próxima ›</button>'+
+      '</span>';
   }catch(e){
     document.getElementById('ven-table').innerHTML='<div class="empty">Erro: '+e.message+'</div>';
   }
+}
+function venMudarPagina(delta){
+  _venPaginaAtual=Math.max(0,_venPaginaAtual+delta);
+  loadVendas(false);
 }
 
 function mostrarLoginEmpresa(){
@@ -3559,14 +3618,14 @@ function logoutFaccao(){
 }
 
 let _chartMensal=null;
-function renderChartMensal(vendas){
+function renderChartMensal(agregado){
   const ctx=document.getElementById('chart-mensal');
   if(!ctx)return;
   // Agrupar por mês e categoria
   const porMesCat={};
   const cats=new Set();
   const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  vendas.forEach(v=>{
+  agregado.forEach(v=>{
     if(!v.data_pedido)return;
     const d=new Date(v.data_pedido+'T12:00:00');
     const mes=d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0');
@@ -3574,8 +3633,8 @@ function renderChartMensal(vendas){
     cats.add(cat);
     if(!porMesCat[mes])porMesCat[mes]={};
     if(!porMesCat[mes][cat])porMesCat[mes][cat]={qtd:0,val:0};
-    porMesCat[mes][cat].qtd+=v.quantidade||0;
-    porMesCat[mes][cat].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+    porMesCat[mes][cat].qtd+=v.qtd||0;
+    porMesCat[mes][cat].val+=v.val||0;
   });
   const meses=Object.keys(porMesCat).sort();
   const catList=[...cats].sort();
@@ -3633,7 +3692,7 @@ let _estoqueMP = [], _estoqueSKU = [];
 
 async function calcularEstoqueModelo(){
   if(!EMPRESAS.length){return;}
-  const _empIdsEst=EMPRESAS.map(e=>e.id).join(',');
+  const _empIdsEst=EMPRESAS.map(e=>e.id);
   const de=document.getElementById('fest-de')?.value;
   const ate=document.getElementById('fest-ate')?.value;
   const dias=parseInt(document.getElementById('fest-dias')?.value)||30;
@@ -3641,18 +3700,18 @@ async function calcularEstoqueModelo(){
   const el=document.getElementById('est-resultado');
   el.innerHTML='<div class="loading"><div class="spinner"></div> Calculando...</div>';
   try{
-    // Buscar vendas do período base
-    const vendas=await sbGet('vendas','?empresa_id=in.('+_empIdsEst+')&data_pedido=gte.'+de+'&data_pedido=lte.'+ate+'&limit=10000');
-    if(!vendas.length){el.innerHTML='<div class="empty">Nenhuma venda no período base</div>';return;}
+    // Vendas do período base já agregadas por SKU+dia no banco — escala para qualquer volume
+    const agregado=await sbRpc('vendas_agregado_sku_dia',{p_empresa_ids:_empIdsEst,p_de:de,p_ate:ate});
+    if(!agregado.length){el.innerHTML='<div class="empty">Nenhuma venda no período base</div>';return;}
     // Calcular dias no período
     const d1=new Date(de+'T12:00:00'), d2=new Date(ate+'T12:00:00');
     const diasBase=Math.max(1,Math.round((d2-d1)/(1000*60*60*24))+1);
     // Média diária por SKU
     const porSku={};
-    vendas.forEach(v=>{
+    agregado.forEach(v=>{
       if(!porSku[v.sku])porSku[v.sku]={qtd:0,val:0};
-      porSku[v.sku].qtd+=v.quantidade||0;
-      porSku[v.sku].val+=(v.valor_total||v.valor_unitario*v.quantidade||0);
+      porSku[v.sku].qtd+=v.qtd||0;
+      porSku[v.sku].val+=v.val||0;
     });
     // Projeção para N dias
     const projecaoSKU=Object.entries(porSku).map(([sku,v])=>({
@@ -3665,7 +3724,7 @@ async function calcularEstoqueModelo(){
     _estoqueSKU=projecaoSKU;
     // Buscar BOM de todos os SKUs
     const skusUnicos=[...new Set(projecaoSKU.map(s=>s.sku))];
-    const bom=await sbGet('estrutura_produto','?empresa_id=in.('+_empIdsEst+')&limit=10000');
+    const bom=await sbGet('estrutura_produto','?empresa_id=in.('+_empIdsEst.join(',')+')&limit=10000');
     const bomPorSku={};
     bom.forEach(b=>{if(!bomPorSku[b.sku])bomPorSku[b.sku]=[];bomPorSku[b.sku].push(b);});
     // Calcular necessidade de MP
