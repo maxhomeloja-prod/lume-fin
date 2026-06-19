@@ -1986,6 +1986,7 @@ async function salvarTerceiro(){
   const senha=document.getElementById('terc-senha').value;
   if(!nome)return alert('Informe o nome');
   const body={nome,email:email||null,ativo:true};
+  if(!id)body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
   if(senha)body.senha_hash=btoa(senha); // armazenamento simples — substituir por hash real em produção
   try{
     if(id)await sbPatch('terceiros',`id=eq.${id}`,body);
