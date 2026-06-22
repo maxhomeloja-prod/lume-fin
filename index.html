@@ -2232,9 +2232,12 @@ async function salvarOP(){
 
 async function excluirOP(id,e){
   if(e)e.stopPropagation();
-  if(!confirm('Excluir esta OP?'))return;
-  await sbDelete('ordens_producao',`id=eq.${id}`);
-  loadOPs();
+  if(!confirm('Excluir esta OP? As entregas vinculadas também serão removidas.'))return;
+  try{
+    await sbDelete('entregas_op',`op_id=eq.${id}`);
+    await sbDelete('ordens_producao',`id=eq.${id}`);
+    loadOPs();
+  }catch(e){alert('Erro ao excluir OP: '+e.message);}
 }
 
 function abrirEntregaOP(id,e){
@@ -4987,8 +4990,9 @@ async function finalizarOPModal(){
 
 async function excluirOPModal(){
   if(!_opDetalheAtual)return;
-  if(!confirm('Excluir a OP ' + _opDetalheAtual.numero + '? Esta ação não pode ser desfeita.'))return;
+  if(!confirm('Excluir a OP ' + _opDetalheAtual.numero + '? As entregas vinculadas também serão removidas. Esta ação não pode ser desfeita.'))return;
   try{
+    await sbDelete('entregas_op','op_id=eq.'+_opDetalheAtual.id);
     await sbDelete('ordens_producao','id=eq.'+_opDetalheAtual.id);
     fecharModal('modal-op-detalhe');
     loadOPs();
