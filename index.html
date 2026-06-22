@@ -4551,7 +4551,9 @@ async function confirmarEntregaFaccao(){
 
     // Registrar cada entrega individualmente
     for(const item of _faccaoCarrinho){
+      const empIdItem=item.avulso?empresaPadrao:(item.op?.empresa_id||empresaPadrao);
       const entrega={
+        empresa_id:empIdItem,
         op_id:item.avulso?null:item.op.id,
         terceiro_id:FACCAO_LOGADO.id,
         sku:item.avulso?item.sku:item.op.sku,
