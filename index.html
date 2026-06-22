@@ -3630,8 +3630,13 @@ async function iniciarFaccaoView(){
 }
 function logoutFaccao(){
   FACCAO_LOGADO=null;
+  _faccaoCarrinho=[];
   localStorage.removeItem('lume_faccao');
-  mostrarLogin();
+  // Esconder tela de facção e voltar para a tela de escolha inicial
+  const fv=document.getElementById('faccao-view');
+  if(fv)fv.style.display='none';
+  document.getElementById('login-screen').style.display='';
+  voltarEscolha();
 }
 
 let _chartMensal=null;
