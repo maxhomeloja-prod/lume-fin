@@ -3610,7 +3610,7 @@ async function loginFaccao(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
     // Verificar se é terceiro
-    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome',{
+    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome,user_id,empresa_id',{
       headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
     });
     const tercs=await rTerc.json();
@@ -4511,7 +4511,9 @@ async function confirmarEntregaFaccao(){
   const venc=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0];
 
   // A notinha pode misturar OPs de empresas diferentes (e itens avulsos sem OP) — cada empresa precisa de seu próprio lançamento financeiro
-  const empresaPadrao=_faccaoCarrinho.find(i=>!i.avulso&&i.op?.empresa_id)?.op.empresa_id||null;
+  let empresaPadrao=_faccaoCarrinho.find(i=>!i.avulso&&i.op?.empresa_id)?.op.empresa_id||null;
+  // Fallback: se todos os itens são avulsos, usar a empresa vinculada ao próprio terceiro logado
+  if(!empresaPadrao&&FACCAO_LOGADO?.empresa_id) empresaPadrao=FACCAO_LOGADO.empresa_id;
   if(!empresaPadrao){btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';alert('Não foi possível identificar a empresa para este lançamento (nenhum item do carrinho está vinculado a uma OP). Adicione ao menos um item com OP antes de confirmar.');return;}
 
   const grupos={}; // empresa_id -> {itens:[...]}
