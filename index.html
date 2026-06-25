@@ -701,6 +701,13 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Facção</span><select class="filter-control" id="fent-terc" onchange="loadEntregas()"><option value="">Todas</option></select></div>
         <div class="filter-group"><span class="filter-label">OP / SKU</span><input type="text" class="filter-control" id="fent-sku" placeholder="Buscar..." oninput="loadEntregas()"></div>
       </div>
+      <div id="entregas-kpi" style="display:none;margin:0 0 12px 0;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px;display:flex;gap:32px;align-items:center">
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">ENTREGAS</div><div id="entregas-kpi-qtd" style="font-size:18px;font-weight:700;color:var(--text)">—</div></div>
+        <div style="width:1px;height:32px;background:var(--border)"></div>
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">TOTAL A PAGAR</div><div id="entregas-kpi-valor" style="font-size:18px;font-weight:700;color:var(--green)">—</div></div>
+        <div style="width:1px;height:32px;background:var(--border)"></div>
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">QUANTIDADE</div><div id="entregas-kpi-pecas" style="font-size:18px;font-weight:700;color:var(--accent)">—</div></div>
+      </div>
       <div class="card"><div class="tbl-wrap" id="entregas-lista"></div></div>
     </div>
 
@@ -1987,7 +1994,10 @@ async function salvarTerceiro(){
   if(!nome)return alert('Informe o nome');
   if(!id&&email&&!senha)return alert('Informe uma senha para criar o acesso de login');
   const body={nome,email:email||null,ativo:true};
-  if(!id)body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
+  if(!id){
+    body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
+    body.empresa_id=(_empresas&&_empresas[0])?_empresas[0].id:null; // empresa padrão do owner
+  }
   try{
     let tercId=id;
     if(id){
@@ -2352,7 +2362,19 @@ async function loadEntregas(){
       return opNum.includes(sku)||eskuU.includes(sku);
     }):entregas;
     const el=document.getElementById('entregas-lista');
-    if(!filtradas.length){el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma entrega encontrada</div></div>';return;}
+    if(!filtradas.length){
+      el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhuma entrega encontrada</div></div>';
+      document.getElementById('entregas-kpi').style.display='none';
+      return;
+    }
+    // Calcular KPIs
+    const totalValor = filtradas.reduce((s,e)=>s+(parseFloat(e.valor_total)||0),0);
+    const totalPecas = filtradas.reduce((s,e)=>s+(parseInt(e.quantidade)||0),0);
+    const kpi=document.getElementById('entregas-kpi');
+    kpi.style.display='flex';
+    document.getElementById('entregas-kpi-qtd').textContent=filtradas.length+' entrega'+(filtradas.length!==1?'s':'');
+    document.getElementById('entregas-kpi-valor').textContent=fBRL(totalValor);
+    document.getElementById('entregas-kpi-pecas').textContent=fN(totalPecas)+' peças';
     el.innerHTML='<table><thead><tr><th>Data Entrega</th><th>OP</th><th>SKU</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>'+
       filtradas.map(e=>'<tr>'+
         '<td>'+fDate(e.data_entrega||e.criado_em?.split('T')[0])+'</td>'+
