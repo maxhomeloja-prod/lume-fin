@@ -4248,14 +4248,8 @@ async function confirmarConectarMarketplace(){
   const empresaId=document.getElementById('mkt-emp-sel').value;
   if(!empresaId){alert('Selecione uma empresa');return;}
   if(!_mktSelecionado)return;
-  // Salvar conexão pendente e redirecionar para OAuth
+  // Redirecionar para OAuth do marketplace sem criar registro pendente
   try{
-    // Criar registro pendente no banco
-    await sbPost('marketplace_conexoes',{
-      empresa_id:empresaId,
-      marketplace:_mktSelecionado,
-      status:'pendente'
-    });
     fecharModal('modal-mkt-empresa');
     // Redirecionar para OAuth do marketplace
     const oauthUrl=await fetch(MKT_WORKER+'/'+_mktSelecionado+'/auth?empresa_id='+empresaId,{
