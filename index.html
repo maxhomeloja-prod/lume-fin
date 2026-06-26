@@ -1669,6 +1669,14 @@ function irPara(pagina){
     if(wraps[pagina]){const el=document.getElementById(wraps[pagina]);if(el)el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Cadastre uma empresa primeiro</div><div class="empty-sub"><button class="btn btn-primary btn-sm" onclick="irPara(\'empresas\')">Ir para Empresas</button></div></div>';}
     if(pagina==='empresas')loadEmpresas();
     if(pagina==='perfil')loadPerfil();
+    // Primeiro acesso: abrir modal de criação de empresa automaticamente
+    if(pagina==='dashboard'){
+      setTimeout(()=>{
+        abrirModal('modal-empresa');
+        const subtitulo=document.querySelector('#modal-empresa .modal-sub');
+        if(subtitulo)subtitulo.textContent='Bem-vindo! Cadastre sua empresa para começar a usar o sistema.';
+      }, 300);
+    }
     return;
   }
   const loaders={
