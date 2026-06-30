@@ -2004,7 +2004,7 @@ async function salvarTerceiro(){
   const body={nome,email:email||null,ativo:true};
   if(!id){
     body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
-    body.empresa_id=(_empresas&&_empresas[0])?_empresas[0].id:null; // empresa padrão do owner
+    body.empresa_id=(EMPRESAS&&EMPRESAS[0])?EMPRESAS[0].id:null; // empresa padrão do owner
   }
   try{
     let tercId=id;
