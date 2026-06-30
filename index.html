@@ -943,6 +943,7 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">Balancete</div><div class="page-sub">Receitas e despesas realizadas</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">📅 Visão Semanal</button>
+          <button class="btn btn-secondary btn-sm" onclick="imprimirBalancete()">🖨️ Imprimir</button>
           <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
         </div>
       </div>
@@ -3152,7 +3153,14 @@ function renderBalancete(){
 
   if(_balSemanal){renderBalanceteSemanal(agrupado);return;}
 
-  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){return a.total-b.total;});
+  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){
+    var ordem=['Fornecedores de Matéria Prima','Mão de Obra Interna','Facção','Custos Fixos','Impostos e Taxas','Despesas Bancárias','Empréstimos e Financiamentos','Pró-labore'];
+    var ia=ordem.indexOf(a.nome);var ib=ordem.indexOf(b.nome);
+    if(ia===-1&&ib===-1)return a.total-b.total; // categorias fora da lista: mantém ordem por valor
+    if(ia===-1)return 1; // categorias não mapeadas vão para o final
+    if(ib===-1)return -1;
+    return ia-ib;
+  });
   var rec=Object.values(agrupado).filter(function(g){return g.tipo==='RECEITA'&&!g.especial;}).sort(function(a,b){return b.total-a.total;});
   var esp=Object.values(agrupado).filter(function(g){return g.especial;});
 
@@ -3192,6 +3200,99 @@ function renderBalancete(){
     (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div><div class="bal-table">'+
       esp.map(function(i){return '<div class="bal-row"><span class="bal-row-name">'+i.nome+'</span><span class="bal-row-val" style="color:var(--text2)">'+fBRL(i.total)+'</span></div>';}).join('')+
       '</div></div>':'');
+}
+
+function imprimirBalancete(){
+  if(!_balTransacoes.length){alert('Aplique um período antes de imprimir.');return;}
+
+  // Reagrupar com a mesma lógica de renderBalancete (sem expandir transações individuais)
+  var agrupado={};var totalRec=0,totalDesp=0;
+  _balTransacoes.forEach(function(t){
+    var catId=t.categoria_id;var ehEsp=CATS_ESPECIAIS.has(catId);
+    var cat=CATEGORIAS.find(function(c){return c.id===catId;});var nomeFinal,tipoFinal,key;
+    if(ehEsp){key='ESP::'+catId;nomeFinal=(cat&&cat.nome)||'Outros';tipoFinal=(cat&&cat.tipo)||(t.valor>=0?'RECEITA':'DESPESA');}
+    else{if(cat&&cat.categoria_pai_id){var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});nomeFinal=(pai&&pai.nome)||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=(cat&&cat.nome)||'(Sem categoria)';tipoFinal=(cat&&cat.tipo)||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
+    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp};
+    agrupado[key].total+=t.valor;
+    if(!ehEsp){if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=t.valor;}
+  });
+  var saldo=totalRec+totalDesp;
+
+  var ordemDesp=['Fornecedores de Matéria Prima','Mão de Obra Interna','Facção','Custos Fixos','Impostos e Taxas','Despesas Bancárias','Empréstimos e Financiamentos','Pró-labore'];
+  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){
+    var ia=ordemDesp.indexOf(a.nome);var ib=ordemDesp.indexOf(b.nome);
+    if(ia===-1&&ib===-1)return a.total-b.total;
+    if(ia===-1)return 1;if(ib===-1)return -1;
+    return ia-ib;
+  });
+  var rec=Object.values(agrupado).filter(function(g){return g.tipo==='RECEITA'&&!g.especial;}).sort(function(a,b){return b.total-a.total;});
+
+  // Contexto do relatório: período, empresas e modo de visão selecionados pelo usuário
+  var de=document.getElementById('fbal-de')?.value;var ate=document.getElementById('fbal-ate')?.value;
+  var periodoTxt=(de&&ate)?(fDate(de)+' a '+fDate(ate)):(de?('A partir de '+fDate(de)):(ate?('At\u00e9 '+fDate(ate)):'Todo o per\u00edodo'));
+  var empTxt=document.getElementById('fbal-emp-label')?.textContent||'Todas';
+  var modoTxt=_balSemanal?'Vis\u00e3o Semanal':'Vis\u00e3o por Categoria';
+  var agora=new Date();var emitidoTxt=agora.toLocaleDateString('pt-BR')+' \u00e0s '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+  function linhaHtml(item,corPositivo){
+    var valorAbs=Math.abs(item.total);
+    var pct=totalRec>0?((valorAbs/totalRec)*100).toFixed(1)+'%':'\u2014';
+    return '<tr><td class="pr-nome">'+item.nome+'</td><td class="pr-pct">'+pct+'</td><td class="pr-val" style="color:'+corPositivo+'">'+fBRL(valorAbs)+'</td></tr>';
+  }
+
+  var html='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Balancete \u2014 '+periodoTxt+'</title><style>'+
+    '@page{size:A4;margin:18mm 16mm}'+
+    '*{box-sizing:border-box}'+
+    'body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1a1a2e;margin:0;padding:0}'+
+    '.pr-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a1a2e;padding-bottom:10px;margin-bottom:4px}'+
+    '.pr-title{font-size:20px;font-weight:700;margin:0}'+
+    '.pr-sub{font-size:12px;color:#666;margin-top:2px}'+
+    '.pr-meta{text-align:right;font-size:11px;color:#666;line-height:1.6}'+
+    '.pr-kpis{display:flex;gap:10px;margin:14px 0 18px}'+
+    '.pr-kpi{flex:1;border:1px solid #ddd;border-radius:6px;padding:8px 10px;background:#f7f7f9}'+
+    '.pr-kpi-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.03em}'+
+    '.pr-kpi-val{font-size:16px;font-weight:700;margin-top:2px}'+
+    '.pr-section-title{font-size:13px;font-weight:700;background:#1a1a2e;color:#fff;padding:6px 10px;border-radius:4px 4px 0 0;margin-top:16px}'+
+    'table.pr-table{width:100%;border-collapse:collapse;border:1px solid #ddd;border-top:none}'+
+    'table.pr-table td{padding:7px 10px;font-size:12px;border-bottom:1px solid #eee}'+
+    'table.pr-table tr:last-child td{border-bottom:none}'+
+    '.pr-nome{width:60%}'+
+    '.pr-pct{width:15%;text-align:right;color:#999;font-size:11px}'+
+    '.pr-val{width:25%;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}'+
+    '.pr-totalrow td{background:#f0f0f4;font-weight:700;border-top:1.5px solid #1a1a2e}'+
+    '.pr-saldo{margin-top:18px;display:flex;justify-content:flex-end}'+
+    '.pr-saldo-box{border:1.5px solid #1a1a2e;border-radius:6px;padding:10px 18px;text-align:right;min-width:240px}'+
+    '.pr-saldo-label{font-size:11px;color:#666;text-transform:uppercase}'+
+    '.pr-saldo-val{font-size:20px;font-weight:700;margin-top:2px}'+
+    '.pr-footer{margin-top:28px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center}'+
+    '.green{color:#1a7a4a}.red{color:#b32424}'+
+    '@media print{.pr-noprint{display:none}}'+
+    '</style></head><body>'+
+    '<div class="pr-header">'+
+      '<div><div class="pr-title">Balancete Financeiro</div><div class="pr-sub">'+periodoTxt+'</div></div>'+
+      '<div class="pr-meta">Empresas: '+empTxt+'<br>'+modoTxt+'<br>Emitido em '+emitidoTxt+'</div>'+
+    '</div>'+
+    '<div class="pr-kpis">'+
+      '<div class="pr-kpi"><div class="pr-kpi-label">Receitas</div><div class="pr-kpi-val green">'+fBRL(totalRec)+'</div></div>'+
+      '<div class="pr-kpi"><div class="pr-kpi-label">Despesas</div><div class="pr-kpi-val red">'+fBRL(Math.abs(totalDesp))+'</div></div>'+
+      '<div class="pr-kpi"><div class="pr-kpi-label">Saldo</div><div class="pr-kpi-val '+(saldo>=0?'green':'red')+'">'+fBRL(saldo)+'</div></div>'+
+    '</div>'+
+    (rec.length?'<div class="pr-section-title">Receitas</div><table class="pr-table">'+
+      rec.map(function(i){return linhaHtml(i,'#1a7a4a');}).join('')+
+      '<tr class="pr-totalrow"><td class="pr-nome">Total Receitas</td><td class="pr-pct"></td><td class="pr-val green">'+fBRL(totalRec)+'</td></tr>'+
+      '</table>':'')+
+    (desp.length?'<div class="pr-section-title">Despesas</div><table class="pr-table">'+
+      desp.map(function(i){return linhaHtml(i,'#b32424');}).join('')+
+      '<tr class="pr-totalrow"><td class="pr-nome">Total Despesas</td><td class="pr-pct"></td><td class="pr-val red">'+fBRL(Math.abs(totalDesp))+'</td></tr>'+
+      '</table>':'')+
+    '<div class="pr-saldo"><div class="pr-saldo-box"><div class="pr-saldo-label">Saldo do Per\u00edodo</div><div class="pr-saldo-val '+(saldo>=0?'green':'red')+'">'+fBRL(saldo)+'</div></div></div>'+
+    '<div class="pr-footer">Lume Financeiro \u00b7 Relat\u00f3rio gerado automaticamente</div>'+
+    '<script>window.onload=function(){window.print();}<\/script>'+
+    '</body></html>';
+
+  var w=window.open('','_blank');
+  if(!w){alert('Permita pop-ups para gerar o PDF de impress\u00e3o.');return;}
+  w.document.open();w.document.write(html);w.document.close();
 }
 
 async function loadLancamentos(){
