@@ -5321,26 +5321,40 @@ async function uploadCorrelacao(input){
   const prog=document.getElementById('prog-corr');
   const txt=document.getElementById('prog-corr-txt');
   const bar=document.getElementById('prog-corr-bar');
-  prog.style.display='';bar.style.width='5%';
+  prog.style.display='block';bar.style.width='5%';
   txt.textContent='Lendo arquivo...';
 
   // Ler como xlsx ou csv dependendo da extensão
   let linhas=[];
   try{
     if(file.name.endsWith('.xlsx')||file.name.endsWith('.xls')){
-      if(typeof XLSX==='undefined')throw new Error('Biblioteca XLSX não carregada');
+      if(typeof XLSX==='undefined'){
+        txt.textContent='❌ Erro: biblioteca XLSX não carregada. Recarregue a página e tente novamente.';
+        console.error('[uploadCorrelacao] XLSX não carregado');
+        return;
+      }
+      txt.textContent='Lendo Excel...';
       const buf=await file.arrayBuffer();
-      const wb=XLSX.read(buf,{type:'array'});
-      const ws=wb.Sheets[wb.SheetNames[0]]; // sempre primeira aba
+      const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
       const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      // Pular header — usar colunas: 0=sku_venda, 1=sku_canonico, 2=multiplicador, 3=empresa_id
-      linhas=data.slice(1).filter(r=>r[0]&&r[1]&&String(r[1]).trim()!=='');
+      linhas=data.slice(1).filter(r=>r[0]&&r[1]&&String(r[1]).trim()!==''&&String(r[1]).trim().toUpperCase()!=='NOVO');
+      txt.textContent='Arquivo lido: '+linhas.length+' linhas encontradas...';
+      console.log('[uploadCorrelacao] linhas válidas:', linhas.length, linhas.slice(0,3));
     } else {
-      // fallback CSV legado
       const text=await file.text();
       linhas=text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>l.split(',').map(c=>c.trim().replace(/"/g,'')));
     }
-  }catch(e){prog.style.display='none';alert('Erro ao ler arquivo: '+e.message);return;}
+  }catch(e){
+    txt.textContent='❌ Erro ao ler arquivo: '+e.message;
+    console.error('[uploadCorrelacao] erro leitura:', e);
+    return;
+  }
+
+  if(!linhas.length){
+    txt.textContent='❌ Nenhuma linha válida encontrada. Verifique se a coluna B (sku_canonico) está preenchida.';
+    return;
+  }
 
   let ok=0,erros=0;
   for(let i=0;i<linhas.length;i++){
@@ -5348,14 +5362,12 @@ async function uploadCorrelacao(input){
     const skuVenda=String(row[0]||'').trim();
     const skuCan=String(row[1]||'').trim().toUpperCase();
     const multiplicador=parseInt(row[2])||1;
-    // empresa_id: coluna D do xlsx exportado, fallback para dropdown se não existir
     const empresaIdUp=String(row[3]||'').trim()||document.getElementById('corr-upload-empresa')?.value;
     if(!skuVenda||!skuCan||skuCan==='NOVO'||!empresaIdUp)continue;
     try{
       const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
       if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan,multiplicador});}
       else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});}
-      // Atualizar vendas afetadas respeitando conflito de constraint
       const vendasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario');
       for(const v of vendasUp){
         const qtdNova=v.quantidade*multiplicador;
@@ -5369,11 +5381,14 @@ async function uploadCorrelacao(input){
         }
       }
       ok++;
-    }catch(e){erros++;}
+    }catch(e){
+      erros++;
+      console.error('[uploadCorrelacao] erro linha '+(i+1)+':', skuVenda, e.message);
+    }
     bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
     txt.textContent='Processando '+(i+1)+'/'+linhas.length+' — '+ok+' ok'+(erros?', '+erros+' erros':'');
   }
-  txt.textContent='✅ '+ok+' correlações processadas'+(erros?', '+erros+' erros':'');
+  txt.textContent='✅ '+ok+' correlações processadas'+(erros?', '+erros+' erros. Veja o console para detalhes.':'');
   setTimeout(()=>{
     prog.style.display='none';
     loadCorrelacao();
