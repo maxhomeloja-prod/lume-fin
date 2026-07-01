@@ -5183,7 +5183,7 @@ async function loadCorrelacao(){
               '<option value="__novo__">+ Novo canônico</option>'+
             '</select>'+
             '<input type="number" min="1" value="1" style="width:56px;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);text-align:center" id="mult-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" title="Multiplicador kit">'+
-            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" data-empresa="'+(empresaPorSkuVenda[sku]||'')+'" onclick="associarSKU(this.dataset.sku,this.dataset.empresa)">Associar</button>'+
+            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" data-empresa="'+(empresaPorSkuVenda[sku]||'')+'" onclick="associarSKU(this.dataset.sku,this.dataset.empresa,this)">Associar</button>'+
           '</div>').join('')+
           '</div></div>';
       }else{
@@ -5227,27 +5227,35 @@ async function verificarNovoCanonico(sel){
   sel.value=skuFormatado;
 }
 
-async function associarSKU(skuVenda,empresaIdVenda){
+async function associarSKU(skuVenda,empresaIdVenda,btnEl){
+  if(btnEl){btnEl.disabled=true;btnEl.textContent='Salvando...';}
   const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const sel=document.getElementById(key);
-  if(!sel)return;
+  if(!sel){if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
   let skuCan=sel.value;
-  if(!skuCan||skuCan==='__novo__'){alert('Selecione ou crie um SKU canônico');return;}
-  if(!empresaIdVenda){alert('Não foi possível identificar a empresa dessa venda');return;}
+  if(!skuCan||skuCan==='__novo__'){alert('Selecione ou crie um SKU canônico');if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
+  if(!empresaIdVenda){alert('Não foi possível identificar a empresa dessa venda');if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
   const multKey='mult-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
   const multEl=document.getElementById(multKey);
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
-    await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
-    // Buscar vendas com esse SKU (na empresa de origem) para ajustar quantidade e preço unitário
+    const existente=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdVenda+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
+    if(existente.length>0){
+      await sbPatch('correlacao_sku','id=eq.'+existente[0].id,{sku_canonico:skuCan,multiplicador});
+    } else {
+      await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
+    }
     const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade,valor_unitario');
     for(const v of vendasAfetadas){
       const qtdNova=v.quantidade*multiplicador;
-      const precoUnitNovo=v.valor_unitario/multiplicador; // divide o preço para não inflar o valor_total (quantidade × preço)
+      const precoUnitNovo=v.valor_unitario/multiplicador;
       await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
     }
     loadCorrelacao();
-  }catch(e){alert('Erro: '+e.message);}
+  }catch(e){
+    alert('Erro: '+e.message);
+    if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}
+  }
 }
 
 async function excluirCorrelacao(id){
