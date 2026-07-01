@@ -5159,15 +5159,17 @@ async function loadCorrelacao(){
   try{
     _correlacao=await sbGet('correlacao_sku','?empresa_id=in.('+_empIdsCorr+')&order=sku_canonico.asc&limit=2000');
 
-    // SKUs sem correlação — buscar SKUs únicos das vendas por empresa (sem limit)
-    // Cada par (sku, empresa_id) é tratado independentemente para não perder SKUs
-    const vendaSkusRaw=await sbGet('vendas','?empresa_id=in.('+_empIdsCorr+')&select=sku,empresa_id&limit=50000');
-    // Mapear por par único (sku+empresa_id) — não apenas sku, para não perder empresas diferentes com mesmo SKU
-    const parsUnicos=new Map(); // chave: sku+empresa_id → {sku, empresa_id}
+    // SKUs sem correlação — buscar via RPC que retorna pares (sku, empresa_id) distintos
+    // Evita o teto de 1000 registros do PostgREST em bases com muitas vendas
+    const empIdsArr=_empIdsCorr.split(',');
+    const vendaSkusRaw=await sbRpc('skus_distintos_por_empresa',{emp_ids:empIdsArr});
+    // Mapear por par único (sku+empresa_id)
+    const parsUnicos=new Map();
     vendaSkusRaw.forEach(v=>{if(v.sku){const k=v.sku+'||'+v.empresa_id;if(!parsUnicos.has(k))parsUnicos.set(k,{sku:v.sku,empresa_id:v.empresa_id});}});
     // Mapeados: par (sku_venda, empresa_id) que já tem correlação
     const chavesMapeadas=new Set(_correlacao.map(c=>c.sku_venda+'||'+c.empresa_id));
     const semCorrPares=[...parsUnicos.values()].filter(p=>!chavesMapeadas.has(p.sku+'||'+p.empresa_id));
+
 
     // Renderizar pendentes
     const elPend=document.getElementById('corr-pendentes');
