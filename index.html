@@ -5159,32 +5159,36 @@ async function loadCorrelacao(){
   try{
     _correlacao=await sbGet('correlacao_sku','?empresa_id=in.('+_empIdsCorr+')&order=sku_canonico.asc&limit=2000');
 
-    // SKUs sem correlação — buscar SKUs únicos das vendas que não têm correlação (mantendo qual empresa cada SKU pendente pertence)
-    const vendaSkusRaw=await sbGet('vendas','?empresa_id=in.('+_empIdsCorr+')&select=sku,empresa_id&limit=5000');
-    const empresaPorSkuVenda={};vendaSkusRaw.forEach(v=>{if(v.sku&&!empresaPorSkuVenda[v.sku])empresaPorSkuVenda[v.sku]=v.empresa_id;});
-    const skusVenda=[...new Set(vendaSkusRaw.map(v=>v.sku).filter(Boolean))];
-    const skusMapeados=new Set(_correlacao.map(c=>c.sku_venda));
-    const semCorr=skusVenda.filter(s=>!skusMapeados.has(s));
+    // SKUs sem correlação — buscar SKUs únicos das vendas por empresa (sem limit)
+    // Cada par (sku, empresa_id) é tratado independentemente para não perder SKUs
+    const vendaSkusRaw=await sbGet('vendas','?empresa_id=in.('+_empIdsCorr+')&select=sku,empresa_id&limit=50000');
+    // Mapear por par único (sku+empresa_id) — não apenas sku, para não perder empresas diferentes com mesmo SKU
+    const parsUnicos=new Map(); // chave: sku+empresa_id → {sku, empresa_id}
+    vendaSkusRaw.forEach(v=>{if(v.sku){const k=v.sku+'||'+v.empresa_id;if(!parsUnicos.has(k))parsUnicos.set(k,{sku:v.sku,empresa_id:v.empresa_id});}});
+    // Mapeados: par (sku_venda, empresa_id) que já tem correlação
+    const chavesMapeadas=new Set(_correlacao.map(c=>c.sku_venda+'||'+c.empresa_id));
+    const semCorrPares=[...parsUnicos.values()].filter(p=>!chavesMapeadas.has(p.sku+'||'+p.empresa_id));
 
     // Renderizar pendentes
     const elPend=document.getElementById('corr-pendentes');
     if(elPend){
-      if(semCorr.length){
+      if(semCorrPares.length){
         const skusCanonicos=[...new Set(_correlacao.map(c=>c.sku_canonico))].sort();
-        elPend.innerHTML='<div class="card mb16"><div class="card-title" style="color:var(--amber)">⚠ '+semCorr.length+' SKU'+
-          (semCorr.length>1?'s':'')+' sem correlação</div>'+
+        elPend.innerHTML='<div class="card mb16"><div class="card-title" style="color:var(--amber)">⚠ '+semCorrPares.length+' SKU'+
+          (semCorrPares.length>1?'s':'')+' sem correlação</div>'+
           '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+
-          semCorr.map(sku=>'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px">'+
-            '<span style="font-weight:500">'+sku+'</span>'+
-            '<span style="color:var(--text3);font-size:10px">'+(empNomeMapCorr[empresaPorSkuVenda[sku]]||'—')+'</span>'+
-            '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" onchange="verificarNovoCanonico(this)">'+
+          semCorrPares.map(par=>{const chaveB64=btoa(par.sku+'||'+par.empresa_id).replace(/[^a-zA-Z0-9]/g,'');return(
+            '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px">'+
+            '<span style="font-weight:500">'+par.sku+'</span>'+
+            '<span style="color:var(--text3);font-size:10px">'+(empNomeMapCorr[par.empresa_id]||'—')+'</span>'+
+            '<select class="form-control" style="width:160px;padding:4px 8px;font-size:11px" id="sel-corr-'+chaveB64+'" onchange="verificarNovoCanonico(this)">'+
               '<option value="">Selecionar canônico...</option>'+
               skusCanonicos.map(c=>'<option value="'+c+'">'+c+'</option>').join('')+
               '<option value="__novo__">+ Novo canônico</option>'+
             '</select>'+
-            '<input type="number" min="1" value="1" style="width:56px;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);text-align:center" id="mult-corr-'+btoa(sku).replace(/[^a-zA-Z0-9]/g,'')+'" title="Multiplicador kit">'+
-            '<button class="btn btn-primary btn-sm" data-sku="'+sku+'" data-empresa="'+(empresaPorSkuVenda[sku]||'')+'" onclick="associarSKU(this.dataset.sku,this.dataset.empresa,this)">Associar</button>'+
-          '</div>').join('')+
+            '<input type="number" min="1" value="1" style="width:56px;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);text-align:center" id="mult-corr-'+chaveB64+'" title="Multiplicador kit">'+
+            '<button class="btn btn-primary btn-sm" data-sku="'+par.sku+'" data-empresa="'+par.empresa_id+'" onclick="associarSKU(this.dataset.sku,this.dataset.empresa,this)">Associar</button>'+
+          '</div>');}).join('')+
           '</div></div>';
       }else{
         elPend.innerHTML='<div class="card mb16"><div style="color:var(--green);font-size:13px;padding:8px">✅ Todos os SKUs de venda têm correlação</div></div>';
@@ -5229,13 +5233,14 @@ async function verificarNovoCanonico(sel){
 
 async function associarSKU(skuVenda,empresaIdVenda,btnEl){
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Salvando...';}
-  const key='sel-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
+  const chaveB64=btoa(skuVenda+'||'+empresaIdVenda).replace(/[^a-zA-Z0-9]/g,'');
+  const key='sel-corr-'+chaveB64;
   const sel=document.getElementById(key);
   if(!sel){if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
   let skuCan=sel.value;
   if(!skuCan||skuCan==='__novo__'){alert('Selecione ou crie um SKU canônico');if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
   if(!empresaIdVenda){alert('Não foi possível identificar a empresa dessa venda');if(btnEl){btnEl.disabled=false;btnEl.textContent='Associar';}return;}
-  const multKey='mult-corr-'+btoa(skuVenda).replace(/[^a-zA-Z0-9]/g,'');
+  const multKey='mult-corr-'+chaveB64;
   const multEl=document.getElementById(multKey);
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
