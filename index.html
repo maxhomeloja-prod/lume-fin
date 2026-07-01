@@ -5245,11 +5245,19 @@ async function associarSKU(skuVenda,empresaIdVenda,btnEl){
     } else {
       await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
     }
-    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade,valor_unitario');
+    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario');
     for(const v of vendasAfetadas){
       const qtdNova=v.quantidade*multiplicador;
       const precoUnitNovo=v.valor_unitario/multiplicador;
-      await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
+      // Verificar se já existe venda com o SKU canônico no mesmo pedido (conflito de constraint)
+      const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade');
+      if(jaExiste.length>0){
+        // Somar a quantidade ao registro existente e deletar este
+        await sbPatch('vendas','id=eq.'+jaExiste[0].id,{quantidade:jaExiste[0].quantidade+qtdNova});
+        await sbDelete('vendas','id=eq.'+v.id);
+      } else {
+        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
+      }
     }
     loadCorrelacao();
   }catch(e){
