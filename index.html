@@ -2829,12 +2829,13 @@ async function salvarBOM(){
   const sku=document.getElementById('bom-sku-val').value;
   const linhas=document.getElementById('bom-linhas').querySelectorAll('[id^=bom-m-]');
   const itens=[];
-  linhas.forEach(el=>{const n=el.id.split('-').pop();const mat=el.value.trim();const qtd=parseFloat(document.getElementById(`bom-q-${n}`)?.value);const un=document.getElementById(`bom-u-${n}`)?.value||'un';const preco=parseFloat(document.getElementById(`bom-p-${n}`)?.value)||null;if(mat&&qtd)itens.push({material_nome:mat,quantidade:qtd,unidade:un,valor_unitario:preco});});
+  linhas.forEach(el=>{const n=el.id.split('-').pop();const mat=el.value.trim();const qtd=parseFloat(document.getElementById(`bom-q-${n}`)?.value);const un=document.getElementById(`bom-u-${n}`)?.value||'un';const preco=parseFloat(document.getElementById(`bom-p-${n}`)?.value)||null;if(mat&&qtd)itens.push({material_nome:mat,quantidade:qtd,unidade:un,preco_unitario:preco});});
   if(!itens.length)return alert('Adicione pelo menos um material');
+  const empresaId=EMPRESAS[0]?.id;
+  if(!empresaId)return alert('Nenhuma empresa encontrada');
   try{
-    // Estrutura de materiais é vinculada apenas ao SKU, independente da empresa
     await sbDelete('estrutura_produto',`sku=eq.${encodeURIComponent(sku)}`);
-    for(const item of itens)await sbPost('estrutura_produto',{sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,valor_unitario:item.valor_unitario});
+    for(const item of itens)await sbPost('estrutura_produto',{empresa_id:empresaId,sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,preco_unitario:item.preco_unitario});
     fecharModal('modal-bom');loadBOM();
   }catch(e){alert('Erro: '+e.message);}
 }
