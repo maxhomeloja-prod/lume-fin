@@ -7,6 +7,7 @@
 <title>Lume · Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg:        #0a1628;
@@ -772,9 +773,9 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">Correlação SKU</div><div class="page-sub">Mapeamento de SKUs de venda para SKUs canônicos</div></div>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="form-control" id="corr-upload-empresa" style="width:160px;padding:6px 10px;font-size:12px"></select>
-          <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaCorrelacao()">⬇ Modelo</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-correlacao').click()">📂 Upload</button>
-          <input type="file" id="upload-correlacao" accept=".csv" style="display:none" onchange="uploadCorrelacao(this)">
+          <button class="btn btn-secondary btn-sm" onclick="exportarCorrelacaoXlsx()">📥 Exportar Excel</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('upload-correlacao').click()">📂 Upload Excel</button>
+          <input type="file" id="upload-correlacao" accept=".xlsx,.csv" style="display:none" onchange="uploadCorrelacao(this)">
         </div>
       </div>
       <div class="upload-progress" id="prog-corr">
@@ -5287,32 +5288,85 @@ function downloadPlanilhaCorrelacao(){
   URL.revokeObjectURL(url);
 }
 
+async function exportarCorrelacaoXlsx(){
+  if(typeof XLSX==='undefined'){alert('Aguarde o carregamento da biblioteca de Excel e tente novamente.');return;}
+  // Buscar todos os pares pendentes via RPC (mesma lógica do loadCorrelacao)
+  const empIds=EMPRESAS.map(e=>e.id);
+  const empNomeMap={};EMPRESAS.forEach(e=>{empNomeMap[e.id]=e.nome;});
+  let skusDistintos=[];
+  try{skusDistintos=await sbRpc('skus_distintos_por_empresa',{emp_ids:empIds});}
+  catch(e){alert('Erro ao buscar SKUs: '+e.message);return;}
+  const chavesMapeadas=new Set((_correlacao||[]).map(c=>c.sku_venda+'||'+c.empresa_id));
+  const pendentes=skusDistintos.filter(v=>v.sku&&!chavesMapeadas.has(v.sku+'||'+v.empresa_id));
+  if(!pendentes.length){alert('Nenhum SKU pendente de correlação.');return;}
+  const skusCanonicos=[...new Set((_correlacao||[]).map(c=>c.sku_canonico))].sort();
+  // Montar dados: 1 linha por pendente + header
+  const header=['sku_venda','sku_canonico','multiplicador','empresa_id','empresa_nome'];
+  const linhas=pendentes.map(p=>[p.sku,'',1,p.empresa_id,empNomeMap[p.empresa_id]||'']);
+  const wsData=[header,...linhas];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  // Larguras de coluna
+  ws['!cols']=[{wch:40},{wch:40},{wch:14},{wch:38},{wch:30}];
+  // Aba auxiliar com SKUs canônicos para validação de dados
+  const wsRef=XLSX.utils.aoa_to_sheet([['sku_canonico'],...skusCanonicos.map(s=>[s]),['NOVO']]);
+  wsRef['!cols']=[{wch:40}];
+  XLSX.utils.book_append_sheet(wb,ws,'Correlação');
+  XLSX.utils.book_append_sheet(wb,wsRef,'SKUs Canônicos');
+  XLSX.writeFile(wb,'correlacao_skus_'+new Date().toISOString().split('T')[0]+'.xlsx');
+}
+
 async function uploadCorrelacao(input){
   const file=input.files[0];if(!file)return;input.value='';
-  const empresaIdUp=document.getElementById('corr-upload-empresa')?.value;
-  if(!empresaIdUp){alert('Selecione a empresa antes de enviar a planilha');return;}
   const prog=document.getElementById('prog-corr');
   const txt=document.getElementById('prog-corr-txt');
   const bar=document.getElementById('prog-corr-bar');
   prog.style.display='';bar.style.width='5%';
   txt.textContent='Lendo arquivo...';
-  const text=await file.text();
-  const linhas=text.trim().split('\n').slice(1).filter(l=>l.trim());
+
+  // Ler como xlsx ou csv dependendo da extensão
+  let linhas=[];
+  try{
+    if(file.name.endsWith('.xlsx')||file.name.endsWith('.xls')){
+      if(typeof XLSX==='undefined')throw new Error('Biblioteca XLSX não carregada');
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]]; // sempre primeira aba
+      const data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      // Pular header — usar colunas: 0=sku_venda, 1=sku_canonico, 2=multiplicador, 3=empresa_id
+      linhas=data.slice(1).filter(r=>r[0]&&r[1]&&String(r[1]).trim()!=='');
+    } else {
+      // fallback CSV legado
+      const text=await file.text();
+      linhas=text.trim().split('\n').slice(1).filter(l=>l.trim()).map(l=>l.split(',').map(c=>c.trim().replace(/"/g,'')));
+    }
+  }catch(e){prog.style.display='none';alert('Erro ao ler arquivo: '+e.message);return;}
+
   let ok=0,erros=0;
   for(let i=0;i<linhas.length;i++){
-    const cols=linhas[i].split(',').map(c=>c.trim().replace(/"/g,''));
-    const[skuVenda,skuCan,multCol]=cols;
-    if(!skuVenda||!skuCan)continue;
-    const multiplicador=parseInt(multCol)||1;
+    const row=linhas[i];
+    const skuVenda=String(row[0]||'').trim();
+    const skuCan=String(row[1]||'').trim().toUpperCase();
+    const multiplicador=parseInt(row[2])||1;
+    // empresa_id: coluna D do xlsx exportado, fallback para dropdown se não existir
+    const empresaIdUp=String(row[3]||'').trim()||document.getElementById('corr-upload-empresa')?.value;
+    if(!skuVenda||!skuCan||skuCan==='NOVO'||!empresaIdUp)continue;
     try{
-      // Upsert correlação (vinculada à empresa selecionada para este upload)
       const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
-      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan.toUpperCase(),multiplicador});}
-      else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan.toUpperCase(),multiplicador});}
-      // Atualizar vendas com esse SKU preservando original, ajustando quantidade e preço unitário
-      const vendasAfetadasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,quantidade,valor_unitario');
-      for(const v of vendasAfetadasUp){
-        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan.toUpperCase(),sku_original:skuVenda,quantidade:v.quantidade*multiplicador,valor_unitario:v.valor_unitario/multiplicador});
+      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan,multiplicador});}
+      else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});}
+      // Atualizar vendas afetadas respeitando conflito de constraint
+      const vendasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario');
+      for(const v of vendasUp){
+        const qtdNova=v.quantidade*multiplicador;
+        const precoNovo=v.valor_unitario/multiplicador;
+        const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade');
+        if(jaExiste.length>0){
+          await sbPatch('vendas','id=eq.'+jaExiste[0].id,{quantidade:jaExiste[0].quantidade+qtdNova});
+          await sbDelete('vendas','id=eq.'+v.id);
+        } else {
+          await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoNovo});
+        }
       }
       ok++;
     }catch(e){erros++;}
@@ -5323,17 +5377,9 @@ async function uploadCorrelacao(input){
   setTimeout(()=>{
     prog.style.display='none';
     loadCorrelacao();
-    // Recarregar abas que dependem dos SKUs
     if(typeof loadVendas==='function')loadVendas();
-    if(typeof loadABC==='function'){
-      // ABC usa filtros de data — só recarrega se já estiver na aba
-      const pageABC=document.getElementById('page-abc');
-      if(pageABC?.classList.contains('active'))loadABC();
-    }
-    if(typeof loadBOM==='function'){
-      const pageBOM=document.getElementById('page-bom');
-      if(pageBOM?.classList.contains('active'))loadBOM();
-    }
+    if(typeof loadABC==='function'){const p=document.getElementById('page-abc');if(p?.classList.contains('active'))loadABC();}
+    if(typeof loadBOM==='function'){const p=document.getElementById('page-bom');if(p?.classList.contains('active'))loadBOM();}
   },2000);
 }
 
