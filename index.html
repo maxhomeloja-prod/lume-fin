@@ -5154,7 +5154,7 @@ async function loadCorrelacao(){
   const _empIdsCorr=EMPRESAS.map(e=>e.id).join(',');
   const empNomeMapCorr={};EMPRESAS.forEach(e=>{empNomeMapCorr[e.id]=e.nome;});
   const selUpEmp=document.getElementById('corr-upload-empresa');
-  if(selUpEmp&&!selUpEmp.children.length)selUpEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  if(selUpEmp)selUpEmp.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   const el=document.getElementById('corr-lista');
   if(!el)return;
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
