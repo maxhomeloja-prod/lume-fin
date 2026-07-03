@@ -4407,7 +4407,10 @@ async function desconectarMarketplace(id){
 
 async function reconectarMarketplace(id,mkt){
   try{
-    const oauthUrl=await fetch(MKT_WORKER+'/'+mkt+'/auth?reconectar='+id,{
+    // Buscar empresa_id da conexão para passar como state no OAuth
+    const conn=await sbGet('marketplace_conexoes','?id=eq.'+id+'&select=empresa_id');
+    const empresaId=conn[0]?.empresa_id||id; // fallback para id se não encontrar
+    const oauthUrl=await fetch(MKT_WORKER+'/'+mkt+'/auth?empresa_id='+empresaId,{
       headers:{Authorization:'Bearer '+SESSION.access_token}
     });
     const data=await oauthUrl.json();
