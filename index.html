@@ -3690,19 +3690,20 @@ async function loadVendas(resetarPagina=true){
     const qBase='?empresa_id=in.('+_empIdsVen.join(',')+')'+qFiltros+'&order=data_pedido.desc';
     const{rows:_vendas,total}=await sbGetPaginado('vendas',qBase,_venPaginaAtual*VEN_PAGE_SIZE,VEN_PAGE_SIZE);
 
-    const hdr='<table><thead><tr><th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>'
-      +'<th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th>'
-      +'<th style="text-align:right">Total</th><th></th></tr></thead><tbody>';
+    const hdr='<table><thead><tr><th>Nº Pedido</th><th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>'
+      +'<th style="text-align:right">Qtd</th><th style="text-align:right">Total</th>'
+      +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
+      const totalExibir=v.valor_bruto||v.valor_total||v.valor_unitario*v.quantidade;
       return '<tr>'
+        +'<td style="color:var(--text2);font-size:11px;font-family:monospace">'+(v.order_id||v.pedido_id||'—')+'</td>'
         +'<td>'+fDate(v.data_pedido)+'</td>'
         +'<td style="color:var(--text2)">'+(v.marketplace||'—')+'</td>'
         +'<td style="font-weight:500">'+v.sku+'</td>'
         +'<td style="color:var(--text2)">'+(v.cliente_nome||'—')+'</td>'
         +'<td style="text-align:right">'+fN(v.quantidade)+'</td>'
-        +'<td style="text-align:right">'+fBRL(v.valor_unitario)+'</td>'
-        +'<td style="text-align:right;color:var(--green);font-weight:500">'+fBRL(v.valor_total||v.valor_unitario*v.quantidade)+'</td>'
-        +'<td><button class="btn btn-danger btn-sm" onclick="excluirVenda(\'' +v.id+ '\')">✕</button></td>'
+        +'<td style="text-align:right;color:var(--green);font-weight:500">'+fBRL(totalExibir)+'</td>'
+        +'<td><button class="btn btn-danger btn-sm" onclick="excluirVenda(\''+v.id+'\')">✕</button></td>'
         +'</tr>';
     }).join('');
     document.getElementById('ven-table').innerHTML=hdr+trows+'</tbody></table>';
