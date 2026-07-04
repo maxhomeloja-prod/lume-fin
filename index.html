@@ -2673,12 +2673,24 @@ async function finalizarVendaManual(){
   const canal=normalizarCanal(document.getElementById('venda-canal').value.trim());
   const dataVenda=document.getElementById('venda-data').value;
   const clienteNome=document.getElementById('venda-cliente').value.trim();
-  const pedidoIdComum='MANUAL-'+Date.now();
   const empresaSel=await pedirEmpresaParaSalvar();
-  if(!empresaSel)return; // cancelado pelo usuário
+  if(!empresaSel)return;
   try{
+    // Gerar número sequencial VD-XXXX por empresa
+    const numeroPedido=await sbRpc('proximo_numero_pedido_manual',{p_empresa_id:empresaSel});
     for(const item of _vendaCarrinho){
-      await sbPost('vendas',{empresa_id:empresaSel,pedido_id:pedidoIdComum,data_pedido:dataVenda,marketplace:canal||'Venda Direta',sku:item.sku,cliente_nome:clienteNome||null,quantidade:item.quantidade,valor_unitario:item.valor_unitario,valor_total:item.quantidade*item.valor_unitario});
+      await sbPost('vendas',{
+        empresa_id:empresaSel,
+        order_id:numeroPedido,
+        pedido_id:numeroPedido,
+        data_pedido:dataVenda,
+        marketplace:canal||'Venda Direta',
+        sku:item.sku,
+        cliente_nome:clienteNome||null,
+        quantidade:item.quantidade,
+        valor_unitario:item.valor_unitario,
+        valor_total:item.quantidade*item.valor_unitario
+      });
     }
     const itensSalvos=[..._vendaCarrinho];
     _vendaCarrinho=[];
@@ -2721,7 +2733,8 @@ async function uploadVendas(input){
     const cliNome=iCli>=0?cols[iCli]?.trim():'';
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
     const canal=iCanal>=0&&cols[iCanal]?.trim()?normalizarCanal(cols[iCanal].trim()):'Venda Direta';
-    batch.push({empresa_id:empresaSel,pedido_id:'IMPORT-'+Date.now()+'-'+i,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
+    const pedidoId='IMPORT-'+Date.now()+'-'+i;
+    batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
   }
   // Inserir em lotes de 500
   const LOTE=500;
