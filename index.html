@@ -2689,7 +2689,8 @@ async function finalizarVendaManual(){
         cliente_nome:clienteNome||null,
         quantidade:item.quantidade,
         valor_unitario:item.valor_unitario,
-        valor_total:item.quantidade*item.valor_unitario
+        valor_total:item.quantidade*item.valor_unitario,
+        valor_bruto:item.quantidade*item.valor_unitario
       });
     }
     const itensSalvos=[..._vendaCarrinho];
@@ -2734,7 +2735,7 @@ async function uploadVendas(input){
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
     const canal=iCanal>=0&&cols[iCanal]?.trim()?normalizarCanal(cols[iCanal].trim()):'Venda Direta';
     const pedidoId='IMPORT-'+Date.now()+'-'+i;
-    batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco});
+    batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco,valor_bruto:qtd*preco});
   }
   // Inserir em lotes de 500
   const LOTE=500;
