@@ -534,6 +534,7 @@ tr:hover td{background:var(--surface2);}
 
     </nav>
     <div class="topbar-right">
+      <div id="global-spinner" style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--text3)"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Carregando...</div>
       <div class="topbar-user" id="tb-user">—</div>
       <select id="sel-empresa" style="display:none"></select>
       <button class="btn-logout" onclick="logout()">Sair</button>
@@ -561,8 +562,10 @@ tr:hover td{background:var(--surface2);}
       </div>
       <div class="grid-2">
         <div class="card">
-          <div class="card-title">Vendas — Últimos 6 meses</div>
-          <div style="position:relative;height:200px"><canvas id="dash-chart-vendas"></canvas></div>
+          <div class="card-title">Vendas — Hoje</div>
+          <div id="dash-vendas-hoje" style="padding:8px 0">
+            <div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div>
+          </div>
         </div>
         <div class="card">
           <div class="card-title">OPs por Situação</div>
@@ -577,6 +580,12 @@ tr:hover td{background:var(--surface2);}
         <div class="card">
           <div class="card-title">Perda por Facção — Histórico</div>
           <div id="dash-perda-tabela"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="card">
+          <div class="card-title">Top SKUs — Hoje</div>
+          <div id="dash-top-skus-hoje"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
         </div>
       </div>
     </div>
@@ -752,7 +761,20 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fven-de" onchange="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fven-ate" onchange="loadVendas()"></div>
-        <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fven-canal" onchange="loadVendas()"><option value="">Todos</option></select></div>
+        <div class="filter-group" style="position:relative">
+          <span class="filter-label">Canal</span>
+          <div id="fven-canal-btn" onclick="toggleFiltroCanais()" style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px;min-width:160px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span id="fven-canal-label">Todos</span><span>▾</span>
+          </div>
+          <div id="fven-canal-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+            <div id="fven-canal-checks"></div>
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanais(true)">Todos</button>
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanais(false)">Nenhum</button>
+              <button class="btn btn-primary btn-sm" onclick="aplicarFiltroCanais()">Aplicar</button>
+            </div>
+          </div>
+        </div>
         <div class="filter-group"><span class="filter-label">SKU</span><input class="filter-control" type="text" id="fven-sku" placeholder="Buscar SKU..." style="width:160px" oninput="loadVendas()"></div>
         <div class="filter-group"><span class="filter-label">Cliente</span><input class="filter-control" type="text" id="fven-cliente" placeholder="Buscar cliente..." style="width:180px" oninput="loadVendas()"></div>
         <button class="btn btn-secondary btn-sm" onclick="gerarFechamentoCliente()">📄 Gerar Fechamento</button>
@@ -1462,48 +1484,89 @@ let _opViewMode='cards', _bomLinhas=0, _opEntregaAtual=null, _lanEditId=null;
 let _balSemanal=false;
 let FACCAO_LOGADO=null, _faccaoCarrinho=[];
 
+// ── Loading global ─────────────────────────────────────────
+let _loadingCount=0;
+function startLoading(){
+  _loadingCount++;
+  const s=document.getElementById('global-spinner');
+  if(s)s.style.display='flex';
+}
+function stopLoading(){
+  _loadingCount=Math.max(0,_loadingCount-1);
+  if(_loadingCount===0){const s=document.getElementById('global-spinner');if(s)s.style.display='none';}
+}
+// Helper para botões: desabilita durante async e reabilita após
+function btnLoading(btn,texto='Aguarde...'){
+  if(!btn)return;
+  btn._textoOriginal=btn.textContent;
+  btn.disabled=true;
+  btn.textContent=texto;
+}
+function btnDone(btn){
+  if(!btn)return;
+  btn.disabled=false;
+  btn.textContent=btn._textoOriginal||btn.textContent;
+}
+
 // ── Supabase helpers ────────────────────────────────────────
 function getAuthToken(){return SESSION?.access_token||FACCAO_LOGADO?.token||SB_ANON;}
 async function sbGet(t,q=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken()}});
-  if(!r.ok){const e=await r.text();console.error(`sbGet ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
-  return r.json();
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken()}});
+    if(!r.ok){const e=await r.text();console.error(`sbGet ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
+    return r.json();
+  }finally{stopLoading();}
 }
 // Busca uma página específica de resultados (offset/limit reais via header Range do PostgREST)
 async function sbGetPaginado(t,q='',offset=0,pageSize=100){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),Range:`${offset}-${offset+pageSize-1}`,Prefer:'count=exact'}});
-  if(!r.ok){const e=await r.text();console.error(`sbGetPaginado ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
-  const rows=await r.json();
-  const range=r.headers.get('content-range'); // formato "0-99/1234"
-  const total=range?parseInt(range.split('/')[1])||0:0;
-  return{rows,total};
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/${t}${q}`,{headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),Range:`${offset}-${offset+pageSize-1}`,Prefer:'count=exact'}});
+    if(!r.ok){const e=await r.text();console.error(`sbGetPaginado ${t}:`,e);throw new Error(`${t}: ${r.status}`);}
+    const rows=await r.json();
+    const range=r.headers.get('content-range');
+    const total=range?parseInt(range.split('/')[1])||0:0;
+    return{rows,total};
+  }finally{stopLoading();}
 }
 async function sbPost(t,b){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
-  if(!r.ok){
-    // Se falhar com representation (policy SELECT), tentar com minimal
-    if(r.status===403){
-      const r2=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
-      if(!r2.ok){const e2=await r2.json();throw new Error(e2.message||r2.status);}
-      return [];
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(b)});
+    if(!r.ok){
+      if(r.status===403){
+        const r2=await fetch(`${SB_URL}/rest/v1/${t}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
+        if(!r2.ok){const e2=await r2.json();throw new Error(e2.message||r2.status);}
+        return [];
+      }
+      const e=await r.json();throw new Error(e.message||r.status);
     }
-    const e=await r.json();throw new Error(e.message||r.status);
-  }
-  return r.json();
+    return r.json();
+  }finally{stopLoading();}
 }
 async function sbPatch(t,f,b){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
-  if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
-  return true;
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'PATCH',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(b)});
+    if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
+    return true;
+  }finally{stopLoading();}
 }
 async function sbDelete(t,f){
-  const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'DELETE',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`}});
-  return r.ok;
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/${t}?${f}`,{method:'DELETE',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`}});
+    return r.ok;
+  }finally{stopLoading();}
 }
 async function sbRpc(fn,args={}){
-  const r=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`,'Content-Type':'application/json'},body:JSON.stringify(args)});
-  if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
-  return r.json();
+  startLoading();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`,'Content-Type':'application/json'},body:JSON.stringify(args)});
+    if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
+    return r.json();
+  }finally{stopLoading();}
 }
 
 // ── Auth ────────────────────────────────────────────────────
@@ -1824,6 +1887,90 @@ async function loadDashboard(){
     }
     // Charts
     renderDashCharts(ops);
+
+    // ── Vendas do dia corrente ──
+    const hoje2=fd(hoje);
+    const[kpisHoje,vendasHoje]=await Promise.all([
+      sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:hoje2,p_ate:hoje2,p_canal:null,p_sku:null,p_cliente:null}),
+      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_bruto,valor_total,marketplace`)
+    ]);
+    const kh=kpisHoje[0]||{total_receita:0,total_pedidos:0,total_unidades:0};
+    const elHoje=document.getElementById('dash-vendas-hoje');
+    if(elHoje){
+      elHoje.innerHTML=
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+
+          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Receita</div>'+
+            '<div style="font-size:20px;font-weight:700;color:var(--green);margin-top:2px">'+fBRL(kh.total_receita)+'</div>'+
+          '</div>'+
+          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Pedidos</div>'+
+            '<div style="font-size:20px;font-weight:700;color:var(--text);margin-top:2px">'+fN(kh.total_pedidos)+'</div>'+
+          '</div>'+
+          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Unidades</div>'+
+            '<div style="font-size:20px;font-weight:700;color:var(--accent);margin-top:2px">'+fN(kh.total_unidades)+'</div>'+
+          '</div>'+
+        '</div>'+
+        // Breakdown por canal
+        (()=>{
+          const canais={};
+          vendasHoje.forEach(v=>{
+            const c=v.marketplace||'—';
+            if(!canais[c])canais[c]={receita:0,qtd:0};
+            canais[c].receita+=v.valor_bruto||v.valor_total||0;
+            canais[c].qtd+=v.quantidade||0;
+          });
+          const linhasCanal=Object.entries(canais).sort((a,b)=>b[1].receita-a[1].receita);
+          if(!linhasCanal.length)return '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">Sem vendas hoje</div>';
+          return '<table style="width:100%;font-size:12px"><thead><tr>'+
+            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:left">Canal</th>'+
+            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
+            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
+            '</tr></thead><tbody>'+
+            linhasCanal.map(([c,d])=>'<tr>'+
+              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text2)">'+c+'</td>'+
+              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right">'+fN(d.qtd)+'</td>'+
+              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
+            '</tr>').join('')+
+          '</tbody></table>';
+        })();
+    }
+
+    // ── Top SKUs do dia ──
+    const elSkus=document.getElementById('dash-top-skus-hoje');
+    if(elSkus){
+      const skuMap={};
+      vendasHoje.forEach(v=>{
+        const s=v.sku||'—';
+        if(!skuMap[s])skuMap[s]={receita:0,qtd:0};
+        skuMap[s].receita+=v.valor_bruto||v.valor_total||0;
+        skuMap[s].qtd+=v.quantidade||0;
+      });
+      const topSkus=Object.entries(skuMap).sort((a,b)=>b[1].receita-a[1].receita).slice(0,15);
+      if(!topSkus.length){
+        elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Sem vendas hoje</div>';
+      }else{
+        const totalRec=topSkus.reduce((s,[,d])=>s+d.receita,0);
+        elSkus.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
+          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:left">SKU</th>'+
+          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
+          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
+          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">% do dia</th>'+
+          '</tr></thead><tbody>'+
+          topSkus.map(([s,d],i)=>{
+            const pct=totalRec>0?(d.receita/totalRec*100):0;
+            const cor=i<3?'var(--green)':i<8?'var(--amber)':'var(--text2)';
+            return '<tr>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:500">'+s+'</td>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+fN(d.qtd)+'</td>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
+              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+cor+'">'+pct.toFixed(1)+'%</td>'+
+            '</tr>';
+          }).join('')+
+        '</tbody></table>';
+      }
+    }
   }catch(e){console.error('loadDashboard:',e);}
 }
 
@@ -2101,6 +2248,7 @@ async function uploadPrecos(input){
 let _ops=[];
 async function loadOPs(){
   if(!EMPRESAS.length){semEmpresaMsg('ops-content');return;}
+  document.getElementById('ops-content')?.innerHTML && (document.getElementById('ops-content').innerHTML='<div class="loading"><div class="spinner"></div> Carregando OPs...</div>');
   const _empIdsOP=EMPRESAS.map(e=>e.id).join(',');
   const sit=document.getElementById('fop-sit')?.value;
   const terc=document.getElementById('fop-terc')?.value;
@@ -2345,6 +2493,8 @@ async function confirmarEntrega(){
 // ── ENTREGAS ───────────────────────────────────────────────────
 async function loadEntregas(){
   if(!EMPRESAS.length){semEmpresaMsg('entregas-lista');return;}
+  const el=document.getElementById('entregas-lista');
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando entregas...</div>';
   try{
     const de=document.getElementById('fent-de')?.value;
     const ate=document.getElementById('fent-ate')?.value;
@@ -2363,7 +2513,13 @@ async function loadEntregas(){
     if(ate)q+='&data_entrega=lte.'+ate;
     if(terc)q+='&terceiro_id=eq.'+terc;
     const entregas=await sbGet('entregas_op',q);
-    const opMap={};_ops.forEach(o=>{opMap[o.id]=o;});
+    // Buscar OPs diretamente pelo op_id das entregas — não depender de _ops que pode estar vazia
+    const opIds=[...new Set(entregas.map(e=>e.op_id).filter(Boolean))];
+    let opMap={};
+    if(opIds.length){
+      const ops=await sbGet('ordens_producao','?id=in.('+opIds.join(',')+')&select=id,numero,sku');
+      ops.forEach(o=>{opMap[o.id]=o;});
+    }
     const tercMap={};_terceiros.forEach(t=>{tercMap[t.id]=t.nome;});
     // Filtrar por SKU/OP localmente
     const filtradas=sku?entregas.filter(e=>{
@@ -3640,6 +3796,7 @@ const VEN_PAGE_SIZE=100;
 
 async function loadVendas(resetarPagina=true){
   if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
+  document.getElementById('ven-table')?.innerHTML && (document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando vendas...</div>');
   if(resetarPagina)_venPaginaAtual=0;
   const _empIdsVen=EMPRESAS.map(e=>e.id);
   let de=document.getElementById('fven-de')?.value;
@@ -3653,21 +3810,22 @@ async function loadVendas(resetarPagina=true){
     if(deEl)deEl.value=de;
     if(ateEl)ateEl.value=ate;
   }
-  const canal=document.getElementById('fven-canal')?.value;
+  const canaisSel=_venCanaisSel; // null = todos, array = filtro
+  const canal=canaisSel&&canaisSel.length===1?canaisSel[0]:null; // compatibilidade RPC p_canal
   const sku=document.getElementById('fven-sku')?.value.trim();
   const clienteFiltro=document.getElementById('fven-cliente')?.value.trim();
   document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
-    // Monta querystring comum (filtros aplicados no banco, não no navegador)
     let qFiltros='&data_pedido=gte.'+de+'&data_pedido=lte.'+ate;
-    if(canal)qFiltros+='&marketplace=eq.'+encodeURIComponent(canal);
+    if(canaisSel&&canaisSel.length===1)qFiltros+='&marketplace=eq.'+encodeURIComponent(canaisSel[0]);
+    else if(canaisSel&&canaisSel.length>1)qFiltros+='&marketplace=in.('+canaisSel.map(c=>encodeURIComponent(c)).join(',')+')';
     if(sku)qFiltros+='&sku=ilike.*'+encodeURIComponent(sku)+'*';
     if(clienteFiltro)qFiltros+='&cliente_nome=ilike.*'+encodeURIComponent(clienteFiltro)+'*';
 
     // KPIs agregados calculados no banco via RPC — nunca traz as linhas cruas
     const kpis=await sbRpc('vendas_kpis',{
       p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate,
-      p_canal:canal||null,p_sku:sku||null,p_cliente:clienteFiltro||null
+      p_canal:canal||null,p_canais:canaisSel||null,p_sku:sku||null,p_cliente:clienteFiltro||null
     });
     const k=kpis[0]||{total_receita:0,total_unidades:0,total_pedidos:0,total_linhas:0};
     document.getElementById('ven-rec').textContent=fBRL(k.total_receita);
@@ -3677,8 +3835,8 @@ async function loadVendas(resetarPagina=true){
 
     // Canais distintos do período (para popular o filtro), via RPC — não depende da página atual
     sbRpc('vendas_canais_distintos',{p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate}).then(canais=>{
-      const selCanal=document.getElementById('fven-canal');
-      if(selCanal){const cv=selCanal.value;selCanal.innerHTML='<option value="">Todos</option>'+canais.map(c=>'<option value="'+c.marketplace+'">'+c.marketplace+'</option>').join('');selCanal.value=cv;}
+      _venCanaisDisponiveis=canais.map(c=>c.marketplace).filter(Boolean);
+      atualizarLabelCanais();
     }).catch(()=>{});
 
     if(!k.total_linhas){
@@ -4822,6 +4980,60 @@ function getEmpresaFiltro(selId){
 
 // ── Filtro multi-empresa balancete ──
 let _balEmpSel = null; // null = todas
+
+// ── Multi-select de canal — aba Vendas ─────────────────────
+let _venCanaisSel = null; // null = todos
+let _venCanaisDisponiveis = [];
+
+function toggleFiltroCanais(){
+  const dd=document.getElementById('fven-canal-dropdown');
+  if(dd.style.display==='none'){
+    const checks=document.getElementById('fven-canal-checks');
+    checks.innerHTML=_venCanaisDisponiveis.map(c=>{
+      const checked=_venCanaisSel===null||_venCanaisSel.includes(c);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
+        <input type="checkbox" value="${c}" ${checked?'checked':''} onchange="atualizarLabelCanais()">
+        ${c}
+      </label>`;
+    }).join('');
+    dd.style.display='block';
+  } else {
+    dd.style.display='none';
+  }
+}
+
+function atualizarLabelCanais(){
+  const checks=[...document.querySelectorAll('#fven-canal-checks input[type=checkbox]')];
+  const total=checks.length;
+  const sel=checks.filter(c=>c.checked).length;
+  const label=document.getElementById('fven-canal-label');
+  if(!total||sel===0||sel===total) label.textContent='Todos';
+  else if(sel===1) label.textContent=checks.find(c=>c.checked).value;
+  else label.textContent=sel+' canais';
+}
+
+function selTodosCanais(val){
+  document.querySelectorAll('#fven-canal-checks input[type=checkbox]').forEach(c=>c.checked=val);
+  atualizarLabelCanais();
+}
+
+function aplicarFiltroCanais(){
+  const checks=[...document.querySelectorAll('#fven-canal-checks input[type=checkbox]')];
+  const sel=checks.filter(c=>c.checked).map(c=>c.value);
+  const total=checks.length;
+  _venCanaisSel=sel.length===total||sel.length===0?null:sel;
+  document.getElementById('fven-canal-dropdown').style.display='none';
+  atualizarLabelCanais();
+  loadVendas();
+}
+
+document.addEventListener('click',e=>{
+  const btn=document.getElementById('fven-canal-btn');
+  const dd=document.getElementById('fven-canal-dropdown');
+  if(dd&&btn&&!btn.contains(e.target)&&!dd.contains(e.target)){
+    dd.style.display='none';
+  }
+});
 
 function toggleFiltroEmpresas(){
   const dd=document.getElementById('fbal-emp-dropdown');
