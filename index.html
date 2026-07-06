@@ -1367,10 +1367,14 @@ tr:hover td{background:var(--surface2);}
         <div style="font-size:10px;color:var(--green);margin-top:4px">● Disponível</div>
       </div>
       <!-- Mercado Livre -->
-      <div class="card" style="cursor:not-allowed;text-align:center;padding:20px 12px;opacity:.5">
+      <div class="card" style="cursor:pointer;text-align:center;padding:20px 12px;border:2px solid transparent;transition:border .2s"
+           id="mkt-card-mercadolivre"
+           onmouseenter="this.style.borderColor='var(--accent)'"
+           onmouseleave="this.style.borderColor='transparent'"
+           onclick="selecionarMarketplace('ml')">
         <div style="font-size:32px;margin-bottom:8px">🟡</div>
         <div style="font-weight:600;font-size:13px">Mercado Livre</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:4px">Em breve</div>
+        <div style="font-size:10px;color:var(--green);margin-top:4px">● Disponível</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -4530,8 +4534,8 @@ async function loadMarketplaces(){
       return;
     }
     const empMap={};EMPRESAS.forEach(e=>{empMap[e.id]=e.nome;});
-    const icons={shopee:'🟠',tiktok:'🎵',mercadolivre:'🟡'};
-    const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre'};
+    const icons={shopee:'🟠',tiktok:'🎵',mercadolivre:'🟡',ml:'🟡'};
+    const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre'};
     el.innerHTML=conexoes.map(c=>'<div class="card">'+
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+
       '<div style="font-size:28px">'+(icons[c.marketplace]||'🛒')+'</div>'+
@@ -4558,7 +4562,7 @@ function selecionarMarketplace(mkt){
   const sel=document.getElementById('mkt-emp-sel');
   sel.innerHTML='<option value="">Selecione...</option>'+
     EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
-  const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre'};
+  const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre'};
   document.getElementById('mkt-emp-titulo').textContent='Conectar '+nomes[mkt];
   document.getElementById('mkt-emp-nome-mkt').textContent=nomes[mkt];
   abrirModal('modal-mkt-empresa');
