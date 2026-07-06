@@ -556,7 +556,7 @@ tr:hover td{background:var(--surface2);}
       </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Receita de Vendas</div><div class="kpi-value green" id="dash-receita">—</div><div class="kpi-sub" id="dash-receita-sub">mês atual</div></div>
-        <div class="kpi"><div class="kpi-label">OPs em Aberto</div><div class="kpi-value blue" id="dash-ops">—</div><div class="kpi-sub">ordens de produção</div></div>
+        <div class="kpi"><div class="kpi-label">Em Produção</div><div class="kpi-value blue" id="dash-ops">—</div><div class="kpi-sub">peças em aberto</div></div>
         <div class="kpi"><div class="kpi-label">A Pagar</div><div class="kpi-value red" id="dash-pagar">—</div><div class="kpi-sub">lançamentos em aberto</div></div>
         <div class="kpi"><div class="kpi-label">Saldo Bancário</div><div class="kpi-value" id="dash-saldo">—</div><div class="kpi-sub">total em contas</div></div>
       </div>
@@ -1799,7 +1799,7 @@ async function loadDashboard(){
       sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`)
     ]);
     const rec=kpisVendas[0]?.total_receita||0;
-    const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').length;
+    const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').reduce((s,o)=>s+(o.quantidade||0),0);
     const pagar=lans.reduce((s,l)=>s+l.valor,0);
     const saldo=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
     document.getElementById('dash-receita').textContent=fBRL(rec);
@@ -1892,7 +1892,7 @@ async function loadDashboard(){
     const hoje2=fd(hoje);
     const[kpisHoje,vendasHoje]=await Promise.all([
       sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:hoje2,p_ate:hoje2,p_canal:null,p_sku:null,p_cliente:null}),
-      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_bruto,valor_total,marketplace`)
+      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_bruto,valor_total,marketplace,order_id,pedido_id`)
     ]);
     const kh=kpisHoje[0]||{total_receita:0,total_pedidos:0,total_unidades:0};
     const elHoje=document.getElementById('dash-vendas-hoje');
@@ -1917,20 +1917,22 @@ async function loadDashboard(){
           const canais={};
           vendasHoje.forEach(v=>{
             const c=v.marketplace||'—';
-            if(!canais[c])canais[c]={receita:0,qtd:0};
+            if(!canais[c])canais[c]={receita:0,pedidos:new Set()};
             canais[c].receita+=v.valor_bruto||v.valor_total||0;
-            canais[c].qtd+=v.quantidade||0;
+            canais[c].pedidos.add(v.order_id||v.pedido_id);
           });
-          const linhasCanal=Object.entries(canais).sort((a,b)=>b[1].receita-a[1].receita);
+          const linhasCanal=Object.entries(canais)
+            .map(([c,d])=>([c,{receita:d.receita,pedidos:d.pedidos.size}]))
+            .sort((a,b)=>b[1].receita-a[1].receita);
           if(!linhasCanal.length)return '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">Sem vendas hoje</div>';
           return '<table style="width:100%;font-size:12px"><thead><tr>'+
             '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:left">Canal</th>'+
-            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
+            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Pedidos</th>'+
             '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
             '</tr></thead><tbody>'+
             linhasCanal.map(([c,d])=>'<tr>'+
               '<td style="padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text2)">'+c+'</td>'+
-              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right">'+fN(d.qtd)+'</td>'+
+              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right">'+fN(d.pedidos)+'</td>'+
               '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
             '</tr>').join('')+
           '</tbody></table>';
@@ -1978,9 +1980,9 @@ function renderDashCharts(ops){
   const ctx1=document.getElementById('dash-chart-ops')?.getContext('2d');
   if(ctx1&&window._chartOps){window._chartOps.destroy();}
   if(ctx1){
-    const sits={ABERTA:0,EM_PRODUCAO:0,PARCIAL:0,CONCLUIDA:0};
+    const sits={ABERTA:0,EM_PRODUCAO:0,PARCIAL:0};
     ops.forEach(o=>{if(sits[o.situacao]!==undefined)sits[o.situacao]++;});
-    window._chartOps=new Chart(ctx1,{type:'doughnut',data:{labels:Object.keys(sits),datasets:[{data:Object.values(sits),backgroundColor:['#1e9be8','#ffb020','#a78bfa','#00d4a0'],borderColor:'#112236',borderWidth:2,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#7ea8c9',font:{size:11},boxWidth:12}}},scales:{x:{display:false},y:{display:false}}}});
+    window._chartOps=new Chart(ctx1,{type:'doughnut',data:{labels:Object.keys(sits),datasets:[{data:Object.values(sits),backgroundColor:['#1e9be8','#ffb020','#a78bfa'],borderColor:'#112236',borderWidth:2,hoverOffset:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#7ea8c9',font:{size:11},boxWidth:12}}},scales:{x:{display:false},y:{display:false}}}});
   }
 }
 
