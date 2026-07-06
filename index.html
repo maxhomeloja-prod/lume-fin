@@ -894,7 +894,20 @@ tr:hover td{background:var(--surface2);}
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fabc-de" onchange="loadABC()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fabc-ate" onchange="loadABC()"></div>
-        <div class="filter-group"><span class="filter-label">Canal</span><select class="filter-control" id="fabc-canal" onchange="loadABC()"><option value="">Todos</option></select></div>
+        <div class="filter-group" style="position:relative">
+          <span class="filter-label">Canal</span>
+          <div id="fabc-canal-btn" onclick="toggleFiltroCanaisABC()" style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px;min-width:160px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span id="fabc-canal-label">Todos</span><span>▾</span>
+          </div>
+          <div id="fabc-canal-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+            <div id="fabc-canal-checks"></div>
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanaisABC(true)">Todos</button>
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanaisABC(false)">Nenhum</button>
+              <button class="btn btn-primary btn-sm" onclick="aplicarFiltroCanaisABC()">Aplicar</button>
+            </div>
+          </div>
+        </div>
         <div class="filter-group"><span class="filter-label">SKU</span><input type="text" class="filter-control" id="fabc-sku" placeholder="Buscar SKU..." style="width:150px" oninput="loadABC()"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadABC()">Aplicar</button>
       </div>
@@ -3020,18 +3033,17 @@ async function loadABC(){
   const _empIdsABC=EMPRESAS.map(e=>e.id);
   const de=document.getElementById('fabc-de')?.value;
   const ate=document.getElementById('fabc-ate')?.value;
-  const canal=document.getElementById('fabc-canal')?.value;
+  const canal=_abcCanaisSel&&_abcCanaisSel.length===1?_abcCanaisSel[0]:null;
   const skuFiltro=document.getElementById('fabc-sku')?.value.trim();
   try{
-    // Dados já agregados por SKU+dia+canal no banco — nunca traz vendas brutas, escala para qualquer volume
     const agregado=await sbRpc('vendas_agregado_sku_dia',{
       p_empresa_ids:_empIdsABC,p_de:de||null,p_ate:ate||null,
-      p_canal:canal||null,p_sku:skuFiltro||null
+      p_canal:canal||null,p_canais:_abcCanaisSel||null,p_sku:skuFiltro||null
     });
-    // Popular select canal a partir do próprio agregado (já é pequeno, não precisa de outra RPC aqui)
+    // Popular dropdown canal a partir do agregado
     const canaisABC=[...new Set(agregado.map(v=>v.marketplace).filter(Boolean))].sort();
-    const selABC=document.getElementById('fabc-canal');
-    if(selABC){const cv=selABC.value;selABC.innerHTML='<option value="">Todos</option>'+canaisABC.map(c=>'<option value="'+c+'">'+c+'</option>').join('');selABC.value=cv;}
+    _abcCanaisDisponiveis=canaisABC;
+    atualizarLabelCanaisABC();
 
     const porSku={};
     agregado.forEach(v=>{
@@ -4983,7 +4995,59 @@ function getEmpresaFiltro(selId){
 // ── Filtro multi-empresa balancete ──
 let _balEmpSel = null; // null = todas
 
-// ── Multi-select de canal — aba Vendas ─────────────────────
+// ── Multi-select de canal — aba ABC ────────────────────────
+let _abcCanaisSel = null;
+let _abcCanaisDisponiveis = [];
+
+function toggleFiltroCanaisABC(){
+  const dd=document.getElementById('fabc-canal-dropdown');
+  if(dd.style.display==='none'){
+    const checks=document.getElementById('fabc-canal-checks');
+    checks.innerHTML=_abcCanaisDisponiveis.map(c=>{
+      const checked=_abcCanaisSel===null||_abcCanaisSel.includes(c);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:13px">
+        <input type="checkbox" value="${c}" ${checked?'checked':''} onchange="atualizarLabelCanaisABC()">
+        ${c}
+      </label>`;
+    }).join('');
+    dd.style.display='block';
+  } else {
+    dd.style.display='none';
+  }
+}
+
+function atualizarLabelCanaisABC(){
+  const checks=[...document.querySelectorAll('#fabc-canal-checks input[type=checkbox]')];
+  const total=checks.length;
+  const sel=checks.filter(c=>c.checked).length;
+  const label=document.getElementById('fabc-canal-label');
+  if(!total||sel===0||sel===total) label.textContent='Todos';
+  else if(sel===1) label.textContent=checks.find(c=>c.checked).value;
+  else label.textContent=sel+' canais';
+}
+
+function selTodosCanaisABC(val){
+  document.querySelectorAll('#fabc-canal-checks input[type=checkbox]').forEach(c=>c.checked=val);
+  atualizarLabelCanaisABC();
+}
+
+function aplicarFiltroCanaisABC(){
+  const checks=[...document.querySelectorAll('#fabc-canal-checks input[type=checkbox]')];
+  const sel=checks.filter(c=>c.checked).map(c=>c.value);
+  const total=checks.length;
+  _abcCanaisSel=sel.length===total||sel.length===0?null:sel;
+  document.getElementById('fabc-canal-dropdown').style.display='none';
+  atualizarLabelCanaisABC();
+  loadABC();
+}
+
+document.addEventListener('click',e=>{
+  const btn=document.getElementById('fabc-canal-btn');
+  const dd=document.getElementById('fabc-canal-dropdown');
+  if(dd&&btn&&!btn.contains(e.target)&&!dd.contains(e.target)){
+    dd.style.display='none';
+  }
+});
 let _venCanaisSel = null; // null = todos
 let _venCanaisDisponiveis = [];
 
