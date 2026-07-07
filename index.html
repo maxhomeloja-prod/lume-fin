@@ -2800,21 +2800,19 @@ function ehVendaDireta(canal){
 }
 
 // Gera comprovante simples em PDF (via impressão do navegador) para vendas diretas
-function gerarPDFVenda(itens, cliente, dataVenda, empresaId){
+function gerarHTMLVenda(itens, cliente, dataVenda, empresaId){
   const empNome=(EMPRESAS.find(e=>e.id===empresaId)?.nome)||'Empresa';
   const dataFmt=(dataVenda||new Date().toISOString().split('T')[0]).split('-').reverse().join('/');
-  const total=itens.reduce((s,i)=>s+(i.quantidade*i.valor_unitario),0);
+  const total=itens.reduce((s,i)=>s+(i.quantidade*(i.valor_unitario||0)),0);
   const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0);
-
   const linhas=itens.map(i=>`
     <tr>
       <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.sku}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.quantidade}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(i.valor_unitario)}</td>
-      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(i.quantidade*i.valor_unitario)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(i.valor_unitario||0)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(i.quantidade*(i.valor_unitario||0))}</td>
     </tr>`).join('');
-
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Comprovante de Venda</title>
   <style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}
   h2{color:#1e9be8;margin-bottom:4px}
@@ -2838,9 +2836,30 @@ function gerarPDFVenda(itens, cliente, dataVenda, empresaId){
   </table>
   <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
+}
 
+// Escreve em janela já aberta (evita bloqueio de popup)
+function gerarPDFVendaJanela(win, itens, cliente, dataVenda, empresaId){
+  if(!win)return;
+  const html=gerarHTMLVenda(itens,cliente,dataVenda,empresaId);
+  win.document.write(html);win.document.close();
+}
+
+// Abre nova janela (para reimprimir — disparado diretamente por clique)
+function gerarPDFVenda(itens, cliente, dataVenda, empresaId){
   const win=window.open('','_blank');
-  if(win){win.document.write(html);win.document.close();}
+  if(win){gerarPDFVendaJanela(win,itens,cliente,dataVenda,empresaId);}
+  else{alert('Permita popups para este site para imprimir o comprovante.');}
+}
+
+// Reimprimir pedido existente pelo order_id — busca todos os itens do pedido
+async function reimprimirPedido(orderId){
+  try{
+    const rows=await sbGet('vendas',`?order_id=eq.${orderId}&select=sku,quantidade,valor_unitario,cliente_nome,data_pedido,empresa_id&order=criado_em.asc`);
+    if(!rows.length)return alert('Pedido não encontrado');
+    const itens=rows.map(r=>({sku:r.sku,quantidade:r.quantidade,valor_unitario:r.valor_unitario}));
+    gerarPDFVenda(itens,rows[0].cliente_nome,rows[0].data_pedido,rows[0].empresa_id);
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 async function finalizarVendaManual(){
@@ -2850,8 +2869,10 @@ async function finalizarVendaManual(){
   const clienteNome=document.getElementById('venda-cliente').value.trim();
   const empresaSel=await pedirEmpresaParaSalvar();
   if(!empresaSel)return;
+  // Abrir janela ANTES das chamadas assíncronas — evita bloqueio de popup do navegador
+  const win=ehVendaDireta(canal)?window.open('','_blank'):null;
+  if(ehVendaDireta(canal)&&!win){alert('Permita popups para este site para imprimir o comprovante.');}
   try{
-    // Gerar número sequencial VD-XXXX por empresa
     const numeroPedido=await sbRpc('proximo_numero_pedido_manual',{p_empresa_id:empresaSel});
     for(const item of _vendaCarrinho){
       await sbPost('vendas',{
@@ -2871,8 +2892,8 @@ async function finalizarVendaManual(){
     const itensSalvos=[..._vendaCarrinho];
     _vendaCarrinho=[];
     fecharModal('modal-venda');loadVendas();
-    if(ehVendaDireta(canal))gerarPDFVenda(itensSalvos,clienteNome,dataVenda,empresaSel);
-  }catch(e){alert('Erro: '+e.message);}
+    if(win)gerarPDFVendaJanela(win,itensSalvos,clienteNome,dataVenda,empresaSel);
+  }catch(e){if(win)win.close();alert('Erro: '+e.message);}
 }
 function downloadPlanilhaVendas(){
   const csv='data_pedido,marketplace,sku,cliente,quantidade,valor_unitario\n2025-06-01,Shopee,LENÇOL_CASAL_3P_BEGE,João Silva,2,89.90\n2025-06-01,Mercado Livre,CORTINA_MICRO_90X205_2PARTES_BRANCO,,1,59.90';
@@ -3872,6 +3893,9 @@ async function loadVendas(resetarPagina=true){
       +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
       const totalExibir=v.valor_bruto||v.valor_total||v.valor_unitario*v.quantidade;
+      const btnImprimir=(v.marketplace==='Venda Direta'||v.marketplace==='venda direta')
+        ?`<button class="btn btn-secondary btn-sm" title="Reimprimir comprovante" onclick="reimprimirPedido('${v.order_id||v.pedido_id}')">🖨️</button>`
+        :'';
       return '<tr>'
         +'<td style="color:var(--text2);font-size:11px;font-family:monospace">'+(v.order_id||v.pedido_id||'—')+'</td>'
         +'<td>'+fDate(v.data_pedido)+'</td>'
@@ -3880,7 +3904,7 @@ async function loadVendas(resetarPagina=true){
         +'<td style="color:var(--text2)">'+(v.cliente_nome||'—')+'</td>'
         +'<td style="text-align:right">'+fN(v.quantidade)+'</td>'
         +'<td style="text-align:right;color:var(--green);font-weight:500">'+fBRL(totalExibir)+'</td>'
-        +'<td><button class="btn btn-danger btn-sm" onclick="excluirVenda(\''+v.id+'\')">✕</button></td>'
+        +'<td style="display:flex;gap:4px">'+btnImprimir+'<button class="btn btn-danger btn-sm" onclick="excluirVenda(\''+v.id+'\')">✕</button></td>'
         +'</tr>';
     }).join('');
     document.getElementById('ven-table').innerHTML=hdr+trows+'</tbody></table>';
