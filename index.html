@@ -1806,7 +1806,8 @@ async function loadDashboard(){
   if(!EMPRESAS||!EMPRESAS.length)return;
   try{
     const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
-    const fd=d=>d.toISOString().split('T')[0];
+    // fd usa data LOCAL do navegador — evita virar dia antes do meia-noite BRT
+    const fd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const empIds=EMPRESAS.map(e=>e.id).join(',');
     const empIdsArr=EMPRESAS.map(e=>e.id);
     const[kpisVendas,ops,lans,saldos]=await Promise.all([
