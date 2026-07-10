@@ -5489,13 +5489,9 @@ async function loadCorrelacao(){
     // SKUs sem correlação — buscar via RPC que retorna pares (sku, empresa_id) distintos
     // Evita o teto de 1000 registros do PostgREST em bases com muitas vendas
     const empIdsArr=_empIdsCorr.split(',');
+    // RPC já retorna apenas SKUs sem correlação (filtro feito no banco)
     const vendaSkusRaw=await sbRpc('skus_distintos_por_empresa',{emp_ids:empIdsArr});
-    // Mapear por par único (sku+empresa_id)
-    const parsUnicos=new Map();
-    vendaSkusRaw.forEach(v=>{if(v.sku){const k=v.sku+'||'+v.empresa_id;if(!parsUnicos.has(k))parsUnicos.set(k,{sku:v.sku,empresa_id:v.empresa_id});}});
-    // Mapeados: par (sku_venda, empresa_id) que já tem correlação
-    const chavesMapeadas=new Set(_correlacao.map(c=>c.sku_venda+'||'+c.empresa_id));
-    const semCorrPares=[...parsUnicos.values()].filter(p=>!chavesMapeadas.has(p.sku+'||'+p.empresa_id));
+    const semCorrPares=vendaSkusRaw.filter(v=>v.sku).map(v=>({sku:v.sku,empresa_id:v.empresa_id}));
 
 
     // Renderizar pendentes
@@ -5622,8 +5618,7 @@ async function exportarCorrelacaoXlsx(){
   let skusDistintos=[];
   try{skusDistintos=await sbRpc('skus_distintos_por_empresa',{emp_ids:empIds});}
   catch(e){alert('Erro ao buscar SKUs: '+e.message);return;}
-  const chavesMapeadas=new Set((_correlacao||[]).map(c=>c.sku_venda+'||'+c.empresa_id));
-  const pendentes=skusDistintos.filter(v=>v.sku&&!chavesMapeadas.has(v.sku+'||'+v.empresa_id));
+  const pendentes=skusDistintos.filter(v=>v.sku);
   if(!pendentes.length){alert('Nenhum SKU pendente de correlação.');return;}
   const skusCanonicos=[...new Set((_correlacao||[]).map(c=>c.sku_canonico))].sort();
   // Montar dados: 1 linha por pendente + header
