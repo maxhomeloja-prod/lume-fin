@@ -4889,6 +4889,8 @@ async function confirmarEntregaFaccao(){
       const itensDescGrupo=itensGrupo.map(i=>i.avulso?i.sku:(i.op.numero+'/'+i.op.sku)).join(', ');
       const descLanGrupo='Entrega '+FACCAO_LOGADO.nome+' — '+qtdGrupo+' peças ('+itensDescGrupo+')';
 
+      // Buscar categoria Facção dinamicamente
+      const catFaccao=(CATEGORIAS||[]).find(c=>c.nome==='Facção')?.id||null;
       await sbPost('lancamentos_externos',{
         empresa_id:empId,
         data:dataEntrega,
@@ -4899,6 +4901,7 @@ async function confirmarEntregaFaccao(){
         meio_pagamento:'PIX',
         situacao:'EM_ABERTO',
         fornecedor:FACCAO_LOGADO.nome||null,
+        categoria_id:catFaccao,
         observacao:obs||null
       });
     }
