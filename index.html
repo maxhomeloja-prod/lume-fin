@@ -2607,9 +2607,9 @@ async function loadPagamentosOP(){
         '<div class="kpi"><div class="kpi-label">Pago</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'+
         '<div class="kpi"><div class="kpi-label">Em Aberto</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'+
         '</div>'+
-        '<table><thead><tr><th>Vencimento</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>'+
+        '<table><thead><tr><th>Data Entrega</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>'+
         lans.map(l=>'<tr>'+
-          '<td>'+fDate(l.data_vencimento)+'</td>'+
+          '<td>'+fDate(l.data||l.criado_em?.split('T')[0])+'</td>'+
           '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'+
           '<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'+
           '<td><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'+(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'+
@@ -2629,7 +2629,7 @@ async function loadPagamentosOP(){
     if(selPag&&_terceiros.length){const vP=selPag.value;selPag.innerHTML='<option value="">Todas</option>'+_terceiros.map(t=>'<option value="'+t.nome+'"'+(t.nome===vP?' selected':'')+'>'+t.nome+'</option>').join('');if(vP)selPag.value=vP;}
     const empIds=EMPRESAS.map(e=>e.id).join(',');
     const fpStatus2=document.getElementById('fpag-status')?.value;
-    let qEmp='?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=500';
+    let qEmp='?empresa_id=in.('+empIds+')&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=500&select=id,data,criado_em,data_vencimento,descricao,fornecedor,valor,situacao,empresa_id';
     if(fpDe2)qEmp+='&data_vencimento=gte.'+fpDe2;
     if(fpAte2)qEmp+='&data_vencimento=lte.'+fpAte2;
     if(fpStatus2)qEmp+='&situacao=eq.'+fpStatus2;
@@ -2652,9 +2652,9 @@ async function loadPagamentosOP(){
       '<div class="kpi"><div class="kpi-label">Pago</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'+
       '<div class="kpi"><div class="kpi-label">Em Aberto</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'+
       '</div>'+
-      '<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Facção</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead><tbody>'+
+      '<table><thead><tr><th>Data Entrega</th><th>Descrição</th><th>Facção</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr></thead><tbody>'+
       faccao.map(l=>'<tr>'+
-        '<td>'+fDate(l.data_vencimento)+'</td>'+
+        '<td>'+fDate(l.data||l.criado_em?.split('T')[0])+'</td>'+
         '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'+
         '<td style="color:var(--text2)">'+(l.fornecedor||'—')+'</td>'+
         '<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'+
