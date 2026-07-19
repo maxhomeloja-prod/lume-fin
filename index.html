@@ -2553,12 +2553,17 @@ async function loadEntregas(){
       document.getElementById('entregas-kpi').style.display='none';
       return;
     }
-    // Calcular KPIs
+    // Contar entregas distintas: agrupar por terceiro + data_entrega + minuto de criação (uma sessão de entrega gera N linhas mas é 1 entrega)
+    const sessoesDistintas = new Set(filtradas.map(e=>{
+      const min = (e.criado_em||'').substring(0,16); // YYYY-MM-DDTHH:MM
+      return (e.terceiro_id||'')+'|'+(e.data_entrega||'')+'|'+min;
+    }));
+    const totalEntregas = sessoesDistintas.size;
     const totalValor = filtradas.reduce((s,e)=>s+(parseFloat(e.valor_total)||0),0);
     const totalPecas = filtradas.reduce((s,e)=>s+(parseInt(e.quantidade)||0),0);
     const kpi=document.getElementById('entregas-kpi');
     kpi.style.display='flex';
-    document.getElementById('entregas-kpi-qtd').textContent=filtradas.length+' entrega'+(filtradas.length!==1?'s':'');
+    document.getElementById('entregas-kpi-qtd').textContent=totalEntregas+' entrega'+(totalEntregas!==1?'s':'');
     document.getElementById('entregas-kpi-valor').textContent=fBRL(totalValor);
     document.getElementById('entregas-kpi-pecas').textContent=fN(totalPecas)+' peças';
     el.innerHTML='<table><thead><tr><th>Data Entrega</th><th>OP</th><th>SKU</th><th>Facção</th><th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>'+
