@@ -891,7 +891,13 @@ tr:hover td{background:var(--surface2);}
 
     <!-- ABC -->
     <div id="page-abc" class="page">
-      <div class="page-header"><div><div class="page-title">Curva ABC</div><div class="page-sub">Análise de Pareto por SKU</div></div></div>
+      <div class="page-header">
+        <div><div class="page-title">Curva ABC</div><div class="page-sub">Análise de Pareto por SKU</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-success btn-sm" onclick="exportarABCXLS()">⬇ Exportar Excel</button>
+          <button class="btn btn-secondary btn-sm" onclick="imprimirABC()">🖨️ Imprimir</button>
+        </div>
+      </div>
       <div class="filters">
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fabc-de" onchange="loadABC()"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fabc-ate" onchange="loadABC()"></div>
@@ -911,7 +917,6 @@ tr:hover td{background:var(--surface2);}
         </div>
         <div class="filter-group"><span class="filter-label">SKU</span><input type="text" class="filter-control" id="fabc-sku" placeholder="Buscar SKU..." style="width:150px" oninput="loadABC()"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadABC()">Aplicar</button>
-        <button class="btn btn-secondary btn-sm" style="align-self:flex-end" onclick="imprimirABC()">🖨️ Imprimir</button>
       </div>
       <div class="grid-3 mb16">
         <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="abc-rec">—</div></div>
@@ -4152,6 +4157,21 @@ async function calcularEstoqueModelo(){
       '<td style="text-align:right;color:var(--green)">'+fBRL(totalValSKU)+'</td></tr>'+
       '</tbody></table></div></div>';
   }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+function exportarABCXLS(){
+  if(!_abcData||!_abcData.length){alert('Carregue a curva ABC primeiro');return;}
+  let csv='Rank,Classe,SKU,Unidades,Receita,% Receita,% Acumulada\n';
+  _abcData.forEach(r=>{
+    csv+=r.rank+','+r.cl+',"'+r.sku+'",'+r.qtd+','+r.rec.toFixed(2)+','+r.pct.toFixed(2)+','+r.pctA.toFixed(2)+'\n';
+  });
+  const recTotal=_abcData.reduce((s,r)=>s+r.rec,0);
+  const uniTotal=_abcData.reduce((s,r)=>s+r.qtd,0);
+  csv+='"TOTAL","—","—",'+uniTotal+','+recTotal.toFixed(2)+',"—","—"\n';
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='curva_abc.csv';a.click();
+  URL.revokeObjectURL(url);
 }
 
 function imprimirABC(){
