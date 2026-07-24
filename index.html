@@ -827,6 +827,7 @@ tr:hover td{background:var(--surface2);}
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-success btn-sm" onclick="exportarEstoqueMPXLS()">⬇ Exportar MP</button>
           <button class="btn btn-success btn-sm" onclick="exportarEstoqueSKUXLS()">⬇ Exportar SKU</button>
+          <button class="btn btn-secondary btn-sm" onclick="imprimirEstoqueModelo()">🖨️ Imprimir</button>
           <button class="btn btn-primary btn-sm" onclick="calcularEstoqueModelo()">Calcular</button>
         </div>
       </div>
@@ -910,6 +911,7 @@ tr:hover td{background:var(--surface2);}
         </div>
         <div class="filter-group"><span class="filter-label">SKU</span><input type="text" class="filter-control" id="fabc-sku" placeholder="Buscar SKU..." style="width:150px" oninput="loadABC()"></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadABC()">Aplicar</button>
+        <button class="btn btn-secondary btn-sm" style="align-self:flex-end" onclick="imprimirABC()">🖨️ Imprimir</button>
       </div>
       <div class="grid-3 mb16">
         <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value green" id="abc-rec">—</div></div>
@@ -4150,6 +4152,193 @@ async function calcularEstoqueModelo(){
       '<td style="text-align:right;color:var(--green)">'+fBRL(totalValSKU)+'</td></tr>'+
       '</tbody></table></div></div>';
   }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+function imprimirABC(){
+  if(!_abcData||!_abcData.length){alert('Carregue a curva ABC primeiro');return;}
+  const de=document.getElementById('fabc-de')?.value||'';
+  const ate=document.getElementById('fabc-ate')?.value||'';
+  const sku=document.getElementById('fabc-sku')?.value||'';
+  const periodo=de&&ate?`${fDate(de)} a ${fDate(ate)}`:(de?`A partir de ${fDate(de)}`:ate?`Até ${fDate(ate)}`:'Todo o período');
+  const recTotal=_abcData.reduce((s,r)=>s+r.rec,0);
+  const uniTotal=_abcData.reduce((s,r)=>s+r.qtd,0);
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const empresas=EMPRESAS.map(e=>e.nome).join(', ');
+
+  const linhas=_abcData.map(r=>`
+    <tr>
+      <td style="text-align:center;font-weight:600">${r.rank}</td>
+      <td style="font-weight:500">${r.sku}</td>
+      <td style="text-align:center;background:${r.cl==='A'?'#dcfce7':r.cl==='B'?'#fef9c3':'#fee2e2'};color:${r.cl==='A'?'#166534':r.cl==='B'?'#854d0e':'#991b1b'};font-weight:700;border-radius:4px">${r.cl}</td>
+      <td style="text-align:right">${r.qtd.toLocaleString('pt-BR')}</td>
+      <td style="text-align:right;color:#166534;font-weight:500">${fBRL(r.rec)}</td>
+      <td style="text-align:right;color:#555">${r.pct.toFixed(1)}%</td>
+      <td style="text-align:right;color:#555">${r.pctA.toFixed(1)}%</td>
+    </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Curva ABC — ${empresas}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a2e;padding:20px}
+    .header{border-bottom:3px solid #1e9be8;padding-bottom:12px;margin-bottom:16px}
+    h1{font-size:20px;color:#1e9be8;margin-bottom:4px}
+    .sub{color:#666;font-size:11px}
+    .kpis{display:flex;gap:16px;margin-bottom:16px}
+    .kpi{background:#f0f7ff;border-radius:8px;padding:10px 16px;flex:1;text-align:center}
+    .kpi-label{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px}
+    .kpi-value{font-size:16px;font-weight:700;color:#1e9be8;margin-top:2px}
+    .legenda{display:flex;gap:12px;margin-bottom:12px}
+    .leg{display:flex;align-items:center;gap:6px;font-size:11px}
+    .dot{width:12px;height:12px;border-radius:3px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.3px}
+    td{padding:5px 8px;border-bottom:1px solid #eee;vertical-align:middle}
+    tr:nth-child(even) td{background:#f8fafc}
+    .footer{margin-top:12px;font-size:10px;color:#999;text-align:right}
+    @media print{button{display:none}body{padding:10px}}
+  </style></head><body>
+  <div class="header">
+    <h1>Curva ABC — Análise de Produtos</h1>
+    <div class="sub">${empresas} &nbsp;|&nbsp; Período: ${periodo}${sku?' &nbsp;|&nbsp; SKU: '+sku:''}</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">SKUs Analisados</div><div class="kpi-value">${_abcData.length.toLocaleString('pt-BR')}</div></div>
+    <div class="kpi"><div class="kpi-label">Unidades Vendidas</div><div class="kpi-value">${uniTotal.toLocaleString('pt-BR')}</div></div>
+    <div class="kpi"><div class="kpi-label">Receita Total</div><div class="kpi-value">${fBRL(recTotal)}</div></div>
+    <div class="kpi"><div class="kpi-label">Classe A (&gt;80%)</div><div class="kpi-value" style="color:#166534">${_abcData.filter(r=>r.cl==='A').length} SKUs</div></div>
+    <div class="kpi"><div class="kpi-label">Classe B (80-95%)</div><div class="kpi-value" style="color:#854d0e">${_abcData.filter(r=>r.cl==='B').length} SKUs</div></div>
+    <div class="kpi"><div class="kpi-label">Classe C (95-100%)</div><div class="kpi-value" style="color:#991b1b">${_abcData.filter(r=>r.cl==='C').length} SKUs</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th style="text-align:center;width:50px">Rank</th>
+      <th>SKU</th>
+      <th style="text-align:center;width:60px">Classe</th>
+      <th style="text-align:right;width:90px">Unidades</th>
+      <th style="text-align:right;width:110px">Receita</th>
+      <th style="text-align:right;width:80px">% Receita</th>
+      <th style="text-align:right;width:80px">% Acum.</th>
+    </tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr style="background:#0d1b2a;color:white;font-weight:700">
+      <td colspan="2" style="padding:7px 8px">TOTAL</td>
+      <td></td>
+      <td style="text-align:right;padding:7px 8px">${uniTotal.toLocaleString('pt-BR')}</td>
+      <td style="text-align:right;padding:7px 8px">${fBRL(recTotal)}</td>
+      <td style="text-align:right;padding:7px 8px">100%</td>
+      <td style="text-align:right;padding:7px 8px">100%</td>
+    </tr></tfoot>
+  </table>
+  <div class="footer">Impresso em ${hoje} &nbsp;|&nbsp; Lume Financeiro</div>
+  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Imprimir / Salvar PDF</button>
+  </body></html>`;
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+  else alert('Permita popups para imprimir.');
+}
+
+function imprimirEstoqueModelo(){
+  if(!_estoqueMP.length&&!_estoqueSKU.length){alert('Calcule o estoque primeiro');return;}
+  const de=document.getElementById('fest-de')?.value||'';
+  const ate=document.getElementById('fest-ate')?.value||'';
+  const dias=document.getElementById('fest-dias')?.value||'30';
+  const periodo=de&&ate?`${fDate(de)} a ${fDate(ate)}`:'—';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const empresas=EMPRESAS.map(e=>e.nome).join(', ');
+  const totalValMP=_estoqueMP.reduce((s,m)=>s+m.val,0);
+  const totalQtdSKU=_estoqueSKU.reduce((s,s2)=>s+s2.qtdProj,0);
+  const totalValSKU=_estoqueSKU.reduce((s,s2)=>s+s2.valProj,0);
+
+  const linhasMP=_estoqueMP.map(m=>`
+    <tr>
+      <td style="font-weight:500">${m.nome}</td>
+      <td style="text-align:center;color:#666">${m.unidade}</td>
+      <td style="text-align:right">${Math.ceil(m.qtd).toLocaleString('pt-BR')}</td>
+      <td style="text-align:right;color:#166534;font-weight:500">${m.val?fBRL(m.val):'—'}</td>
+    </tr>`).join('');
+
+  const linhasSKU=_estoqueSKU.map(s=>`
+    <tr>
+      <td style="font-weight:500">${s.sku}</td>
+      <td style="text-align:right;color:#666">${s.qtdDia.toFixed(2)}</td>
+      <td style="text-align:right">${s.qtdProj.toLocaleString('pt-BR')}</td>
+      <td style="text-align:right;color:#166534;font-weight:500">${fBRL(s.valProj)}</td>
+    </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Estoque Modelo — ${empresas}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a2e;padding:20px}
+    .header{border-bottom:3px solid #1e9be8;padding-bottom:12px;margin-bottom:16px}
+    h1{font-size:20px;color:#1e9be8;margin-bottom:4px}
+    .sub{color:#666;font-size:11px}
+    .kpis{display:flex;gap:16px;margin-bottom:20px}
+    .kpi{background:#f0f7ff;border-radius:8px;padding:10px 16px;flex:1;text-align:center}
+    .kpi-label{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px}
+    .kpi-value{font-size:16px;font-weight:700;color:#1e9be8;margin-top:2px}
+    .section{margin-bottom:24px}
+    .section-title{font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #e2e8f0}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.3px}
+    td{padding:5px 8px;border-bottom:1px solid #eee;vertical-align:middle}
+    tr:nth-child(even) td{background:#f8fafc}
+    .footer{margin-top:12px;font-size:10px;color:#999;text-align:right}
+    @media print{button{display:none}body{padding:10px}.section{page-break-inside:avoid}}
+  </style></head><body>
+  <div class="header">
+    <h1>Estoque Modelo — Projeção de ${dias} dias</h1>
+    <div class="sub">${empresas} &nbsp;|&nbsp; Base: ${periodo}</div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Dias Projetados</div><div class="kpi-value">${dias}</div></div>
+    <div class="kpi"><div class="kpi-label">SKUs</div><div class="kpi-value">${_estoqueSKU.length.toLocaleString('pt-BR')}</div></div>
+    <div class="kpi"><div class="kpi-label">Qtd Total Proj.</div><div class="kpi-value">${totalQtdSKU.toLocaleString('pt-BR')}</div></div>
+    <div class="kpi"><div class="kpi-label">Valor Est. SKUs</div><div class="kpi-value">${fBRL(totalValSKU)}</div></div>
+    <div class="kpi"><div class="kpi-label">Valor Est. MP</div><div class="kpi-value">${fBRL(totalValMP)}</div></div>
+  </div>
+  <div class="section">
+    <div class="section-title">Matéria-Prima Necessária — ${dias} dias</div>
+    <table>
+      <thead><tr>
+        <th>Material</th>
+        <th style="text-align:center;width:60px">Un.</th>
+        <th style="text-align:right;width:100px">Quantidade</th>
+        <th style="text-align:right;width:110px">Valor Est.</th>
+      </tr></thead>
+      <tbody>${linhasMP}</tbody>
+      <tfoot><tr style="background:#0d1b2a;color:white;font-weight:700">
+        <td colspan="2" style="padding:7px 8px">TOTAL</td>
+        <td style="text-align:right;padding:7px 8px">—</td>
+        <td style="text-align:right;padding:7px 8px">${fBRL(totalValMP)}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="section">
+    <div class="section-title">Projeção por SKU — ${dias} dias</div>
+    <table>
+      <thead><tr>
+        <th>SKU</th>
+        <th style="text-align:right;width:90px">Qtd/dia</th>
+        <th style="text-align:right;width:100px">Qtd Proj.</th>
+        <th style="text-align:right;width:110px">Valor Est.</th>
+      </tr></thead>
+      <tbody>${linhasSKU}</tbody>
+      <tfoot><tr style="background:#0d1b2a;color:white;font-weight:700">
+        <td style="padding:7px 8px">TOTAL</td>
+        <td></td>
+        <td style="text-align:right;padding:7px 8px">${totalQtdSKU.toLocaleString('pt-BR')}</td>
+        <td style="text-align:right;padding:7px 8px">${fBRL(totalValSKU)}</td>
+      </tr></tfoot>
+    </table>
+  </div>
+  <div class="footer">Impresso em ${hoje} &nbsp;|&nbsp; Lume Financeiro</div>
+  <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Imprimir / Salvar PDF</button>
+  </body></html>`;
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+  else alert('Permita popups para imprimir.');
 }
 
 function exportarEstoqueMPXLS(){
