@@ -447,7 +447,35 @@ tr:hover td{background:var(--surface2);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModal('modal-fac-confirmar')">Cancelar</button>
-      <button class="btn btn-primary" id="btn-conf-fac" onclick="confirmarEntregaFaccao()">Confirmar e Gerar PDF</button>
+      <button class="btn btn-primary" id="btn-conf-fac" onclick="abrirModalAssinatura()">Finalizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ASSINATURA -->
+<div class="modal-overlay" id="modal-assinatura" style="display:none;z-index:9999">
+  <div class="modal" style="max-width:420px;width:95%">
+    <div class="modal-header">
+      <div class="modal-title">✍️ Assinatura de Recebimento</div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">Assine abaixo para confirmar o recebimento das peças entregues.</p>
+      <div style="border:2px solid var(--border);border-radius:8px;background:#fff;position:relative;margin-bottom:16px">
+        <canvas id="canvas-assinatura" width="380" height="160" style="display:block;touch-action:none;cursor:crosshair;border-radius:6px"></canvas>
+        <button onclick="limparAssinatura()" style="position:absolute;top:6px;right:6px;background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;color:var(--text2)">Limpar</button>
+        <span style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-size:10px;color:#ccc;pointer-events:none">Assine aqui</span>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px">PIN de recebimento</label>
+        <input type="password" id="input-pin-assinatura" maxlength="8" placeholder="••••"
+          style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:18px;letter-spacing:6px;text-align:center;background:var(--surface2);color:var(--text1)"
+          oninput="this.value=this.value.replace(/\D/g,'')">
+      </div>
+      <p id="assinatura-erro" style="color:var(--red);font-size:12px;display:none;text-align:center"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-assinatura')">Voltar</button>
+      <button class="btn btn-primary" onclick="confirmarComAssinatura()">✅ Confirmar e Gerar PDF</button>
     </div>
   </div>
 </div>
@@ -1208,6 +1236,7 @@ tr:hover td{background:var(--surface2);}
     <div class="form-group"><label class="form-label">Nome</label><input class="form-control" type="text" id="terc-nome"></div>
     <div class="form-group"><label class="form-label">E-mail</label><input class="form-control" type="email" id="terc-email" placeholder="Para acesso ao sistema"></div>
     <div class="form-group"><label class="form-label">Senha de Acesso</label><input class="form-control" type="text" id="terc-senha" placeholder="Senha para o terceiro entrar e ver suas OPs"></div>
+    <div class="form-group"><label class="form-label">PIN de Recebimento</label><input class="form-control" type="text" id="terc-pin" maxlength="8" placeholder="Ex: 0320 — necessário para assinar entregas" oninput="this.value=this.value.replace(/\D/g,'')"><small style="color:var(--text3);font-size:11px">Configurado pelo responsável da empresa. Quando preenchido, o checkout seguro fica ativo.</small></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-terceiro')">Cancelar</button><button class="btn btn-primary" onclick="salvarTerceiro()">Salvar</button></div>
   </div>
 </div>
@@ -2176,12 +2205,13 @@ async function salvarTerceiro(){
   const nome=document.getElementById('terc-nome').value.trim();
   const email=document.getElementById('terc-email').value.trim();
   const senha=document.getElementById('terc-senha').value;
+  const pin=document.getElementById('terc-pin').value.trim()||null;
   if(!nome)return alert('Informe o nome');
   if(!id&&email&&!senha)return alert('Informe uma senha para criar o acesso de login');
-  const body={nome,email:email||null,ativo:true};
+  const body={nome,email:email||null,ativo:true,pin_recebimento:pin};
   if(!id){
-    body.user_id=SESSION.user.id; // obrigatório na criação — identifica o dono do cadastro
-    body.empresa_id=(EMPRESAS&&EMPRESAS[0])?EMPRESAS[0].id:null; // empresa padrão do owner
+    body.user_id=SESSION.user.id;
+    body.empresa_id=(EMPRESAS&&EMPRESAS[0])?EMPRESAS[0].id:null;
   }
   try{
     let tercId=id;
@@ -2191,7 +2221,6 @@ async function salvarTerceiro(){
       const[novo]=await sbPost('terceiros',body);
       tercId=novo.id;
     }
-    // Se foi informado e-mail+senha, criar/atualizar a conta de login real (Supabase Auth) via worker
     if(email&&senha){
       const rLogin=await fetch('https://lume-mkt.maxhome-loja.workers.dev/terceiro/criar-login',{
         method:'POST',headers:{'Content-Type':'application/json'},
@@ -5084,21 +5113,107 @@ function abrirConfirmacaoFaccao(){
   abrirModal('modal-fac-confirmar');
 }
 
-async function confirmarEntregaFaccao(){
+// ── ASSINATURA DIGITAL ────────────────────────────────────────────────────
+let _assinaturaCtx=null, _assinaturaDesenhando=false, _assinaturaDataURL=null;
+
+function iniciarCanvasAssinatura(){
+  const canvas=document.getElementById('canvas-assinatura');
+  if(!canvas)return;
+  _assinaturaCtx=canvas.getContext('2d');
+  _assinaturaCtx.strokeStyle='#1a1a2e';
+  _assinaturaCtx.lineWidth=2.5;
+  _assinaturaCtx.lineCap='round';
+  _assinaturaCtx.lineJoin='round';
+
+  const getPos=(e)=>{
+    const r=canvas.getBoundingClientRect();
+    const touch=e.touches?e.touches[0]:e;
+    return{x:(touch.clientX-r.left)*(canvas.width/r.width),y:(touch.clientY-r.top)*(canvas.height/r.height)};
+  };
+
+  canvas.addEventListener('mousedown',e=>{_assinaturaDesenhando=true;const p=getPos(e);_assinaturaCtx.beginPath();_assinaturaCtx.moveTo(p.x,p.y);});
+  canvas.addEventListener('mousemove',e=>{if(!_assinaturaDesenhando)return;const p=getPos(e);_assinaturaCtx.lineTo(p.x,p.y);_assinaturaCtx.stroke();});
+  canvas.addEventListener('mouseup',()=>{_assinaturaDesenhando=false;});
+  canvas.addEventListener('mouseleave',()=>{_assinaturaDesenhando=false;});
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();_assinaturaDesenhando=true;const p=getPos(e);_assinaturaCtx.beginPath();_assinaturaCtx.moveTo(p.x,p.y);},{passive:false});
+  canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!_assinaturaDesenhando)return;const p=getPos(e);_assinaturaCtx.lineTo(p.x,p.y);_assinaturaCtx.stroke();},{passive:false});
+  canvas.addEventListener('touchend',()=>{_assinaturaDesenhando=false;});
+}
+
+function limparAssinatura(){
+  const canvas=document.getElementById('canvas-assinatura');
+  if(canvas&&_assinaturaCtx)_assinaturaCtx.clearRect(0,0,canvas.width,canvas.height);
+  _assinaturaDataURL=null;
+}
+
+function canvasEstaVazio(){
+  const canvas=document.getElementById('canvas-assinatura');
+  if(!canvas)return true;
+  const data=_assinaturaCtx.getImageData(0,0,canvas.width,canvas.height).data;
+  return !data.some(v=>v!==0);
+}
+
+function abrirModalAssinatura(){
+  if(!_faccaoCarrinho.length||!FACCAO_LOGADO)return;
+  // Verificar se PIN está configurado — se não tiver, prosseguir sem assinatura
+  if(!FACCAO_LOGADO.pin_recebimento){
+    confirmarEntregaFaccao(null);
+    return;
+  }
+  limparAssinatura();
+  document.getElementById('input-pin-assinatura').value='';
+  const erroEl=document.getElementById('assinatura-erro');
+  if(erroEl)erroEl.style.display='none';
+  abrirModal('modal-assinatura');
+  setTimeout(iniciarCanvasAssinatura,100);
+}
+
+async function confirmarComAssinatura(){
+  const pin=document.getElementById('input-pin-assinatura').value.trim();
+  const erroEl=document.getElementById('assinatura-erro');
+
+  // Validar assinatura
+  if(canvasEstaVazio()){
+    erroEl.textContent='Por favor, assine antes de confirmar.';
+    erroEl.style.display='block';
+    return;
+  }
+
+  // Validar PIN
+  if(!pin){
+    erroEl.textContent='Informe o PIN de recebimento.';
+    erroEl.style.display='block';
+    return;
+  }
+
+  if(pin!==FACCAO_LOGADO.pin_recebimento){
+    erroEl.textContent='PIN incorreto. Tente novamente.';
+    erroEl.style.display='block';
+    document.getElementById('input-pin-assinatura').value='';
+    return;
+  }
+
+  // Capturar assinatura como imagem
+  const canvas=document.getElementById('canvas-assinatura');
+  _assinaturaDataURL=canvas.toDataURL('image/png');
+
+  fecharModal('modal-assinatura');
+  await confirmarEntregaFaccao(_assinaturaDataURL);
+}
+
+async function confirmarEntregaFaccao(assinaturaDataURL){
   if(!_faccaoCarrinho.length||!FACCAO_LOGADO)return;
   const btn=document.getElementById('btn-conf-fac');
-  btn.disabled=true;btn.textContent='Confirmando...';
+  if(btn){btn.disabled=true;btn.textContent='Confirmando...';}
   const obs=document.getElementById('fac-conf-obs').value.trim();
   const dataEntrega=document.getElementById('fac-conf-data')?.value||new Date().toISOString().split('T')[0];
   const venc=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0];
 
-  // A notinha pode misturar OPs de empresas diferentes (e itens avulsos sem OP) — cada empresa precisa de seu próprio lançamento financeiro
   let empresaPadrao=_faccaoCarrinho.find(i=>!i.avulso&&i.op?.empresa_id)?.op.empresa_id||null;
-  // Fallback: se todos os itens são avulsos, usar a empresa vinculada ao próprio terceiro logado
   if(!empresaPadrao&&FACCAO_LOGADO?.empresa_id) empresaPadrao=FACCAO_LOGADO.empresa_id;
-  if(!empresaPadrao){btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';alert('Não foi possível identificar a empresa para este lançamento (nenhum item do carrinho está vinculado a uma OP). Adicione ao menos um item com OP antes de confirmar.');return;}
+  if(!empresaPadrao){if(btn){btn.disabled=false;btn.textContent='Finalizar';}alert('Não foi possível identificar a empresa para este lançamento (nenhum item do carrinho está vinculado a uma OP). Adicione ao menos um item com OP antes de confirmar.');return;}
 
-  const grupos={}; // empresa_id -> {itens:[...]}
+  const grupos={};
   _faccaoCarrinho.forEach(item=>{
     const empId=item.avulso?empresaPadrao:(item.op?.empresa_id||empresaPadrao);
     if(!grupos[empId])grupos[empId]={itens:[]};
@@ -5109,15 +5224,12 @@ async function confirmarEntregaFaccao(){
     const totalValor=_faccaoCarrinho.reduce((s,i)=>s+i.valor,0);
     const totalQtd=_faccaoCarrinho.reduce((s,i)=>s+i.qtd,0);
 
-    // 1 lançamento financeiro por empresa presente no carrinho
     for(const empId of Object.keys(grupos)){
       const itensGrupo=grupos[empId].itens;
       const valorGrupo=itensGrupo.reduce((s,i)=>s+i.valor,0);
       const qtdGrupo=itensGrupo.reduce((s,i)=>s+i.qtd,0);
       const itensDescGrupo=itensGrupo.map(i=>i.avulso?i.sku:(i.op.numero+'/'+i.op.sku)).join(', ');
       const descLanGrupo='Entrega '+FACCAO_LOGADO.nome+' — '+qtdGrupo+' peças ('+itensDescGrupo+')';
-
-      // Buscar categoria Facção dinamicamente
       const catFaccao=(CATEGORIAS||[]).find(c=>c.nome==='Facção')?.id||null;
       await sbPost('lancamentos_externos',{
         empresa_id:empId,
@@ -5134,7 +5246,6 @@ async function confirmarEntregaFaccao(){
       });
     }
 
-    // Registrar cada entrega individualmente
     for(const item of _faccaoCarrinho){
       const empIdItem=item.avulso?empresaPadrao:(item.op?.empresa_id||empresaPadrao);
       const entrega={
@@ -5159,25 +5270,24 @@ async function confirmarEntregaFaccao(){
       }
     }
 
-    // Gerar PDF comprovante
-    gerarPDFEntregaFaccao(dataEntrega, totalValor, totalQtd, obs);
+    gerarPDFEntregaFaccao(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
 
     _faccaoCarrinho.length=0;
     fecharModal('modal-fac-confirmar');
-    btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';
+    if(btn){btn.disabled=false;btn.textContent='Finalizar';}
     await carregarOPsFaccao();
     renderFaccaoCarrinho();
   }catch(e){
-    btn.disabled=false;btn.textContent='Confirmar e Gerar PDF';
+    if(btn){btn.disabled=false;btn.textContent='Finalizar';}
     alert('Erro: '+e.message);
   }
 }
 
-function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
-  // Gerar PDF via printJS simples usando window.print
+function gerarPDFEntregaFaccao(data, total, totalQtd, obs, assinaturaDataURL){
   const itens=_faccaoCarrinho.length?[..._faccaoCarrinho]:[];
   const dataFmt=data.split('-').reverse().join('/');
   const vencFmt=new Date(new Date(data).getTime()+7*864e5).toISOString().split('T')[0].split('-').reverse().join('/');
+  const agora=new Date().toLocaleString('pt-BR');
 
   const linhas=itens.map(i=>`
     <tr>
@@ -5187,6 +5297,18 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
       <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(i.preco||i.op?._preco||0)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(i.valor)}</td>
     </tr>`).join('');
+
+  const blocoAssinatura=assinaturaDataURL?`
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
+      <div style="font-size:11px;color:#666;margin-bottom:6px">Assinatura Digital de Recebimento</div>
+      <div style="border:1px solid #ddd;border-radius:6px;padding:8px;background:#fafafa;display:inline-block">
+        <img src="${assinaturaDataURL}" style="height:80px;display:block">
+      </div>
+      <div style="font-size:10px;color:#999;margin-top:4px">Assinado digitalmente em ${agora} · ${FACCAO_LOGADO.nome}</div>
+    </div>`:`
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
+      <div style="font-size:10px;color:#999">Documento gerado sem assinatura digital (PIN não configurado)</div>
+    </div>`;
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Comprovante Entrega</title>
@@ -5212,6 +5334,7 @@ function gerarPDFEntregaFaccao(data, total, totalQtd, obs){
     <tbody>${linhas}</tbody>
     <tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(total)}</td></tr></tfoot>
   </table>
+  ${blocoAssinatura}
   <br><button onclick="this.disabled=true;setTimeout(()=>window.print(),200)" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
   </body></html>`;
 
