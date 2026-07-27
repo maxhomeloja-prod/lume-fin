@@ -1007,6 +1007,7 @@ tr:hover td{background:var(--surface2);}
         </div>
         <div class="filter-group"><span class="filter-label">De</span><input type="date" class="filter-control" id="fbal-de"></div>
         <div class="filter-group"><span class="filter-label">Até</span><input type="date" class="filter-control" id="fbal-ate"></div>
+        <div class="filter-group"><span class="filter-label">Conta</span><select class="filter-control" id="fbal-conta" style="min-width:180px" onchange="loadBalancete()"><option value="">Todas as contas</option></select></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
       </div>
       <div id="bal-saldos" class="saldo-cards"></div>
@@ -3317,8 +3318,20 @@ async function confirmarTodas(){
 async function loadBalancete(){
   if(!EMPRESAS.length){semEmpresaMsg('bal-corpo');return;}
   const de=document.getElementById('fbal-de')?.value;const ate=document.getElementById('fbal-ate')?.value;
+  const contaSel=document.getElementById('fbal-conta')?.value||'';
   document.getElementById('bal-corpo').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
+    // Popular dropdown de contas
+    const contasSel=document.getElementById('fbal-conta');
+    if(contasSel&&contasSel.options.length<=1){
+      const todasContas=await sbGet('contas_bancarias','?empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')'+'&tipo=eq.BANK&select=id,banco,nome_conta&order=banco.asc');
+      todasContas.forEach(c=>{
+        const opt=document.createElement('option');
+        opt.value=c.id;opt.textContent=c.banco+' — '+c.nome_conta;
+        contasSel.appendChild(opt);
+      });
+      if(contaSel)contasSel.value=contaSel;
+    }
     // Montar query de empresas com suporte a multi-seleção e caixa
     let empIds,inclCaixa=false;
     if(_balEmpSel===null){
@@ -3331,6 +3344,7 @@ async function loadBalancete(){
     const empQStr=empIds.length?'empresa_id=in.('+empIds.join(',')+')':`empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})`;
     let qT='?'+empQStr+'&status=eq.CONFIRMADA';
     if(de)qT+=`&data=gte.${de}`;if(ate)qT+=`&data=lte.${ate}`;
+    if(contaSel)qT+=`&conta_id=eq.${contaSel}`;
     const uid=SESSION?.user?.id||'00000000-0000-0000-0000-000000000000';
     const cxQ=inclCaixa?'?user_id=eq.'+uid:'?user_id=eq.00000000-0000-0000-0000-000000000000';
     // Se só caixa físico selecionado, não buscar transações bancárias
