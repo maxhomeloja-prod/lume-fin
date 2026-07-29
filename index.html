@@ -843,6 +843,11 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header"><div><div class="page-title">Estrutura de Materiais</div><div class="page-sub">Bill of Materials por SKU</div></div><div style="display:flex;gap:8px;align-items:center">
           <input class="filter-control" type="text" id="fbom-sku" placeholder="Buscar SKU..." style="width:180px" oninput="renderBOMFiltrado()">
           <button class="btn btn-secondary btn-sm" onclick="loadBOM()">↻ Atualizar</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportarModeloBOM()">📥 Baixar Modelo</button>
+          <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0">
+            📤 Importar xlsx
+            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarBOMCSV(this)">
+          </label>
         </div></div>
       <div id="bom-pendencias" class="mb16"></div>
       <div id="bom-cadastrados"></div>
@@ -3091,6 +3096,137 @@ async function salvarBOM(){
     for(const item of itens)await sbPost('estrutura_produto',{empresa_id:empresaId,sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,preco_unitario:item.preco_unitario});
     fecharModal('modal-bom');loadBOM();
   }catch(e){alert('Erro: '+e.message);}
+}
+
+// ── BOM IMPORTAÇÃO/EXPORTAÇÃO XLSX ───────────────────────────────
+async function exportarModeloBOM(){
+  if(!EMPRESAS.length)return alert('Nenhuma empresa encontrada');
+  const empIds=EMPRESAS.map(e=>e.id).join(',');
+
+  const [corrs, bomEx] = await Promise.all([
+    sbGet('correlacao_sku',`?empresa_id=in.(${empIds})&select=sku_canonico&limit=2000`).catch(()=>[]),
+    sbGet('estrutura_produto',`?empresa_id=in.(${empIds})&select=sku,material_nome,quantidade,unidade,preco_unitario&order=sku`).catch(()=>[])
+  ]);
+  const skusCanonicos=[...new Set(corrs.map(c=>c.sku_canonico))].sort();
+  const skusCad=new Set(bomEx.map(b=>b.sku));
+
+  // Carregar SheetJS dinamicamente se não estiver carregado
+  if(!window.XLSX){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+
+  const linhas=[['sku','material_nome','quantidade','unidade','preco_unitario']];
+
+  // Cadastrados com dados atuais
+  bomEx.forEach(r=>linhas.push([r.sku,r.material_nome,r.quantidade,r.unidade||'un',r.preco_unitario||'']));
+
+  // Pendentes — linha em branco para preencher
+  skusCanonicos.filter(s=>!skusCad.has(s)).forEach(sku=>linhas.push([sku,'','','un','']));
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(linhas);
+
+  // Larguras de coluna
+  ws['!cols']=[{wch:30},{wch:35},{wch:12},{wch:10},{wch:16}];
+
+  // Estilo do cabeçalho (linha 1)
+  const headerStyle={font:{bold:true},fill:{fgColor:{rgb:'1e9be8'}},alignment:{horizontal:'center'}};
+  ['A1','B1','C1','D1','E1'].forEach(ref=>{
+    if(!ws[ref])return;
+    ws[ref].s=headerStyle;
+  });
+
+  // Instrução na aba separada
+  const wsInfo=XLSX.utils.aoa_to_sheet([
+    ['INSTRUÇÕES DE PREENCHIMENTO'],
+    [''],
+    ['Coluna','Descrição','Obrigatório'],
+    ['sku','SKU canônico do produto (não alterar)','SIM'],
+    ['material_nome','Nome do material/insumo','SIM'],
+    ['quantidade','Quantidade usada por unidade produzida','SIM'],
+    ['unidade','Unidade: un, m, kg, g','SIM'],
+    ['preco_unitario','Preço unitário do material (pode ficar em branco)','NÃO'],
+    [''],
+    ['OBSERVAÇÕES'],
+    ['- SKUs em amarelo estão pendentes de preenchimento'],
+    ['- Cada material é uma linha separada'],
+    ['- Um SKU com 3 materiais = 3 linhas com o mesmo SKU'],
+    ['- Não altere os nomes das colunas'],
+    ['- Salve o arquivo e importe pelo botão "Importar xlsx"'],
+  ]);
+  wsInfo['!cols']=[{wch:20},{wch:50},{wch:15}];
+
+  XLSX.utils.book_append_sheet(wb,ws,'BOM');
+  XLSX.utils.book_append_sheet(wb,wsInfo,'Instruções');
+  XLSX.writeFile(wb,`BOM_modelo_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+async function importarBOMCSV(input){
+  const file=input.files[0];
+  if(!file)return;
+  input.value='';
+  const empresaId=EMPRESAS[0]?.id;
+  if(!empresaId)return alert('Nenhuma empresa encontrada');
+
+  // Carregar SheetJS se necessário
+  if(!window.XLSX){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+
+  // Usar primeira aba que não seja "Instruções"
+  const nomAba=wb.SheetNames.find(n=>n!=='Instruções')||wb.SheetNames[0];
+  const ws=wb.Sheets[nomAba];
+  const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+
+  if(!rows.length)return alert('Planilha vazia ou sem dados');
+
+  // Agrupar por SKU
+  const porSku={};
+  let ignoradas=0;
+  rows.forEach(r=>{
+    const sku=String(r['sku']||'').trim();
+    const mat=String(r['material_nome']||'').trim();
+    const qtd=parseFloat(String(r['quantidade']||'').replace(',','.'));
+    const un=String(r['unidade']||'un').trim()||'un';
+    const prc=parseFloat(String(r['preco_unitario']||'').replace(',','.'))||null;
+    if(!sku||!mat||isNaN(qtd)||qtd<=0){ignoradas++;return;}
+    if(!porSku[sku])porSku[sku]=[];
+    porSku[sku].push({material_nome:mat,quantidade:qtd,unidade:un,preco_unitario:isNaN(prc)?null:prc});
+  });
+
+  const skus=Object.keys(porSku);
+  if(!skus.length)return alert(`Nenhuma linha válida encontrada.\n${ignoradas} linha(s) ignoradas por dados incompletos.`);
+
+  const conf=confirm(`Importar estrutura para ${skus.length} SKU(s)?\n\n${skus.slice(0,10).join('\n')}${skus.length>10?`\n...e mais ${skus.length-10}`:''}${ignoradas?`\n\n⚠ ${ignoradas} linha(s) ignoradas por dados incompletos`:''}\n\nEstrutura existente será substituída.`);
+  if(!conf)return;
+
+  let ok=0,erros=0;
+  const btnImp=document.querySelector('label.btn.btn-primary.btn-sm');
+  const origText=btnImp?.querySelector('span')?.textContent||'📤 Importar xlsx';
+
+  for(const sku of skus){
+    try{
+      await sbDelete('estrutura_produto',`sku=eq.${encodeURIComponent(sku)}&empresa_id=eq.${empresaId}`);
+      for(const item of porSku[sku]){
+        await sbPost('estrutura_produto',{empresa_id:empresaId,sku,material_nome:item.material_nome,quantidade:item.quantidade,unidade:item.unidade,preco_unitario:item.preco_unitario});
+      }
+      ok++;
+    }catch(e){erros++;console.error('BOM import erro SKU',sku,e);}
+  }
+
+  alert(`Importação concluída!\n✅ ${ok} SKUs importados${erros?`\n❌ ${erros} com erro`:''}`);
+  loadBOM();
 }
 
 // ── ABC ───────────────────────────────────────────────────────
