@@ -4017,7 +4017,7 @@ async function loginFaccao(){
     const d=await r.json();
     if(!r.ok)throw new Error(d.error_description||d.msg||'Credenciais inválidas');
     // Verificar se é terceiro
-    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome,user_id,empresa_id',{
+    const rTerc=await fetch(SB_URL+'/rest/v1/terceiros?auth_user_id=eq.'+d.user.id+'&select=id,nome,user_id,empresa_id,pin_recebimento',{
       headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
     });
     const tercs=await rTerc.json();
@@ -6096,7 +6096,17 @@ window.addEventListener('DOMContentLoaded', async()=>{
     dbg('lume_faccao: '+(rawFac?'existe':'vazio'));
     if(rawFac){
       const fac=JSON.parse(rawFac);
-      if(fac&&fac.id){FACCAO_LOGADO=fac;await iniciarFaccaoView();return;}
+      if(fac&&fac.id&&fac.token){
+        try{
+          const rT=await fetch(SB_URL+'/rest/v1/terceiros?id=eq.'+fac.id+'&select=id,nome,user_id,empresa_id,pin_recebimento',{
+            headers:{apikey:SB_ANON,Authorization:'Bearer '+fac.token}
+          });
+          const tArr=await rT.json();
+          if(tArr&&tArr.length){FACCAO_LOGADO={...fac,...tArr[0]};localStorage.setItem('lume_faccao',JSON.stringify(FACCAO_LOGADO));}
+          else{FACCAO_LOGADO=fac;}
+        }catch(e){FACCAO_LOGADO=fac;}
+        await iniciarFaccaoView();return;
+      }
     }
   }catch(e){dbg('faccao err: '+e.message);}
   // Restaurar sessão empresa
