@@ -2616,11 +2616,88 @@ async function loadEntregas(){
         '<td style="color:var(--text3);font-size:11px">'+(e.observacao||'—')+'</td>'+
         '<td style="display:flex;gap:4px;padding:6px 4px">'+
         '<button class="btn btn-danger btn-sm" onclick="excluirEntrega(this.dataset.id)" data-id="'+e.id+'" title="Excluir entrega">✕</button>'+
-        (e.lancamento_id?'<button class="btn btn-ghost btn-sm" onclick="editarLancamentoEntrega(this.dataset.id)" data-id="'+e.lancamento_id+'" title="Editar lançamento">✎</button>':'—')+
+        (e.lancamento_id?'<button class="btn btn-ghost btn-sm" onclick="editarLancamentoEntrega(this.dataset.id)" data-id="'+e.lancamento_id+'" title="Editar lançamento">✎</button>':'<span style="width:28px"></span>')+
+        '<button class="btn btn-secondary btn-sm" onclick="verComprovante(this.dataset.id,this.dataset.terc,this.dataset.data)" data-id="'+e.id+'" data-terc="'+(tercMap[e.terceiro_id]||'—')+'" data-data="'+(e.data_entrega||e.criado_em?.split('T')[0]||'')+'" title="Ver comprovante">🧾</button>'+
         '</td>'+
         '</tr>').join('')+
       '</tbody></table>';
   }catch(e){document.getElementById('entregas-lista').innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+async function verComprovante(entregaId, nomeTerc, dataEntrega){
+  try{
+    // Buscar a entrega base
+    const [entrega]=await sbGet('entregas_op',`?id=eq.${entregaId}&select=*`);
+    if(!entrega)return alert('Entrega não encontrada');
+
+    // Buscar TODOS os itens da mesma sessão (mesmo terceiro + data + minuto)
+    const min=(entrega.criado_em||'').substring(0,16);
+    const empId=entrega.empresa_id;
+    const tercId=entrega.terceiro_id;
+
+    const itens=await sbGet('entregas_op',
+      `?empresa_id=eq.${empId}&terceiro_id=eq.${tercId}&data_entrega=eq.${dataEntrega}&select=*&order=criado_em.asc`);
+
+    // Filtrar pela mesma sessão (mesmo minuto de criação)
+    const sessao=itens.filter(i=>(i.criado_em||'').substring(0,16)===min);
+    const itensSessao=sessao.length>0?sessao:itens;
+
+    // Buscar números das OPs
+    const opIds=[...new Set(itensSessao.map(i=>i.op_id).filter(Boolean))];
+    let opMap={};
+    if(opIds.length){
+      const ops=await sbGet('ordens_producao',`?id=in.(${opIds.join(',')})&select=id,numero,sku,preco_unitario`);
+      ops.forEach(o=>{opMap[o.id]=o;});
+    }
+
+    const dataFmt=dataEntrega.split('-').reverse().join('/');
+    const vencFmt=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0].split('-').reverse().join('/');
+    const totalValor=itensSessao.reduce((s,i)=>s+(parseFloat(i.valor_total)||0),0);
+    const totalQtd=itensSessao.reduce((s,i)=>s+(parseInt(i.quantidade)||0),0);
+    const obs=itensSessao.find(i=>i.observacao)?.observacao||'';
+
+    const linhas=itensSessao.map(i=>{
+      const op=opMap[i.op_id]||{};
+      const numOp=op.numero||'Avulso';
+      const sku=i.sku||op.sku||'—';
+      const preco=op.preco_unitario||0;
+      return `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee">${numOp}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee">${sku}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.quantidade}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">R$${preco.toFixed(2)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">R$${parseFloat(i.valor_total).toFixed(2)}</td>
+      </tr>`;}).join('');
+
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Comprovante — ${nomeTerc} — ${dataFmt}</title>
+<style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}
+h2{color:#1e9be8;margin-bottom:4px}
+.info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}
+th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}
+.total{background:#0d1b2a;color:white;font-weight:bold}.total td{padding:8px}
+@media print{button{display:none}}</style></head>
+<body>
+<h2>Maxhome Indústria e Comércio</h2>
+<p style="color:#888;margin-top:0">Comprovante de Entrega</p>
+<div class="info">
+  <b>Facção:</b> ${nomeTerc}<br>
+  <b>Data da Entrega:</b> ${dataFmt}<br>
+  <b>Vencimento Pagamento:</b> ${vencFmt}<br>
+  ${obs?'<b>Observação:</b> '+obs+'<br>':''}
+</div>
+<table>
+<thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead>
+<tbody>${linhas}</tbody>
+<tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">R$${totalValor.toFixed(2)}</td></tr></tfoot>
+</table>
+<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+</body></html>`;
+
+    const win=window.open('','_blank');
+    if(win){win.document.write(html);win.document.close();}
+  }catch(e){alert('Erro ao gerar comprovante: '+e.message);}
 }
 
 async function loadPagamentosOP(){
@@ -5342,6 +5419,7 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
   const obs=document.getElementById('fac-conf-obs').value.trim();
   const dataEntrega=document.getElementById('fac-conf-data')?.value||new Date().toISOString().split('T')[0];
   const venc=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0];
+  const _idsEntregasCriadas=[];
 
   let empresaPadrao=_faccaoCarrinho.find(i=>!i.avulso&&i.op?.empresa_id)?.op.empresa_id||null;
   if(!empresaPadrao&&FACCAO_LOGADO?.empresa_id) empresaPadrao=FACCAO_LOGADO.empresa_id;
@@ -5392,7 +5470,8 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
         data_entrega:dataEntrega,
         observacao:obs||null
       };
-      await sbPost('entregas_op',entrega);
+      const [novaEntrega]=await sbPost('entregas_op',{...entrega},true);
+      _idsEntregasCriadas.push(novaEntrega?.id||null);
       if(!item.avulso){
         const op=item.op;
         const novaQtd=op.quantidade_entregue+item.qtd;
@@ -5401,6 +5480,17 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
           quantidade_entregue:novaQtd,situacao:novaSit,
           data_conclusao:novaSit==='CONCLUIDA'?dataEntrega:null
         });
+      }
+    }
+
+    // Gerar HTML do comprovante e salvar no Storage
+    const htmlComp=gerarHTMLComprovante(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
+    const pdfUrl=await salvarComprovante(htmlComp, dataEntrega);
+
+    // Gravar pdf_url em todos os registros de entrega criados
+    if(pdfUrl&&_idsEntregasCriadas.length){
+      for(const eid of _idsEntregasCriadas.filter(Boolean)){
+        await sbPatch('entregas_op','id=eq.'+eid,{pdf_url:pdfUrl});
       }
     }
 
@@ -5415,6 +5505,35 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
     if(btn){btn.disabled=false;btn.textContent='Finalizar';}
     alert('Erro: '+e.message);
   }
+}
+
+async function salvarComprovante(html, dataEntrega){
+  try{
+    const nomeArq=`${FACCAO_LOGADO.empresa_id}/${FACCAO_LOGADO.id}_${dataEntrega}_${Date.now()}.html`;
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const r=await fetch(`${SB_URL}/storage/v1/object/comprovantes/${nomeArq}`,{
+      method:'POST',
+      headers:{
+        apikey:SB_ANON,
+        Authorization:'Bearer '+FACCAO_LOGADO.token,
+        'Content-Type':'text/html',
+        'x-upsert':'true'
+      },
+      body:blob
+    });
+    if(!r.ok){console.warn('Storage upload falhou:',r.status);return null;}
+    return `${SB_URL}/storage/v1/object/public/comprovantes/${nomeArq}`;
+  }catch(e){console.warn('salvarComprovante erro:',e.message);return null;}
+}
+
+function gerarHTMLComprovante(data, total, totalQtd, obs, assinaturaDataURL){
+  const itens=_faccaoCarrinho.length?[..._faccaoCarrinho]:[];
+  const dataFmt=data.split('-').reverse().join('/');
+  const vencFmt=new Date(new Date(data).getTime()+7*864e5).toISOString().split('T')[0].split('-').reverse().join('/');
+  const agora=new Date().toLocaleString('pt-BR');
+  const linhas=itens.map(i=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${i.avulso?'Avulso':(i.op?.numero||'—')}</td><td style="padding:6px 8px;border-bottom:1px solid #eee">${i.avulso?i.sku:(i.op?.sku||'—')}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.qtd}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(i.preco||i.op?._preco||0)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(i.valor)}</td></tr>`).join('');
+  const blocoAssinatura=assinaturaDataURL?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd"><div style="font-size:11px;color:#666;margin-bottom:6px">Assinatura Digital de Recebimento</div><div style="border:1px solid #ddd;border-radius:6px;padding:8px;background:#fafafa;display:inline-block"><img src="${assinaturaDataURL}" style="height:80px;display:block"></div><div style="font-size:10px;color:#999;margin-top:4px">Assinado digitalmente em ${agora} · ${FACCAO_LOGADO.nome}</div></div>`:`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd"><div style="font-size:10px;color:#999">Documento gerado sem assinatura digital</div></div>`;
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante Entrega</title><style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}h2{color:#1e9be8;margin-bottom:4px}.info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}table{width:100%;border-collapse:collapse}th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}.total{background:#0d1b2a;color:white;font-weight:bold}.total td{padding:8px}@media print{button{display:none}}</style></head><body><h2>Maxhome Indústria e Comércio</h2><p style="color:#888;margin-top:0">Comprovante de Entrega</p><div class="info"><b>Facção:</b> ${FACCAO_LOGADO.nome}<br><b>Data da Entrega:</b> ${dataFmt}<br><b>Vencimento Pagamento:</b> ${vencFmt}<br>${obs?'<b>Observação:</b> '+obs+'<br>':''}</div><table><thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(total)}</td></tr></tfoot></table>${blocoAssinatura}<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button></body></html>`;
 }
 
 function gerarPDFEntregaFaccao(data, total, totalQtd, obs, assinaturaDataURL){
