@@ -1678,19 +1678,13 @@ async function criarConta(){
 function abrirCadastro(){document.getElementById('login-screen').style.display='none';const el=document.getElementById('modal-cadastro');el.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';}
 function fecharCadastro(){document.getElementById('modal-cadastro').style.display='none';document.getElementById('login-screen').style.display='flex';}
 function logout(){
-  localStorage.removeItem('lume_session');
+  localStorage.clear();
   SESSION=null;EMPRESA_ID=null;EMPRESAS=[];CATEGORIAS=[];CONTAS=[];
   _ops=[];_terceiros=[];_precosOp={};_vendas=[];_lancamentos=[];
   _balTransacoes=[];_transacoesPendentes=[];_caixaEntradas=[];_caixaSaidas=[];
   _abcData=[];FACCAO_LOGADO=null;
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
-  document.getElementById('login-escolha').style.display='';
-  document.getElementById('login-empresa').style.display='none';
-  document.getElementById('login-faccao').style.display='none';
-  // Limpar campos de login
-  document.getElementById('login-email').value='';
-  document.getElementById('login-senha').value='';
+  // Reload garante estado limpo — sem risco de cache de variáveis globais
+  window.location.reload();
 }
 
 // ── Init ─────────────────────────────────────────────────────
@@ -2191,7 +2185,9 @@ async function desativarConta(id){
 // ── TERCEIROS ──────────────────────────────────────────────────
 async function loadTerceiros(){
   try{
-    _terceiros=await sbGet('terceiros',`?order=nome`);
+    if(!EMPRESAS||!EMPRESAS.length)return;
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
+    _terceiros=await sbGet('terceiros',`?empresa_id=in.(${empIds})&order=nome`);
     const el=document.getElementById('terceiros-lista');
     if(!_terceiros.length){el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Nenhum terceiro cadastrado</div></div>';return;}
     el.innerHTML='<div class="card"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Status</th><th></th></tr></thead><tbody>'+_terceiros.map(t=>`<tr><td style="font-weight:500">${t.nome}</td><td style="color:var(--text2)">${t.email||'—'}</td><td><span class="badge ${t.ativo?'badge-green':'badge-gray'}">${t.ativo?'ATIVO':'INATIVO'}</span></td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalTerceiro('${t.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirTerceiro('${t.id}')">✕</button></td></tr>`).join('')+'</tbody></table></div>';
@@ -2203,6 +2199,7 @@ function abrirModalTerceiro(id){
   document.getElementById('terc-nome').value=t?.nome||'';
   document.getElementById('terc-email').value=t?.email||'';
   document.getElementById('terc-senha').value='';
+  document.getElementById('terc-pin').value=t?.pin_recebimento||'';
   abrirModal('modal-terceiro');
 }
 async function salvarTerceiro(){
@@ -4172,14 +4169,10 @@ async function iniciarFaccaoView(){
   await carregarOPsFaccao();
 }
 function logoutFaccao(){
+  localStorage.clear();
   FACCAO_LOGADO=null;
   _faccaoCarrinho=[];
-  localStorage.removeItem('lume_faccao');
-  // Esconder tela de facção e voltar para a tela de escolha inicial
-  const fv=document.getElementById('faccao-view');
-  if(fv)fv.style.display='none';
-  document.getElementById('login-screen').style.display='';
-  voltarEscolha();
+  window.location.reload();
 }
 
 let _chartMensal=null;
