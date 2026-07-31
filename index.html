@@ -2650,6 +2650,11 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
       ops.forEach(o=>{opMap[o.id]=o;});
     }
 
+    // Assinatura e timestamp salvos no banco
+    const assinaturaDataURL=itensSessao.find(i=>i.assinatura_img)?.assinatura_img||null;
+    const assinadoEm=itensSessao.find(i=>i.assinado_em)?.assinado_em||null;
+    const assinadoEmFmt=assinadoEm?new Date(assinadoEm).toLocaleString('pt-BR'):null;
+
     const dataFmt=dataEntrega.split('-').reverse().join('/');
     const vencFmt=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0].split('-').reverse().join('/');
     const totalValor=itensSessao.reduce((s,i)=>s+(parseFloat(i.valor_total)||0),0);
@@ -2665,9 +2670,21 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
         <td style="padding:6px 8px;border-bottom:1px solid #eee">${numOp}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee">${sku}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.quantidade}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">R$${preco.toFixed(2)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">R$${parseFloat(i.valor_total).toFixed(2)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(preco)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(parseFloat(i.valor_total)||0)}</td>
       </tr>`;}).join('');
+
+    const blocoAssinatura=assinaturaDataURL
+      ?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
+          <div style="font-size:11px;color:#666;margin-bottom:6px">Assinatura Digital de Recebimento</div>
+          <div style="border:1px solid #ddd;border-radius:6px;padding:8px;background:#fafafa;display:inline-block">
+            <img src="${assinaturaDataURL}" style="height:80px;display:block">
+          </div>
+          <div style="font-size:10px;color:#999;margin-top:4px">Assinado digitalmente em ${assinadoEmFmt} · ${nomeTerc}</div>
+        </div>`
+      :`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
+          <div style="font-size:10px;color:#999">Documento gerado sem assinatura digital</div>
+        </div>`;
 
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Comprovante — ${nomeTerc} — ${dataFmt}</title>
@@ -2690,8 +2707,9 @@ th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px
 <table>
 <thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead>
 <tbody>${linhas}</tbody>
-<tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">R$${totalValor.toFixed(2)}</td></tr></tfoot>
+<tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(totalValor)}</td></tr></tfoot>
 </table>
+${blocoAssinatura}
 <br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
 </body></html>`;
 
@@ -5468,7 +5486,9 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
         quantidade:item.qtd,
         valor_total:item.valor,
         data_entrega:dataEntrega,
-        observacao:obs||null
+        observacao:obs||null,
+        assinatura_img:assinaturaDataURL||null,
+        assinado_em:assinaturaDataURL?new Date().toISOString():null
       };
       const [novaEntrega]=await sbPost('entregas_op',{...entrega},true);
       _idsEntregasCriadas.push(novaEntrega?.id||null);
