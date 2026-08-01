@@ -2626,23 +2626,23 @@ async function loadEntregas(){
 
 async function verComprovante(entregaId, nomeTerc, dataEntrega){
   try{
-    // Buscar a entrega base
-    const [entrega]=await sbGet('entregas_op',`?id=eq.${entregaId}&select=*`);
+    const [entrega]=await sbGet('entregas_op',`?id=eq.${entregaId}&select=comprovante_html,criado_em,empresa_id,terceiro_id,data_entrega`);
     if(!entrega)return alert('Entrega não encontrada');
 
-    // Buscar TODOS os itens da mesma sessão (mesmo terceiro + data + minuto)
+    // Tem HTML salvo — abrir o comprovante original diretamente
+    if(entrega.comprovante_html){
+      const win=window.open('','_blank');
+      if(win){win.document.write(entrega.comprovante_html);win.document.close();}
+      return;
+    }
+
+    // Fallback — entregas anteriores ao sistema: recriar a partir dos dados
     const min=(entrega.criado_em||'').substring(0,16);
-    const empId=entrega.empresa_id;
-    const tercId=entrega.terceiro_id;
+    const todos=await sbGet('entregas_op',
+      `?empresa_id=eq.${entrega.empresa_id}&terceiro_id=eq.${entrega.terceiro_id}&data_entrega=eq.${dataEntrega}&select=*&order=criado_em.asc`);
+    const sessao=todos.filter(i=>(i.criado_em||'').substring(0,16)===min);
+    const itensSessao=sessao.length>0?sessao:todos;
 
-    const itens=await sbGet('entregas_op',
-      `?empresa_id=eq.${empId}&terceiro_id=eq.${tercId}&data_entrega=eq.${dataEntrega}&select=*&order=criado_em.asc`);
-
-    // Filtrar pela mesma sessão (mesmo minuto de criação)
-    const sessao=itens.filter(i=>(i.criado_em||'').substring(0,16)===min);
-    const itensSessao=sessao.length>0?sessao:itens;
-
-    // Buscar números das OPs
     const opIds=[...new Set(itensSessao.map(i=>i.op_id).filter(Boolean))];
     let opMap={};
     if(opIds.length){
@@ -2650,11 +2650,9 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
       ops.forEach(o=>{opMap[o.id]=o;});
     }
 
-    // Assinatura e timestamp salvos no banco
     const assinaturaDataURL=itensSessao.find(i=>i.assinatura_img)?.assinatura_img||null;
     const assinadoEm=itensSessao.find(i=>i.assinado_em)?.assinado_em||null;
     const assinadoEmFmt=assinadoEm?new Date(assinadoEm).toLocaleString('pt-BR'):null;
-
     const dataFmt=dataEntrega.split('-').reverse().join('/');
     const vencFmt=new Date(new Date(dataEntrega).getTime()+7*864e5).toISOString().split('T')[0].split('-').reverse().join('/');
     const totalValor=itensSessao.reduce((s,i)=>s+(parseFloat(i.valor_total)||0),0);
@@ -2663,59 +2661,23 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
 
     const linhas=itensSessao.map(i=>{
       const op=opMap[i.op_id]||{};
-      const numOp=op.numero||'Avulso';
-      const sku=i.sku||op.sku||'—';
-      const preco=op.preco_unitario||0;
       return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee">${numOp}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee">${sku}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee">${op.numero||'Avulso'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.sku||op.sku||'—'}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${i.quantidade}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(preco)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fBRL(op.preco_unitario||0)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;color:#007700;font-weight:600">${fBRL(parseFloat(i.valor_total)||0)}</td>
       </tr>`;}).join('');
 
     const blocoAssinatura=assinaturaDataURL
-      ?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
-          <div style="font-size:11px;color:#666;margin-bottom:6px">Assinatura Digital de Recebimento</div>
-          <div style="border:1px solid #ddd;border-radius:6px;padding:8px;background:#fafafa;display:inline-block">
-            <img src="${assinaturaDataURL}" style="height:80px;display:block">
-          </div>
-          <div style="font-size:10px;color:#999;margin-top:4px">Assinado digitalmente em ${assinadoEmFmt} · ${nomeTerc}</div>
-        </div>`
-      :`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd">
-          <div style="font-size:10px;color:#999">Documento gerado sem assinatura digital</div>
-        </div>`;
+      ?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd"><div style="font-size:11px;color:#666;margin-bottom:6px">Assinatura Digital de Recebimento</div><div style="border:1px solid #ddd;border-radius:6px;padding:8px;background:#fafafa;display:inline-block"><img src="${assinaturaDataURL}" style="height:80px;display:block"></div><div style="font-size:10px;color:#999;margin-top:4px">Assinado digitalmente em ${assinadoEmFmt} · ${nomeTerc}</div></div>`
+      :`<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd"><div style="font-size:10px;color:#999">Entrega anterior ao sistema de assinatura digital</div></div>`;
 
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Comprovante — ${nomeTerc} — ${dataFmt}</title>
-<style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}
-h2{color:#1e9be8;margin-bottom:4px}
-.info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}
-table{width:100%;border-collapse:collapse}
-th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}
-.total{background:#0d1b2a;color:white;font-weight:bold}.total td{padding:8px}
-@media print{button{display:none}}</style></head>
-<body>
-<h2>Maxhome Indústria e Comércio</h2>
-<p style="color:#888;margin-top:0">Comprovante de Entrega</p>
-<div class="info">
-  <b>Facção:</b> ${nomeTerc}<br>
-  <b>Data da Entrega:</b> ${dataFmt}<br>
-  <b>Vencimento Pagamento:</b> ${vencFmt}<br>
-  ${obs?'<b>Observação:</b> '+obs+'<br>':''}
-</div>
-<table>
-<thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead>
-<tbody>${linhas}</tbody>
-<tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(totalValor)}</td></tr></tfoot>
-</table>
-${blocoAssinatura}
-<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
-</body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante — ${nomeTerc} — ${dataFmt}</title><style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}h2{color:#1e9be8;margin-bottom:4px}.info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}table{width:100%;border-collapse:collapse}th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}.total{background:#0d1b2a;color:white;font-weight:bold}.total td{padding:8px}@media print{button{display:none}}</style></head><body><h2>Maxhome Indústria e Comércio</h2><p style="color:#888;margin-top:0">Comprovante de Entrega</p><div class="info"><b>Facção:</b> ${nomeTerc}<br><b>Data da Entrega:</b> ${dataFmt}<br><b>Vencimento Pagamento:</b> ${vencFmt}<br>${obs?'<b>Observação:</b> '+obs+'<br>':''}</div><table><thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(totalValor)}</td></tr></tfoot></table>${blocoAssinatura}<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button></body></html>`;
 
     const win=window.open('','_blank');
     if(win){win.document.write(html);win.document.close();}
-  }catch(e){alert('Erro ao gerar comprovante: '+e.message);}
+  }catch(e){alert('Erro ao abrir comprovante: '+e.message);}
 }
 
 async function loadPagamentosOP(){
@@ -5503,14 +5465,13 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
       }
     }
 
-    // Gerar HTML do comprovante e salvar no Storage
+    // Gerar HTML do comprovante e salvar no banco (comprovante_html)
     const htmlComp=gerarHTMLComprovante(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
-    const pdfUrl=await salvarComprovante(htmlComp, dataEntrega);
 
-    // Gravar pdf_url em todos os registros de entrega criados
-    if(pdfUrl&&_idsEntregasCriadas.length){
+    // Gravar comprovante_html em todos os registros de entrega criados
+    if(_idsEntregasCriadas.length){
       for(const eid of _idsEntregasCriadas.filter(Boolean)){
-        await sbPatch('entregas_op','id=eq.'+eid,{pdf_url:pdfUrl});
+        await sbPatch('entregas_op','id=eq.'+eid,{comprovante_html:htmlComp});
       }
     }
 
