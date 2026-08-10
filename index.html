@@ -2887,7 +2887,7 @@ function renderVendaCarrinho(){
   document.getElementById('venda-total').textContent='Total: '+fBRL(total);
 }
 // Marketplaces conhecidos — qualquer canal fora dessa lista é considerado venda direta
-const MARKETPLACES_CONHECIDOS=['shopee','tiktok','tiktok shop','mercado livre','mercadolivre','shein','kwai','magalu','magazine luiza'];
+const MARKETPLACES_CONHECIDOS=['shopee','tiktok','tiktok shop','mercado livre','mercadolivre','temu','shein','kwai','magalu','magazine luiza'];
 // Normaliza texto de canal digitado/importado manualmente: remove espaços extras e capitaliza cada palavra
 // (ex: "venda direta", "VENDA DIRETA", "  Venda  Direta " todos viram "Venda Direta")
 function normalizarCanal(canal){
@@ -5007,8 +5007,9 @@ async function loadMarketplaces(){
       tiktok:`<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="#010101"/><text x="14" y="20" text-anchor="middle" font-size="16" font-family="Arial,sans-serif" fill="white">♪</text></svg>`,
       mercadolivre:`<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="#FFE600"/><text x="14" y="19" text-anchor="middle" font-size="10" font-family="Arial,sans-serif" font-weight="bold" fill="#333">ML</text></svg>`,
       ml:`<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="#FFE600"/><text x="14" y="19" text-anchor="middle" font-size="10" font-family="Arial,sans-serif" font-weight="bold" fill="#333">ML</text></svg>`,
+      temu:`<svg width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="14" fill="#FF6B35"/><text x="14" y="19" text-anchor="middle" font-size="10" font-family="Arial,sans-serif" font-weight="bold" fill="white">TEMU</text></svg>`,
     };
-    const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre'};
+    const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre',temu:'Temu'};
     el.innerHTML=conexoes.map(c=>'<div class="card">'+
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+
       '<div>'+(MKT_SVG[c.marketplace]||'🛒')+'</div>'+
@@ -5035,7 +5036,7 @@ function selecionarMarketplace(mkt){
   const sel=document.getElementById('mkt-emp-sel');
   sel.innerHTML='<option value="">Selecione...</option>'+
     EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
-  const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre'};
+  const nomes={shopee:'Shopee',tiktok:'TikTok Shop',mercadolivre:'Mercado Livre',ml:'Mercado Livre',temu:'Temu'};
   document.getElementById('mkt-emp-titulo').textContent='Conectar '+nomes[mkt];
   document.getElementById('mkt-emp-nome-mkt').textContent=nomes[mkt];
   abrirModal('modal-mkt-empresa');
