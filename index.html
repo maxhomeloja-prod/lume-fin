@@ -941,6 +941,7 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Curva ABC</div><div class="page-sub">Análise de Pareto por SKU</div></div>
         <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-secondary btn-sm" onclick="abrirModalSkuCategorias()">⚙ Categorias</button>
           <button class="btn btn-success btn-sm" onclick="exportarABCXLS()">⬇ Exportar Excel</button>
           <button class="btn btn-secondary btn-sm" onclick="imprimirABC()">🖨️ Imprimir</button>
         </div>
@@ -1343,6 +1344,30 @@ tr:hover td{background:var(--surface2);}
     <div id="bom-linhas"></div>
     <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="addLinhaBOM()">+ Material</button>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-bom')">Cancelar</button><button class="btn btn-primary" onclick="salvarBOM()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL SKU CATEGORIAS -->
+<div class="modal-overlay" id="modal-sku-categorias">
+  <div class="modal modal-lg">
+    <div class="modal-title">⚙ Categorias de SKU</div>
+    <div class="modal-sub">Prefixos para classificação automática na Curva ABC</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:16px;padding:12px;background:var(--surface2);border-radius:8px">
+      <div class="form-group" style="margin:0;flex:1">
+        <label class="form-label">Prefixo do SKU</label>
+        <input class="form-control" type="text" id="skucat-prefixo" placeholder="Ex: MFIB, CORMF, M2_" style="text-transform:uppercase">
+      </div>
+      <div class="form-group" style="margin:0;flex:1">
+        <label class="form-label">Categoria</label>
+        <input class="form-control" type="text" id="skucat-categoria" placeholder="Ex: Lençóis, Cortinas" list="skucat-datalist">
+        <datalist id="skucat-datalist"></datalist>
+      </div>
+      <button class="btn btn-primary" onclick="adicionarSkuCategoria()" style="white-space:nowrap">+ Adicionar</button>
+    </div>
+    <div id="skucat-lista-regras" style="max-height:380px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-sku-categorias')">Fechar</button>
+    </div>
   </div>
 </div>
 
@@ -3316,6 +3341,76 @@ async function importarBOMCSV(input){
 
   alert(`Importação concluída!\n✅ ${ok} SKUs importados${erros?`\n❌ ${erros} com erro`:''}`);
   loadBOM();
+}
+
+// ── SKU CATEGORIAS ─────────────────────────────────────────────────
+async function abrirModalSkuCategorias(){
+  await carregarSkuCategorias();
+  renderSkuCategorias();
+  // Popular datalist com categorias já usadas
+  const cats=[...new Set(_skuCategorias.map(r=>r.categoria))].sort();
+  const dl=document.getElementById('skucat-datalist');
+  if(dl)dl.innerHTML=cats.map(c=>`<option value="${c}">`).join('');
+  document.getElementById('skucat-prefixo').value='';
+  document.getElementById('skucat-categoria').value='';
+  abrirModal('modal-sku-categorias');
+}
+
+function renderSkuCategorias(){
+  const el=document.getElementById('skucat-lista-regras');
+  if(!el)return;
+  if(!_skuCategorias.length){
+    el.innerHTML='<div class="empty">Nenhuma regra cadastrada</div>';
+    return;
+  }
+  // Agrupar por categoria
+  const grupos={};
+  _skuCategorias.forEach(r=>{
+    if(!grupos[r.categoria])grupos[r.categoria]=[];
+    grupos[r.categoria].push(r);
+  });
+  el.innerHTML=Object.entries(grupos).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,regras])=>`
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${cat}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${regras.map(r=>`
+          <div style="display:flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px">
+            <span style="font-family:monospace;font-weight:600">${r.prefixo}</span>
+            <button onclick="excluirSkuCategoria('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;line-height:1;padding:0">✕</button>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+async function adicionarSkuCategoria(){
+  const prefixo=document.getElementById('skucat-prefixo').value.trim().toUpperCase();
+  const categoria=document.getElementById('skucat-categoria').value.trim();
+  if(!prefixo||!categoria)return alert('Preencha o prefixo e a categoria');
+  if(!EMPRESAS.length)return;
+  try{
+    await sbPost('sku_categorias',{
+      empresa_id:EMPRESAS[0].id,
+      prefixo,
+      categoria
+    });
+    document.getElementById('skucat-prefixo').value='';
+    document.getElementById('skucat-categoria').value='';
+    await carregarSkuCategorias();
+    renderSkuCategorias();
+    // Atualizar datalist
+    const cats=[...new Set(_skuCategorias.map(r=>r.categoria))].sort();
+    const dl=document.getElementById('skucat-datalist');
+    if(dl)dl.innerHTML=cats.map(c=>`<option value="${c}">`).join('');
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function excluirSkuCategoria(id){
+  if(!confirm('Remover esta regra?'))return;
+  try{
+    await sbDelete('sku_categorias',`id=eq.${id}`);
+    await carregarSkuCategorias();
+    renderSkuCategorias();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 // ── ABC ───────────────────────────────────────────────────────
