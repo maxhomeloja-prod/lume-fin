@@ -868,6 +868,20 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Base De</span><input type="date" class="filter-control" id="fest-de"></div>
         <div class="filter-group"><span class="filter-label">Base Até</span><input type="date" class="filter-control" id="fest-ate"></div>
         <div class="filter-group"><span class="filter-label">Projeção (dias)</span><input type="number" class="filter-control" id="fest-dias" value="30" min="1" max="365" style="width:80px"></div>
+        <div class="filter-group" style="position:relative">
+          <span class="filter-label">Canal</span>
+          <div id="fest-canal-btn" onclick="toggleFiltroCanaisEst()" style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text1);font-size:13px;min-width:160px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span id="fest-canal-label">Todos</span><span>▾</span>
+          </div>
+          <div id="fest-canal-dropdown" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+            <div id="fest-canal-checks"></div>
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanaisEst(true)">Todos</button>
+              <button class="btn btn-secondary btn-sm" onclick="selTodosCanaisEst(false)">Nenhum</button>
+              <button class="btn btn-primary btn-sm" onclick="calcularEstoqueModelo()">Aplicar</button>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="calcularEstoqueModelo()">Calcular</button>
       </div>
       <div id="est-resultado"></div>
@@ -4315,15 +4329,24 @@ async function calcularEstoqueModelo(){
   const el=document.getElementById('est-resultado');
   el.innerHTML='<div class="loading"><div class="spinner"></div> Calculando...</div>';
   try{
-    // Vendas do período base já agregadas por SKU+dia no banco — escala para qualquer volume
     const agregado=await sbRpc('vendas_agregado_sku_dia',{p_empresa_ids:_empIdsEst,p_de:de,p_ate:ate});
     if(!agregado.length){el.innerHTML='<div class="empty">Nenhuma venda no período base</div>';return;}
-    // Calcular dias no período
+
+    // Popular filtro de canais na primeira execução
+    const canaisEst=[...new Set(agregado.map(v=>v.marketplace).filter(Boolean))].sort();
+    const checksEl=document.getElementById('fest-canal-checks');
+    if(checksEl&&checksEl.children.length===0){
+      checksEl.innerHTML=canaisEst.map(c=>`<label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer"><input type="checkbox" value="${c}" checked> ${c}</label>`).join('');
+    }
+
+    // Filtrar por canais selecionados
+    const canaisSel=checksEl?[...checksEl.querySelectorAll('input:checked')].map(i=>i.value):canaisEst;
+    const agregadoFilt=canaisSel.length?agregado.filter(v=>canaisSel.includes(v.marketplace)):agregado;
+
     const d1=new Date(de+'T12:00:00'), d2=new Date(ate+'T12:00:00');
     const diasBase=Math.max(1,Math.round((d2-d1)/(1000*60*60*24))+1);
-    // Média diária por SKU
     const porSku={};
-    agregado.forEach(v=>{
+    agregadoFilt.forEach(v=>{
       if(!porSku[v.sku])porSku[v.sku]={qtd:0,val:0};
       porSku[v.sku].qtd+=v.qtd||0;
       porSku[v.sku].val+=v.val||0;
@@ -5617,6 +5640,15 @@ let _balEmpSel = null; // null = todas
 let _abcCanaisSel = null;
 let _abcCanaisDisponiveis = [];
 
+function toggleFiltroCanaisEst(){
+  const dd=document.getElementById('fest-canal-dropdown');
+  dd.style.display=dd.style.display==='none'?'block':'none';
+}
+function selTodosCanaisEst(val){
+  document.querySelectorAll('#fest-canal-checks input[type=checkbox]').forEach(c=>c.checked=val);
+  const label=document.getElementById('fest-canal-label');
+  if(label)label.textContent=val?'Todos':'Nenhum';
+}
 function toggleFiltroCanaisABC(){
   const dd=document.getElementById('fabc-canal-dropdown');
   if(dd.style.display==='none'){
