@@ -1072,7 +1072,10 @@ tr:hover td{background:var(--surface2);}
     <div id="page-lancamentos" class="page">
       <div class="page-header">
         <div><div class="page-title">Lançamentos</div><div class="page-sub">Contas a pagar e receber</div></div>
-        <button class="btn btn-primary btn-sm" onclick="abrirModalLancamento()">+ Novo Lançamento</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="imprimirLancamentos()">🖨️ Imprimir</button>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalLancamento()">+ Novo Lançamento</button>
+        </div>
       </div>
       <div class="filters">
         <div class="filter-group"><span class="filter-label">Empresa</span><select class="filter-control" id="flan-empresa" onchange="loadLancamentos()"><option value="">Todas</option></select></div>
@@ -1347,7 +1350,31 @@ tr:hover td{background:var(--surface2);}
   </div>
 </div>
 
-<!-- MODAL SKU CATEGORIAS -->
+<!-- MODAL EDITAR TRANSAÇÃO -->
+<div class="modal-overlay" id="modal-transacao">
+  <div class="modal">
+    <div class="modal-title">Editar Transação</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:13px">
+        <div id="mtrans-data" style="font-size:11px;color:var(--text3);margin-bottom:4px"></div>
+        <div id="mtrans-desc" style="font-weight:600;margin-bottom:4px"></div>
+        <div id="mtrans-valor" style="font-size:18px;font-weight:700"></div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Categoria</label>
+        <select class="form-control" id="mtrans-categoria"></select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Descrição</label>
+        <input class="form-control" type="text" id="mtrans-descricao">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-transacao')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarTransacao()">Salvar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-sku-categorias">
   <div class="modal modal-lg">
     <div class="modal-title">⚙ Categorias de SKU</div>
@@ -3343,6 +3370,51 @@ async function importarBOMCSV(input){
   loadBOM();
 }
 
+// ── EDITAR TRANSAÇÃO (BALANCETE) ───────────────────────────────
+let _transacaoEditando=null;
+
+async function abrirModalTransacao(id){
+  const t=_balTransacoes.find(x=>x.id===id);
+  if(!t)return;
+  _transacaoEditando=t;
+
+  document.getElementById('mtrans-data').textContent=fDate(t.data)+' · '+(t.conta_nome||t.banco||'');
+  document.getElementById('mtrans-desc').textContent=t.descricao||'—';
+  const vEl=document.getElementById('mtrans-valor');
+  vEl.textContent=fBRL(t.valor);
+  vEl.style.color=t.valor>=0?'var(--green)':'var(--red)';
+  document.getElementById('mtrans-descricao').value=t.descricao||'';
+
+  // Popular select de categorias separadas por tipo
+  const tipo=t.valor>=0?'RECEITA':'DESPESA';
+  const sel=document.getElementById('mtrans-categoria');
+  const cats=CATEGORIAS.filter(c=>c.tipo===tipo||CATS_ESPECIAIS.has(c.id));
+  sel.innerHTML='<option value="">— Sem categoria —</option>'+
+    cats.map(c=>`<option value="${c.id}" ${c.id===t.categoria_id?'selected':''}>${c.nome}</option>`).join('');
+
+  abrirModal('modal-transacao');
+}
+
+async function salvarTransacao(){
+  if(!_transacaoEditando)return;
+  const catId=document.getElementById('mtrans-categoria').value||null;
+  const desc=document.getElementById('mtrans-descricao').value.trim();
+  try{
+    await sbPatch('transacoes',`id=eq.${_transacaoEditando.id}`,{
+      categoria_id:catId,
+      descricao:desc||_transacaoEditando.descricao||null
+    });
+    // Atualizar localmente
+    const idx=_balTransacoes.findIndex(x=>x.id===_transacaoEditando.id);
+    if(idx>=0){
+      _balTransacoes[idx].categoria_id=catId;
+      _balTransacoes[idx].descricao=desc||_transacaoEditando.descricao||null;
+    }
+    fecharModal('modal-transacao');
+    renderBalancete();
+  }catch(e){alert('Erro ao salvar: '+e.message);}
+}
+
 // ── SKU CATEGORIAS ─────────────────────────────────────────────────
 async function abrirModalSkuCategorias(){
   await carregarSkuCategorias();
@@ -3753,9 +3825,10 @@ function renderBalancete(){
 
   function buildDetalhes(trans,rowId){
     var rows=trans.map(function(t){
-      return '<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2);display:flex;justify-content:space-between">'+
-        '<span>'+fDate(t.data)+' \u00b7 '+(t.descricao||'\u2014')+'</span>'+
-        '<span style="color:'+(t.valor>=0?'var(--green)':'var(--red)')+'">'+fBRL(t.valor)+'</span>'+
+      return '<div class="bal-row bal-detail" style="padding-left:24px;font-size:11px;color:var(--text2);background:var(--surface2);display:flex;justify-content:space-between;cursor:pointer" '+
+        'onclick="abrirModalTransacao(\''+t.id+'\')" title="Clique para editar">'+
+        '<span>'+fDate(t.data)+' · '+(t.descricao||'—')+'</span>'+
+        '<span style="color:'+(t.valor>=0?'var(--green)':'var(--red)')+'">'+fBRL(t.valor)+' ✎</span>'+
         '</div>';
     }).join('');
     return '<div id="'+rowId+'" style="display:none">'+rows+'</div>';
@@ -3903,6 +3976,18 @@ async function loadLancamentos(){
   document.getElementById('lan-wrap').innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     _lancamentos=await sbGet('lancamentos_externos',q+'&limit=500');
+
+    // Filtrar por fornecedor/cliente localmente ANTES dos KPIs
+    if(fc){
+      _lancamentos=_lancamentos.filter(l=>{
+        const fc_lower=fc.toLowerCase();
+        return (l.fornecedor||'').toLowerCase().includes(fc_lower)||
+               (l.cliente||'').toLowerCase().includes(fc_lower)||
+               (l.descricao||'').toLowerCase().includes(fc_lower);
+      });
+    }
+
+    // KPIs calculados sobre os dados já filtrados
     const pagar=_lancamentos.filter(l=>l.tipo_lancamento==='PAGAR'&&l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
     const receber=_lancamentos.filter(l=>l.tipo_lancamento==='RECEBER'&&l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
     const saldo=receber-pagar;
@@ -3930,21 +4015,76 @@ async function loadLancamentos(){
         elTG.className='kpi-value '+(totalGeral>=0?'green':'red');
       }catch(e){elTG.textContent='—';}
     }
-    // Filtrar por fornecedor/cliente localmente
-    if(fc){
-      _lancamentos=_lancamentos.filter(l=>{
-        const fc_lower=fc.toLowerCase();
-        return (l.fornecedor||'').toLowerCase().includes(fc_lower)||
-               (l.cliente||'').toLowerCase().includes(fc_lower)||
-               (l.descricao||'').toLowerCase().includes(fc_lower);
-      });
-    }
     const hoje=new Date().toISOString().split('T')[0];
     if(!_lancamentos.length){document.getElementById('lan-wrap').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum lançamento encontrado</div></div>';return;}
     document.getElementById('lan-wrap').innerHTML='<table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornec./Cliente</th><th>Categoria</th><th>Meio</th><th style="text-align:right">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+_lancamentos.map(l=>`<tr style="${l.situacao==='EM_ABERTO'&&l.data_vencimento<hoje?'background:var(--red-bg)':''}"><td>${fDate(l.data_vencimento)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.descricao}</td><td style="color:var(--text2)">${l.fornecedor||l.cliente||'—'}</td><td style="color:var(--text3)">${getNomeCat(l.categoria_id)}</td><td style="font-size:11px">${l.meio_pagamento||'—'}</td><td style="text-align:right;color:${l.tipo_lancamento==='RECEBER'?'var(--green)':'var(--red)'}">${fBRL(l.valor)}</td><td><span class="badge ${l.situacao==='EM_ABERTO'?'badge-amber':'badge-green'}">${l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO'}</span></td><td style="display:flex;gap:4px;padding:8px 4px">${l.situacao==='EM_ABERTO'?`<button class="btn btn-success btn-sm" onclick="darBaixa('${l.id}')">✓</button>`:''}<button class="btn btn-ghost btn-sm" onclick="abrirModalLancamento('${l.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirLancamento('${l.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
     renderLanCharts(_lancamentos);
   }catch(e){document.getElementById('lan-wrap').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
+function imprimirLancamentos(){
+  if(!_lancamentos||!_lancamentos.length){alert('Nenhum lançamento para imprimir. Aplique os filtros primeiro.');return;}
+  const fc=document.getElementById('flan-fc')?.value.trim();
+  const de=document.getElementById('flan-de')?.value;
+  const ate=document.getElementById('flan-ate')?.value;
+  const tipo=document.getElementById('flan-tipo')?.value;
+  const pagar=_lancamentos.filter(l=>l.tipo_lancamento==='PAGAR'&&l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
+  const receber=_lancamentos.filter(l=>l.tipo_lancamento==='RECEBER'&&l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
+  const hoje=new Date().toISOString().split('T')[0];
+
+  const titulo=fc?`Lançamentos — ${fc}`:(tipo==='PAGAR'?'Contas a Pagar':tipo==='RECEBER'?'Contas a Receber':'Lançamentos Financeiros');
+  const periodo=de&&ate?`${fDate(de)} a ${fDate(ate)}`:(de?`A partir de ${fDate(de)}`:(ate?`Até ${fDate(ate)}`:'Todos os períodos'));
+  const empresa=EMPRESAS.map(e=>e.nome).join(', ');
+
+  const linhas=_lancamentos.map(l=>{
+    const venc=l.data_vencimento;
+    const atrasado=l.situacao==='EM_ABERTO'&&venc<hoje;
+    const cor=l.tipo_lancamento==='RECEBER'?'#007700':'#cc0000';
+    return `<tr style="${atrasado?'background:#fff3f3':''}">
+      <td>${fDate(venc)}</td>
+      <td>${l.descricao||'—'}</td>
+      <td>${l.fornecedor||l.cliente||'—'}</td>
+      <td>${getNomeCat(l.categoria_id)}</td>
+      <td>${l.meio_pagamento||'—'}</td>
+      <td style="text-align:right;color:${cor};font-weight:600">${fBRL(l.valor)}</td>
+      <td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:${l.situacao==='EM_ABERTO'?'#fef3c7':'#d1fae5'};color:${l.situacao==='EM_ABERTO'?'#92400e':'#065f46'}">${l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:12px;margin:20px;color:#1a1a1a}
+  h2{color:#1e9be8;margin-bottom:4px;font-size:16px}
+  .sub{color:#888;font-size:11px;margin-bottom:16px}
+  .kpis{display:flex;gap:24px;margin-bottom:16px;background:#f0f7ff;padding:12px;border-radius:6px}
+  .kpi-item{text-align:center}.kpi-item .lbl{font-size:10px;color:#666}.kpi-item .val{font-size:15px;font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{background:#1e9be8;color:white;padding:6px 8px;text-align:left}
+  td{padding:5px 8px;border-bottom:1px solid #eee}
+  tr:hover{background:#f9f9f9}
+  .total-row{background:#0d1b2a;color:white;font-weight:bold}
+  .total-row td{padding:7px 8px}
+  @media print{button{display:none}}
+</style></head><body>
+<h2>${titulo}</h2>
+<div class="sub">${empresa} · Período: ${periodo} · Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+<div class="kpis">
+  <div class="kpi-item"><div class="lbl">A Pagar</div><div class="val" style="color:#cc0000">${fBRL(pagar)}</div></div>
+  <div class="kpi-item"><div class="lbl">A Receber</div><div class="val" style="color:#007700">${fBRL(receber)}</div></div>
+  <div class="kpi-item"><div class="lbl">Saldo</div><div class="val" style="color:${receber-pagar>=0?'#007700':'#cc0000'}">${fBRL(receber-pagar)}</div></div>
+  <div class="kpi-item"><div class="lbl">Total de lançamentos</div><div class="val">${_lancamentos.length}</div></div>
+</div>
+<table>
+  <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornec./Cliente</th><th>Categoria</th><th>Meio</th><th style="text-align:right">Valor</th><th>Situação</th></tr></thead>
+  <tbody>${linhas}</tbody>
+  <tfoot><tr class="total-row"><td colspan="5">TOTAL EM ABERTO</td><td style="text-align:right">A Pagar: ${fBRL(pagar)} · A Receber: ${fBRL(receber)}</td><td></td></tr></tfoot>
+</table>
+<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
+</body></html>`;
+
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+}
+
 async function darBaixa(id){if(!confirm('Confirmar baixa?'))return;await sbPatch('lancamentos_externos',`id=eq.${id}`,{situacao:'PAGO_RECEBIDO'});loadLancamentos();}
 async function excluirLancamento(id){if(!confirm('Excluir?'))return;await sbDelete('lancamentos_externos',`id=eq.${id}`);loadLancamentos();}
 function abrirModalLancamento(id){
