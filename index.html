@@ -3399,8 +3399,10 @@ async function salvarTransacao(){
   if(!_transacaoEditando)return;
   const catId=document.getElementById('mtrans-categoria').value||null;
   const desc=document.getElementById('mtrans-descricao').value.trim();
+  const fonte=_transacaoEditando.fonte||'banco';
+  const tabela=fonte==='banco'?'transacoes':fonte==='caixa'&&_transacaoEditando.valor>=0?'caixa_entradas':'caixa_saidas';
   try{
-    await sbPatch('transacoes',`id=eq.${_transacaoEditando.id}`,{
+    await sbPatch(tabela,`id=eq.${_transacaoEditando.id}`,{
       categoria_id:catId,
       descricao:desc||_transacaoEditando.descricao||null
     });
@@ -3776,9 +3778,9 @@ async function loadBalancete(){
       sbGet('caixa_saidas',cxQ+(de?'&data=gte.'+de:'')+(ate?'&data=lte.'+ate:'')+'&limit=500')
     ]);
     _balTransacoes=[
-      ...trans.map(t=>({data:t.data,descricao:t.descricao,valor:t.tipo==='DEBIT'?-Math.abs(t.valor):Math.abs(t.valor),tipo:t.tipo,categoria_id:t.categoria_id,fonte:'banco'})),
-      ...caixaEnt.filter(e=>{const d=e.data||e.criado_em?.split('T')[0];return(!de||d>=de)&&(!ate||d<=ate);}).map(e=>({data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
-      ...caixaSai.map(s=>({data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
+      ...trans.map(t=>({id:t.id,data:t.data,descricao:t.descricao,valor:t.tipo==='DEBIT'?-Math.abs(t.valor):Math.abs(t.valor),tipo:t.tipo,categoria_id:t.categoria_id,banco:t.banco,conta_nome:t.conta_nome,fonte:'banco'})),
+      ...caixaEnt.filter(e=>{const d=e.data||e.criado_em?.split('T')[0];return(!de||d>=de)&&(!ate||d<=ate);}).map(e=>({id:e.id,data:e.data||e.criado_em?.split('T')[0],descricao:(e.tipo==='CHEQUE'?'Cheque: ':'Entrada: ')+(e.cliente||e.descricao||'—'),valor:Math.abs(e.valor_original),tipo:'RECEITA',categoria_id:e.categoria_id,fonte:'caixa'})),
+      ...caixaSai.map(s=>({id:s.id,data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
     const _empIdsB=EMPRESAS.map(e=>e.id).join(',');
