@@ -1931,12 +1931,14 @@ async function loadDashboard(){
     const hoje=new Date(),ini=new Date(hoje.getFullYear(),hoje.getMonth(),1);
     // fd usa data LOCAL do navegador — evita virar dia antes do meia-noite BRT
     const fd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const fimMes=new Date(hoje.getFullYear(),hoje.getMonth()+1,0);
     const empIds=EMPRESAS.map(e=>e.id).join(',');
     const empIdsArr=EMPRESAS.map(e=>e.id);
     const[kpisVendas,ops,lans,saldos]=await Promise.all([
       sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:fd(ini),p_ate:null}),
       sbGet('ordens_producao',`?empresa_id=in.(${empIds})&situacao=neq.CANCELADA&select=situacao,quantidade`),
-      sbGet('lancamentos_externos',`?empresa_id=in.(${empIds})&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&select=valor`),
+      // A pagar: apenas atrasados + mês atual (vencimento até fim do mês corrente)
+      sbGet('lancamentos_externos',`?empresa_id=in.(${empIds})&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&data_vencimento=lte.${fd(fimMes)}&select=valor`),
       sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`)
     ]);
     const rec=kpisVendas[0]?.total_receita||0;
