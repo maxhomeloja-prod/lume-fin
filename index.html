@@ -1370,6 +1370,7 @@ tr:hover td{background:var(--surface2);}
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-danger" onclick="excluirTransacaoBalancete()" style="margin-right:auto">🗑 Excluir</button>
       <button class="btn btn-secondary" onclick="fecharModal('modal-transacao')">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarTransacao()">Salvar</button>
     </div>
@@ -3489,6 +3490,20 @@ async function excluirSkuCategoria(id){
   }catch(e){alert('Erro: '+e.message);}
 }
 
+async function excluirTransacaoBalancete(){
+  if(!_transacaoEditando)return;
+  if(!confirm(`Excluir "${_transacaoEditando.descricao||'esta transação'}"?\n\nEsta ação não pode ser desfeita.`))return;
+  const fonte=_transacaoEditando.fonte||'banco';
+  const tabela=fonte==='banco'?'transacoes':fonte==='caixa'&&_transacaoEditando.valor>=0?'caixa_entradas':'caixa_saidas';
+  try{
+    await sbDelete(tabela,`id=eq.${_transacaoEditando.id}`);
+    _balTransacoes=_balTransacoes.filter(x=>x.id!==_transacaoEditando.id);
+    fecharModal('modal-transacao');
+    renderBalancete();
+    loadBalancete();
+  }catch(e){alert('Erro ao excluir: '+e.message);}
+}
+
 // ── ABC ───────────────────────────────────────────────────────
 let _chartDaily=null,_chartCanal=null,_chartPizza=null;
 
@@ -3755,10 +3770,12 @@ async function loadBalancete(){
     // Popular dropdown de contas
     const contasSel=document.getElementById('fbal-conta');
     if(contasSel&&contasSel.options.length<=1){
-      const todasContas=await sbGet('contas_bancarias','?empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')'+'&tipo=eq.BANK&select=id,banco,nome_conta&order=banco.asc');
+      const empMap2={};EMPRESAS.forEach(e=>{empMap2[e.id]=e.nome;});
+      const todasContas=await sbGet('contas_bancarias','?empresa_id=in.('+EMPRESAS.map(e=>e.id).join(',')+')'+'&tipo=eq.BANK&select=id,banco,nome_conta,empresa_id&order=banco.asc');
       todasContas.forEach(c=>{
         const opt=document.createElement('option');
-        opt.value=c.id;opt.textContent=c.banco+' — '+c.nome_conta;
+        const nomeEmp=empMap2[c.empresa_id]||'';
+        opt.value=c.id;opt.textContent=c.banco+' — '+c.nome_conta+(nomeEmp?' ('+nomeEmp+')':'');
         contasSel.appendChild(opt);
       });
       if(contaSel)contasSel.value=contaSel;
