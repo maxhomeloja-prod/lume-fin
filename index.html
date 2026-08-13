@@ -3727,8 +3727,14 @@ function renderCategorizacao(){
     const o2=folhas.filter(c=>c.tipo===out).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
     return`<select class="form-control" id="sel-${t.id}" style="width:100%"><optgroup label="${sug==='RECEITA'?'Receitas':'Despesas'} (sugerido)">${o1}</optgroup><optgroup label="${out==='RECEITA'?'Receitas':'Despesas'}">${o2}</optgroup></select>`;
   }
-  const contaNome=id=>{const c=CONTAS.find(x=>x.id===id);return c?`${c.banco} · ${c.nome_conta}`:'—';};
-  wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;color:var(--text3)">${dados.length} transações pendentes</span><button class="btn btn-primary btn-sm" onclick="confirmarTodas()">✓ Confirmar todas</button></div><table><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th style="text-align:right">Valor</th><th>Tipo</th><th style="min-width:200px">Categoria</th><th></th></tr></thead><tbody>${dados.map(t=>`<tr id="tr-${t.id}"><td>${fDate(t.data)}</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.descricao}</td><td style="font-size:11px;color:var(--text3)">${contaNome(t.conta_id)}</td><td style="text-align:right;color:${t.tipo==='CREDIT'?'var(--green)':'var(--red)'}">${t.tipo==='CREDIT'?'+':'-'}${fBRL(t.valor)}</td><td><span class="badge ${t.tipo==='CREDIT'?'badge-green':'badge-red'}">${t.tipo==='CREDIT'?'CRÉD':'DÉB'}</span></td><td>${buildSel(t)}</td><td><button class="btn btn-primary btn-sm" onclick="confirmarUma('${t.id}')">✓</button></td></tr>`).join('')}</tbody></table>`;
+  const empMap={};EMPRESAS.forEach(e=>{empMap[e.id]=e.nome;});
+  const contaNome=id=>{
+    const c=CONTAS.find(x=>x.id===id);
+    if(!c)return'—';
+    const emp=empMap[c.empresa_id]||'';
+    return`${c.banco} · ${c.nome_conta}${emp?'<br><span style="font-size:10px;color:var(--text3)">'+emp+'</span>':''}`;
+  };
+  wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;color:var(--text3)">${dados.length} transações pendentes</span><button class="btn btn-primary btn-sm" onclick="confirmarTodas()">✓ Confirmar todas</button></div><table><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th style="text-align:right">Valor</th><th>Tipo</th><th style="min-width:200px">Categoria</th><th></th></tr></thead><tbody>${dados.map(t=>`<tr id="tr-${t.id}"><td>${fDate(t.data)}</td><td style="max-width:260px;word-break:break-word;white-space:normal;font-size:12px" title="${(t.descricao||'').replace(/"/g,'&quot;')}">${t.descricao||'—'}</td><td style="font-size:11px;color:var(--text3);line-height:1.4">${contaNome(t.conta_id)}</td><td style="text-align:right;color:${t.tipo==='CREDIT'?'var(--green)':'var(--red)'}">${t.tipo==='CREDIT'?'+':'-'}${fBRL(t.valor)}</td><td><span class="badge ${t.tipo==='CREDIT'?'badge-green':'badge-red'}">${t.tipo==='CREDIT'?'CRÉD':'DÉB'}</span></td><td>${buildSel(t)}</td><td><button class="btn btn-primary btn-sm" onclick="confirmarUma('${t.id}')">✓</button></td></tr>`).join('')}</tbody></table>`;
 }
 async function confirmarUma(id){
   const sel=document.getElementById(`sel-${id}`);const catId=sel?.value;if(!catId)return;
