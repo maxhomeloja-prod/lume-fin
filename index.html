@@ -2087,36 +2087,40 @@ async function loadDashboard(){
     // ── Top SKUs do dia ──
     const elSkus=document.getElementById('dash-top-skus-hoje');
     if(elSkus){
-      const skuMap={};
-      vendasHoje.forEach(v=>{
-        const s=v.sku||'—';
-        if(!skuMap[s])skuMap[s]={receita:0,qtd:0};
-        skuMap[s].receita+=v.valor_bruto||v.valor_total||0;
-        skuMap[s].qtd+=v.quantidade||0;
-      });
-      const topSkus=Object.entries(skuMap).sort((a,b)=>b[1].receita-a[1].receita).slice(0,15);
-      if(!topSkus.length){
-        elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Sem vendas hoje</div>';
-      }else{
-        const totalRec=topSkus.reduce((s,[,d])=>s+d.receita,0);
-        elSkus.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
-          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:left">SKU</th>'+
-          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
-          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
-          '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">% do dia</th>'+
-          '</tr></thead><tbody>'+
-          topSkus.map(([s,d],i)=>{
-            const pct=totalRec>0?(d.receita/totalRec*100):0;
-            const cor=i<3?'var(--green)':i<8?'var(--amber)':'var(--text2)';
-            return '<tr>'+
-              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:500">'+s+'</td>'+
-              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+fN(d.qtd)+'</td>'+
-              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
-              '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+cor+'">'+pct.toFixed(1)+'%</td>'+
-            '</tr>';
-          }).join('')+
-        '</tbody></table>';
-      }
+      try{
+        const vendasSkus=await sbGet('vendas',
+          `?empresa_id=in.(${_empIds})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_total,valor_bruto&limit=2000`);
+        const skuMap={};
+        vendasSkus.forEach(v=>{
+          const s=v.sku||'—';
+          if(!skuMap[s])skuMap[s]={receita:0,qtd:0};
+          skuMap[s].receita+=parseFloat(v.valor_bruto||v.valor_total||0);
+          skuMap[s].qtd+=parseInt(v.quantidade||0);
+        });
+        const topSkus=Object.entries(skuMap).sort((a,b)=>b[1].receita-a[1].receita).slice(0,15);
+        if(!topSkus.length){
+          elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Sem vendas hoje</div>';
+        }else{
+          const totalRec=topSkus.reduce((s,[,d])=>s+d.receita,0);
+          elSkus.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
+            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:left">SKU</th>'+
+            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
+            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
+            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">% do dia</th>'+
+            '</tr></thead><tbody>'+
+            topSkus.map(([s,d],i)=>{
+              const pct=totalRec>0?(d.receita/totalRec*100):0;
+              const cor=i<3?'var(--green)':i<8?'var(--amber)':'var(--text2)';
+              return '<tr>'+
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:500">'+s+'</td>'+
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+fN(d.qtd)+'</td>'+
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
+                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+cor+'">'+pct.toFixed(1)+'%</td>'+
+              '</tr>';
+            }).join('')+
+          '</tbody></table>';
+        }
+      }catch(e){elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Erro ao carregar</div>';}
     }
   }catch(e){console.error('loadDashboard:',e);}
 }
