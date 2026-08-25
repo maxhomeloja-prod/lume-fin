@@ -1099,10 +1099,10 @@ tr:hover td{background:var(--surface2);}
           <div class="card-title">Por categoria</div>
           <div style="position:relative;height:260px"><canvas id="lan-chart-pizza"></canvas></div>
         </div>
-        <div class="card" style="overflow:hidden;cursor:pointer" onclick="expandirFluxoCaixa()" title="Clique para expandir">
+        <div class="card" style="overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
             <div class="card-title" style="margin:0">📈 Fluxo de Caixa Projetado</div>
-            <span style="font-size:11px;color:var(--text3)">⤢ expandir</span>
+            <span onclick="expandirFluxoCaixa()" style="font-size:11px;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:4px;border:1px solid var(--border)" title="Expandir gráfico">⤢ expandir</span>
           </div>
           <div style="position:relative;height:250px"><canvas id="lan-chart-fluxo"></canvas></div>
         </div>
