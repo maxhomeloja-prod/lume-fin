@@ -1094,17 +1094,17 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Saldo Projetado</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Banco + Caixa + Receber − Pagar</div><div class="kpi-value" id="lan-total-geral">—</div></div>
       </div>
       <!-- Gráficos de categorias + fluxo de caixa projetado -->
-      <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
+      <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
         <div class="card" style="overflow:hidden">
           <div class="card-title">Por categoria</div>
-          <div style="position:relative;height:220px"><canvas id="lan-chart-pizza"></canvas></div>
+          <div style="position:relative;height:260px"><canvas id="lan-chart-pizza"></canvas></div>
         </div>
         <div class="card" style="overflow:hidden;cursor:pointer" onclick="expandirFluxoCaixa()" title="Clique para expandir">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
             <div class="card-title" style="margin:0">📈 Fluxo de Caixa Projetado</div>
             <span style="font-size:11px;color:var(--text3)">⤢ expandir</span>
           </div>
-          <div style="position:relative;height:210px"><canvas id="lan-chart-fluxo"></canvas></div>
+          <div style="position:relative;height:250px"><canvas id="lan-chart-fluxo"></canvas></div>
         </div>
       </div>
 
@@ -4043,6 +4043,7 @@ async function loadLancamentos(){
         const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
         const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
         const totalBC=totalBanco+totalCaixa;
+        window._saldoAtualBC=totalBC; // usado pelo fluxo de caixa projetado
         const totalGeral=totalBC+receber-pagar;
         // Banco + Caixa
         const sEl=document.getElementById('lan-saldo');
@@ -5393,6 +5394,8 @@ function gerarFluxoCaixaReal(){
   _balTransacoes.forEach(function(t){
     const d=t.data;
     if(!d)return;
+    // Excluir transferências e categorias especiais — mesmo critério do balancete
+    if(CATS_ESPECIAIS.has(t.categoria_id))return;
     if(!porDia[d])porDia[d]={rec:0,sai:0};
     if(t.valor>=0)porDia[d].rec+=t.valor;
     else porDia[d].sai+=Math.abs(t.valor);
