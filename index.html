@@ -1034,6 +1034,7 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">Balancete</div><div class="page-sub">Receitas e despesas realizadas</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">📅 Visão Semanal</button>
+          <button class="btn btn-secondary btn-sm" onclick="gerarFluxoCaixaReal()">📊 Fluxo de Caixa</button>
           <button class="btn btn-secondary btn-sm" onclick="imprimirBalancete()">🖨️ Imprimir</button>
           <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
         </div>
@@ -1092,15 +1093,18 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Banco + Caixa</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Saldo total disponível</div><div class="kpi-value" id="lan-saldo">—</div></div>
         <div class="kpi"><div class="kpi-label">Saldo Projetado</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Banco + Caixa + Receber − Pagar</div><div class="kpi-value" id="lan-total-geral">—</div></div>
       </div>
-      <!-- Gráficos de categorias -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
+      <!-- Gráficos de categorias + fluxo de caixa projetado -->
+      <div style="display:grid;grid-template-columns:220px 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
         <div class="card" style="overflow:hidden">
-          <div class="card-title">Pizza</div>
-          <div style="position:relative;height:190px"><canvas id="lan-chart-pizza"></canvas></div>
+          <div class="card-title">Por categoria</div>
+          <div style="position:relative;height:220px"><canvas id="lan-chart-pizza"></canvas></div>
         </div>
-        <div class="card" style="overflow:hidden">
-          <div class="card-title">Barras</div>
-          <div style="position:relative;height:190px"><canvas id="lan-chart-barras"></canvas></div>
+        <div class="card" style="overflow:hidden;cursor:pointer" onclick="expandirFluxoCaixa()" title="Clique para expandir">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <div class="card-title" style="margin:0">📈 Fluxo de Caixa Projetado</div>
+            <span style="font-size:11px;color:var(--text3)">⤢ expandir</span>
+          </div>
+          <div style="position:relative;height:210px"><canvas id="lan-chart-fluxo"></canvas></div>
         </div>
       </div>
 
@@ -5213,7 +5217,8 @@ async function acFetchFornClientes(q){
   return[...set].sort();
 }
 
-let _chartLanPizza=null, _chartLanBarras=null;
+let _chartLanPizza=null, _chartLanBarras=null, _chartLanFluxo=null;
+let _fluxoData=null; // cache para expandir
 
 function renderLanCharts(lancamentos){
   if(!lancamentos||!lancamentos.length){
@@ -5224,7 +5229,7 @@ function renderLanCharts(lancamentos){
   const w=document.getElementById('lan-charts-wrap');
   if(w)w.style.display='grid';
 
-  // Agrupar por categoria — separar pagar e receber
+  // ── Pizza por categoria ──
   const grupos={};
   lancamentos.forEach(function(l){
     const catNome=getNomeCat(l.categoria_id)||'Sem categoria';
@@ -5233,15 +5238,10 @@ function renderLanCharts(lancamentos){
     if(l.tipo_lancamento==='PAGAR')grupos[catNome].pagar+=v;
     else grupos[catNome].receber+=v;
   });
-
-  // Ordenar por total (pagar + receber) decrescente
   const itens=Object.entries(grupos)
     .map(function(e){return{nome:e[0],pagar:e[1].pagar,receber:e[1].receber,total:e[1].pagar+e[1].receber};})
     .sort(function(a,b){return b.total-a.total;});
-
   const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa','#f472b6','#e11d48'];
-
-  // ── Pizza ──
   const ctxP=document.getElementById('lan-chart-pizza');
   if(ctxP){
     if(_chartLanPizza){_chartLanPizza.destroy();}
@@ -5249,18 +5249,15 @@ function renderLanCharts(lancamentos){
       type:'pie',
       data:{
         labels:itens.map(function(i){return i.nome;}),
-        datasets:[{
-          data:itens.map(function(i){return i.total;}),
-          backgroundColor:cores.slice(0,itens.length),
-          borderWidth:2
-        }]
+        datasets:[{data:itens.map(function(i){return i.total;}),backgroundColor:cores.slice(0,itens.length),borderWidth:2}]
       },
       options:{
         responsive:true,maintainAspectRatio:false,
         plugins:{
-          legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:8}},
+          legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},
           tooltip:{callbacks:{label:function(ctx){
-            const pct=(ctx.parsed/_chartLanPizza.data.datasets[0].data.reduce(function(a,b){return a+b;},0)*100).toFixed(1);
+            const tot=_chartLanPizza.data.datasets[0].data.reduce(function(a,b){return a+b;},0);
+            const pct=(ctx.parsed/tot*100).toFixed(1);
             return ' '+ctx.label+': '+fBRL(ctx.parsed)+' ('+pct+'%)';
           }}}
         }
@@ -5268,32 +5265,176 @@ function renderLanCharts(lancamentos){
     });
   }
 
-  // ── Barras ──
-  const ctxB=document.getElementById('lan-chart-barras');
-  if(ctxB){
-    if(_chartLanBarras){_chartLanBarras.destroy();}
-    const labels=itens.map(function(i){return i.nome.length>18?i.nome.slice(0,16)+'…':i.nome;});
-    _chartLanBarras=new Chart(ctxB,{
-      type:'bar',
-      data:{
-        labels:labels,
-        datasets:[
-          {label:'A Pagar',data:itens.map(function(i){return i.pagar;}),backgroundColor:'rgba(248,113,113,0.8)',borderRadius:4},
-          {label:'A Receber',data:itens.map(function(i){return i.receber;}),backgroundColor:'rgba(0,212,160,0.8)',borderRadius:4}
-        ]
-      },
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        indexAxis:'y',
-        interaction:{mode:'index',intersect:false},
-        plugins:{legend:{position:'top',labels:{font:{size:11},boxWidth:12}}},
-        scales:{
-          x:{title:{display:true,text:'Valor (R$)'},ticks:{callback:function(v){return 'R$'+(v/1000).toFixed(0)+'k';}}},
-          y:{ticks:{font:{size:10}}}
-        }
-      }
-    });
+  // ── Fluxo de caixa projetado ──
+  _buildFluxoProjetado(lancamentos);
+}
+
+function _buildFluxoProjetado(lancamentos){
+  const hoje=new Date();
+  hoje.setHours(0,0,0,0);
+  const hISO=hoje.toISOString().split('T')[0];
+
+  // Separar pagamentos e recebimentos por data
+  const gastosPorDia={}, receitasPorDia={};
+  let atrasadosAcum=0;
+
+  lancamentos.forEach(function(l){
+    const venc=l.data_vencimento;
+    const v=Math.abs(parseFloat(l.valor)||0);
+    if(l.situacao!=='EM_ABERTO')return;
+    if(l.tipo_lancamento==='PAGAR'){
+      if(venc<hISO){ atrasadosAcum+=v; }
+      else{ gastosPorDia[venc]=(gastosPorDia[venc]||0)+v; }
+    } else {
+      if(venc>=hISO){ receitasPorDia[venc]=(receitasPorDia[venc]||0)+v; }
+    }
+  });
+
+  // Range de datas: hoje até última data de vencimento
+  const todasDatas=Object.keys(gastosPorDia).concat(Object.keys(receitasPorDia));
+  if(!todasDatas.length)return;
+  const maxData=todasDatas.sort().pop();
+
+  const labels=[], gasData=[], recData=[], saldoData=[];
+  let saldo=0;
+  let primeiro=true;
+
+  for(let d=new Date(hoje); d.toISOString().split('T')[0]<=maxData; d.setDate(d.getDate()+1)){
+    const iso=d.toISOString().split('T')[0];
+    const dd=String(d.getDate()).padStart(2,'0');
+    const mms=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    labels.push(dd+'/'+mms[d.getMonth()]);
+    const g=(gastosPorDia[iso]||0)+(primeiro?atrasadosAcum:0);
+    const r=receitasPorDia[iso]||0;
+    primeiro=false;
+    saldo+=r-g;
+    gasData.push(Math.round(g/1000*100)/100);
+    recData.push(Math.round(r/1000*100)/100);
+    saldoData.push(Math.round(saldo/1000*100)/100);
   }
+
+  _fluxoData={labels,gasData,recData,saldoData};
+  _renderFluxoChart(document.getElementById('lan-chart-fluxo'),labels,gasData,recData,saldoData,false);
+}
+
+function _renderFluxoChart(canvas,labels,gasData,recData,saldoData,grande){
+  if(!canvas)return;
+  if(canvas._chartInst){canvas._chartInst.destroy();}
+  const fs=grande?11:10;
+  const inst=new Chart(canvas,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Receitas',data:recData,borderColor:'#1e9be8',backgroundColor:'rgba(30,155,232,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>recData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#1e9be8',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:true,tension:0},
+      {label:'Gastos',data:gasData,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>gasData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#f87171',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:false,tension:0},
+      {label:'Saldo projetado',data:saldoData,borderColor:'#00d4a0',borderWidth:grande?2.5:2,pointRadius:0,borderDash:[4,3],fill:false,tension:0.3,yAxisID:'y2'}
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:fs},boxWidth:10,padding:8}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: R$ ${ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:1})}k`}}
+      },
+      scales:{
+        x:{ticks:{color:'var(--text3)',font:{size:fs},maxRotation:45,autoSkip:true,maxTicksLimit:grande?30:15},grid:{display:false},border:{color:'rgba(128,128,128,0.2)'}},
+        y:{position:'left',ticks:{color:'var(--text3)',font:{size:fs},callback:v=>'R$'+v+'k'},grid:{color:'rgba(128,128,128,0.08)'},border:{display:false}},
+        y2:{position:'right',ticks:{color:'#00d4a0',font:{size:fs},callback:v=>'R$'+v+'k'},grid:{display:false},border:{display:false}}
+      }
+    }
+  });
+  canvas._chartInst=inst;
+  return inst;
+}
+
+function expandirFluxoCaixa(){
+  if(!_fluxoData)return;
+  const {labels,gasData,recData,saldoData}=_fluxoData;
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Fluxo de Caixa Projetado</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"><\/script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:#0d1b2a;color:#e8f0fe;padding:24px}
+  h2{font-size:18px;margin-bottom:4px;color:#1e9be8}
+  .sub{font-size:12px;color:#4a7a9b;margin-bottom:20px}
+  .legenda{display:flex;gap:20px;margin-bottom:12px;font-size:12px;color:#7ea8c9}
+  .legenda span{display:flex;align-items:center;gap:6px}
+  .dot{width:12px;height:3px;border-radius:2px;display:inline-block}
+  canvas{width:100%!important;height:500px!important}
+  @media print{button{display:none}}
+</style></head><body>
+<h2>📈 Fluxo de Caixa Projetado</h2>
+<div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · Gastos atrasados acumulados no dia atual</div>
+<div class="legenda">
+  <span><span class="dot" style="background:#1e9be8"></span>Receitas previstas</span>
+  <span><span class="dot" style="background:#f87171"></span>Gastos do dia</span>
+  <span><span class="dot" style="background:#00d4a0"></span>Saldo projetado</span>
+</div>
+<canvas id="c"></canvas>
+<script>
+const labels=${JSON.stringify(labels)};
+const gasData=${JSON.stringify(gasData)};
+const recData=${JSON.stringify(recData)};
+const saldoData=${JSON.stringify(saldoData)};
+new Chart(document.getElementById('c'),{type:'line',data:{labels,datasets:[
+  {label:'Receitas',data:recData,borderColor:'#1e9be8',backgroundColor:'rgba(30,155,232,0.07)',borderWidth:2,pointRadius:ctx=>recData[ctx.dataIndex]>0?4:0,pointBackgroundColor:'#1e9be8',pointBorderColor:'#0d1b2a',pointBorderWidth:2,fill:true,tension:0},
+  {label:'Gastos',data:gasData,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:2,pointRadius:ctx=>gasData[ctx.dataIndex]>0?4:0,pointBackgroundColor:'#f87171',pointBorderColor:'#0d1b2a',pointBorderWidth:2,fill:false,tension:0},
+  {label:'Saldo projetado',data:saldoData,borderColor:'#00d4a0',borderWidth:2.5,pointRadius:0,borderDash:[4,3],fill:false,tension:0.3,yAxisID:'y2'}
+]},options:{responsive:false,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#112236',borderColor:'#1e3a5f',borderWidth:1,titleColor:'#e8f0fe',bodyColor:'#7ea8c9',callbacks:{label:ctx=>\`\${ctx.dataset.label}: R\$ \${ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:1})}k\`}}},scales:{x:{ticks:{color:'#4a7a9b',font:{size:11},maxRotation:45,autoSkip:true,maxTicksLimit:40},grid:{color:'rgba(30,90,150,0.2)'},border:{color:'rgba(30,90,150,0.3)'}},y:{position:'left',ticks:{color:'#4a7a9b',font:{size:11},callback:v=>'R\$'+v+'k'},grid:{color:'rgba(30,90,150,0.15)'},border:{display:false}},y2:{position:'right',ticks:{color:'#00d4a0',font:{size:11},callback:v=>'R\$'+v+'k'},grid:{display:false},border:{display:false}}}}});
+<\/script></body></html>`;
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
+}
+
+// ── FLUXO DE CAIXA REAL (Balancete) ──────────────────────────────
+function gerarFluxoCaixaReal(){
+  if(!_balTransacoes||!_balTransacoes.length){alert('Carregue o balancete primeiro.');return;}
+
+  const porDia={};
+  _balTransacoes.forEach(function(t){
+    const d=t.data;
+    if(!d)return;
+    if(!porDia[d])porDia[d]={rec:0,sai:0};
+    if(t.valor>=0)porDia[d].rec+=t.valor;
+    else porDia[d].sai+=Math.abs(t.valor);
+  });
+
+  const datas=Object.keys(porDia).sort();
+  if(!datas.length){alert('Sem transações no período.');return;}
+
+  const mms=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const labels=datas.map(d=>{const dt=new Date(d+'T12:00:00');return String(dt.getDate()).padStart(2,'0')+'/'+mms[dt.getMonth()];});
+  const recData=datas.map(d=>Math.round(porDia[d].rec/1000*100)/100);
+  const saiData=datas.map(d=>Math.round(porDia[d].sai/1000*100)/100);
+  const saldoData=[];let acum=0;
+  datas.forEach(d=>{acum+=(porDia[d].rec-porDia[d].sai);saldoData.push(Math.round(acum/1000*100)/100);});
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Fluxo de Caixa Real</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"><\/script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:#0d1b2a;color:#e8f0fe;padding:24px}
+  h2{font-size:18px;margin-bottom:4px;color:#1e9be8}
+  .sub{font-size:12px;color:#4a7a9b;margin-bottom:20px}
+  canvas{width:100%!important;height:500px!important}
+  @media print{button{display:none}}
+</style></head><body>
+<h2>📊 Fluxo de Caixa Real</h2>
+<div class="sub">Período: ${labels[0]} a ${labels[labels.length-1]} · Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+<canvas id="c"></canvas>
+<script>
+const labels=${JSON.stringify(labels)};
+const recData=${JSON.stringify(recData)};
+const saiData=${JSON.stringify(saiData)};
+const saldoData=${JSON.stringify(saldoData)};
+new Chart(document.getElementById('c'),{type:'line',data:{labels,datasets:[
+  {label:'Entradas',data:recData,borderColor:'#1e9be8',backgroundColor:'rgba(30,155,232,0.07)',borderWidth:2,pointRadius:ctx=>recData[ctx.dataIndex]>0?4:0,pointBackgroundColor:'#1e9be8',pointBorderColor:'#0d1b2a',pointBorderWidth:2,fill:true,tension:0},
+  {label:'Saídas',data:saiData,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:2,pointRadius:ctx=>saiData[ctx.dataIndex]>0?4:0,pointBackgroundColor:'#f87171',pointBorderColor:'#0d1b2a',pointBorderWidth:2,fill:false,tension:0},
+  {label:'Saldo real',data:saldoData,borderColor:'#00d4a0',borderWidth:2.5,pointRadius:0,borderDash:[4,3],fill:false,tension:0.3,yAxisID:'y2'}
+]},options:{responsive:false,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:'#7ea8c9',font:{size:12},boxWidth:12}},tooltip:{backgroundColor:'#112236',borderColor:'#1e3a5f',borderWidth:1,titleColor:'#e8f0fe',bodyColor:'#7ea8c9',callbacks:{label:ctx=>\`\${ctx.dataset.label}: R\$ \${ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:1})}k\`}}},scales:{x:{ticks:{color:'#4a7a9b',font:{size:11},maxRotation:45,autoSkip:true,maxTicksLimit:40},grid:{color:'rgba(30,90,150,0.2)'},border:{color:'rgba(30,90,150,0.3)'}},y:{position:'left',ticks:{color:'#4a7a9b',font:{size:11},callback:v=>'R\$'+v+'k'},grid:{color:'rgba(30,90,150,0.15)'},border:{display:false}},y2:{position:'right',ticks:{color:'#00d4a0',font:{size:11},callback:v=>'R\$'+v+'k'},grid:{display:false},border:{display:false}}}}});
+<\/script></body></html>`;
+  const win=window.open('','_blank');
+  if(win){win.document.write(html);win.document.close();}
 }
 
 // ── MARKETPLACES ──────────────────────────────────────────────
