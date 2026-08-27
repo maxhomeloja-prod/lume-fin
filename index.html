@@ -602,6 +602,15 @@ tr:hover td{background:var(--surface2);}
       </div>
       <div style="margin-top:16px">
         <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div class="card-title" style="margin:0">⚡ Vendas em Tempo Real — Hoje por SKU (hora a hora)</div>
+            <span id="dash-tempo-real-atualizado" style="font-size:11px;color:var(--text3)"></span>
+          </div>
+          <div style="position:relative;width:100%;height:260px"><canvas id="dash-chart-tempo-real"></canvas></div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="card">
           <div class="card-title">OPs por Situação</div>
           <div style="position:relative;height:200px"><canvas id="dash-chart-ops"></canvas></div>
         </div>
@@ -2127,6 +2136,114 @@ async function loadDashboard(){
       }catch(e){elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Erro ao carregar</div>';}
     }
   }catch(e){console.error('loadDashboard:',e);}
+  // Tempo Real — busca após o restante do dashboard
+  renderTempoReal();
+}
+
+let _chartTempoReal=null;
+async function renderTempoReal(){
+  const canvas=document.getElementById('dash-chart-tempo-real');
+  if(!canvas)return;
+  if(!EMPRESAS.length)return;
+
+  const hoje=new Date();
+  const hISO=hoje.toISOString().split('T')[0];
+  const empIds=EMPRESAS.map(e=>e.id).join(',');
+
+  // Buscar todas as vendas de hoje com hora (criado_em ou data_pedido)
+  const vendas=await sbGet('vendas',
+    `?empresa_id=in.(${empIds})&data_pedido=eq.${hISO}&select=sku,quantidade,criado_em&limit=5000`);
+
+  if(!vendas.length){
+    canvas.parentElement.innerHTML='<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">Sem vendas registradas hoje</div>';
+    return;
+  }
+
+  // Montar 24 slots de hora
+  const horas=Array.from({length:24},(_,i)=>String(i).padStart(2,'0')+':00');
+
+  // Agrupar por SKU e hora
+  const porSku={};
+  vendas.forEach(v=>{
+    const s=v.sku||'—';
+    if(!porSku[s])porSku[s]=Array(24).fill(0);
+    // usar criado_em para extrair a hora
+    const dt=new Date(v.criado_em);
+    const h=dt.getHours();
+    porSku[s][h]+=(v.quantidade||1);
+  });
+
+  // Paleta de cores — gerar dinamicamente
+  const skus=Object.keys(porSku);
+  function corSku(i,total){
+    const hue=Math.round((i/total)*360);
+    return`hsl(${hue},70%,55%)`;
+  }
+
+  const datasets=skus.map((s,i)=>({
+    label:s,
+    data:porSku[s],
+    borderColor:corSku(i,skus.length),
+    backgroundColor:'transparent',
+    borderWidth:1.5,
+    pointRadius:ctx=>porSku[s][ctx.dataIndex]>0?3:0,
+    pointBackgroundColor:corSku(i,skus.length),
+    tension:0.3,
+  }));
+
+  if(_chartTempoReal){_chartTempoReal.destroy();}
+  _chartTempoReal=new Chart(canvas,{
+    type:'line',
+    data:{labels:horas,datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:{duration:400},
+      plugins:{
+        legend:{
+          display:true,
+          position:'bottom',
+          labels:{
+            font:{size:9},
+            boxWidth:8,
+            padding:6,
+            color:'var(--text2)'
+          }
+        },
+        tooltip:{
+          mode:'index',
+          intersect:false,
+          callbacks:{
+            title:ctx=>'Hora: '+ctx[0].label,
+            label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${ctx.parsed.y} un`:'',
+          },
+          filter:item=>item.parsed.y>0,
+        }
+      },
+      scales:{
+        x:{
+          ticks:{color:'var(--text3)',font:{size:10}},
+          grid:{color:'rgba(128,128,128,0.1)'},
+          border:{color:'rgba(128,128,128,0.2)'},
+          title:{display:true,text:'Hora do dia',color:'var(--text3)',font:{size:11}}
+        },
+        y:{
+          ticks:{color:'var(--text3)',font:{size:10},stepSize:1},
+          grid:{color:'rgba(128,128,128,0.08)'},
+          border:{display:false},
+          title:{display:true,text:'Qtd vendida',color:'var(--text3)',font:{size:11}},
+          beginAtZero:true
+        }
+      },
+      interaction:{mode:'nearest',axis:'x',intersect:false}
+    }
+  });
+
+  const el=document.getElementById('dash-tempo-real-atualizado');
+  if(el){
+    const agora=new Date();
+    el.textContent=`atualizado ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')} · ${skus.length} SKUs`;
+  }
 }
 
 function renderDashCharts(ops){
