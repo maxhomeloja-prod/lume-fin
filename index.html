@@ -2102,7 +2102,7 @@ async function loadDashboard(){
     if(elSkus){
       try{
         const vendasSkus=await sbGet('vendas',
-          `?empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_total,valor_bruto&limit=2000`);
+          `?empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_total,valor_bruto&limit=10000`);
         const skuMap={};
         vendasSkus.forEach(v=>{
           const s=v.sku||'—';
