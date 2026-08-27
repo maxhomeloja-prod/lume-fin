@@ -2211,11 +2211,11 @@ async function renderTempoReal(){
           }
         },
         tooltip:{
-          mode:'index',
-          intersect:false,
+          mode:'nearest',
+          intersect:true,
           callbacks:{
-            title:ctx=>'Hora: '+ctx[0].label,
-            label:ctx=>ctx.parsed.y>0?` ${ctx.dataset.label}: ${ctx.parsed.y} un`:'',
+            title:ctx=>ctx.length?'Hora: '+ctx[0].label:'',
+            label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y} un`,
           },
           filter:item=>item.parsed.y>0,
         }
@@ -2235,7 +2235,7 @@ async function renderTempoReal(){
           beginAtZero:true
         }
       },
-      interaction:{mode:'nearest',axis:'x',intersect:false}
+      interaction:{mode:'nearest',intersect:true}
     }
   });
 
@@ -3769,8 +3769,14 @@ function renderChartCanal(agregado){
     data:{labels:datas.map(d=>fDate(d)),datasets},
     options:{
       responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'nearest',axis:'x',intersect:false},
-      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      interaction:{mode:'nearest',intersect:true},
+      plugins:{
+        legend:{position:'top',labels:{font:{size:11}}},
+        tooltip:{callbacks:{
+          title:items=>items[0]?.label||'',
+          label:item=>` ${item.dataset.label}: ${fBRL(item.raw)}`
+        }}
+      },
       scales:{x:{ticks:{font:{size:10},maxRotation:45}},y:{title:{display:true,text:'Valor (R$)'}}}
     }
   });
