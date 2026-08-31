@@ -5385,7 +5385,7 @@ function renderLanCharts(lancamentos){
   _buildFluxoProjetado(lancamentos);
 }
 
-function _buildFluxoProjetado(lancamentos){
+async function _buildFluxoProjetado(lancamentos){
   const hoje=new Date();
   hoje.setHours(0,0,0,0);
   const hISO=hoje.toISOString().split('T')[0];
@@ -5411,8 +5411,21 @@ function _buildFluxoProjetado(lancamentos){
   if(!todasDatas.length)return;
   const maxData=todasDatas.sort().pop();
 
-  const labels=[], gasData=[], recData=[], saldoData=[];
+  // Buscar saldo bancário + caixa em tempo real
   let saldo=0;
+  try{
+    const empIds=EMPRESAS.map(e=>e.id).join(',');
+    const[saldos,cxEnt]=await Promise.all([
+      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`),
+      sbGet('caixa_entradas',`?user_id=eq.${SESSION?.user?.id||''}&select=valor_disponivel`)
+    ]);
+    const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
+    const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
+    saldo=totalBanco+totalCaixa;
+    window._saldoAtualBC=saldo;
+  }catch(e){ saldo=window._saldoAtualBC||0; }
+
+  const labels=[], gasData=[], recData=[], saldoData=[];
   let primeiro=true;
 
   for(let d=new Date(hoje); d.toISOString().split('T')[0]<=maxData; d.setDate(d.getDate()+1)){
