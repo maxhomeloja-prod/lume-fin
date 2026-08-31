@@ -7,6 +7,7 @@
 <title>Lume · Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -5439,22 +5440,34 @@ function _renderFluxoChart(canvas,labels,gasData,recData,saldoData,grande){
   const inst=new Chart(canvas,{
     type:'line',
     data:{labels,datasets:[
-      {label:'Receitas',data:recData,borderColor:'#1e9be8',backgroundColor:'rgba(30,155,232,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>recData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#1e9be8',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:true,tension:0},
-      {label:'Gastos',data:gasData,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>gasData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#f87171',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:false,tension:0},
-      {label:'Saldo projetado',data:saldoData,borderColor:'#00d4a0',borderWidth:grande?2.5:2,pointRadius:0,borderDash:[4,3],fill:false,tension:0.3,yAxisID:'y2'}
+      {label:'Receitas',data:recData,borderColor:'#1e9be8',backgroundColor:'rgba(30,155,232,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>recData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#1e9be8',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:true,tension:0,datalabels:{display:false}},
+      {label:'Gastos',data:gasData,borderColor:'#f87171',backgroundColor:'rgba(248,113,113,0.07)',borderWidth:grande?2:1.5,pointRadius:ctx=>gasData[ctx.dataIndex]>0?3:0,pointBackgroundColor:'#f87171',pointBorderColor:'#fff',pointBorderWidth:1.5,fill:false,tension:0,datalabels:{display:false}},
+      {label:'Saldo projetado',data:saldoData,borderColor:'#00d4a0',borderWidth:grande?2.5:2,
+        pointRadius:3,pointBackgroundColor:'#00d4a0',pointBorderColor:'#00d4a0',
+        borderDash:[4,3],fill:false,tension:0.3,yAxisID:'y2',
+        datalabels:{
+          display:true,align:'top',anchor:'end',
+          color:'#00d4a0',font:{size:grande?10:9,weight:'bold'},
+          formatter:v=>'R$'+v.toLocaleString('pt-BR',{minimumFractionDigits:1})+'k',
+          backgroundColor:'rgba(13,27,42,0.8)',borderRadius:3,
+          padding:{top:2,bottom:2,left:4,right:4}
+        }
+      }
     ]},
     options:{
       responsive:true,maintainAspectRatio:false,
       plugins:{
         legend:{display:true,position:'top',labels:{font:{size:fs},boxWidth:10,padding:8}},
-        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: R$ ${ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:1})}k`}}
+        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: R$ ${ctx.parsed.y.toLocaleString('pt-BR',{minimumFractionDigits:1})}k`}},
+        datalabels:{display:false}
       },
       scales:{
         x:{ticks:{color:'var(--text3)',font:{size:fs},maxRotation:45,autoSkip:true,maxTicksLimit:grande?30:15},grid:{display:false},border:{color:'rgba(128,128,128,0.2)'}},
         y:{position:'left',ticks:{color:'var(--text3)',font:{size:fs},callback:v=>'R$'+v+'k'},grid:{color:'rgba(128,128,128,0.08)'},border:{display:false}},
         y2:{position:'right',ticks:{color:'#00d4a0',font:{size:fs},callback:v=>'R$'+v+'k'},grid:{display:false},border:{display:false}}
       }
-    }
+    },
+    plugins:[ChartDataLabels]
   });
   canvas._chartInst=inst;
   return inst;
