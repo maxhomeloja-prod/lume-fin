@@ -1103,11 +1103,11 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Banco + Caixa</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Saldo total disponível</div><div class="kpi-value" id="lan-saldo">—</div></div>
         <div class="kpi"><div class="kpi-label">Saldo Projetado</div><div class="kpi-sub" style="font-size:10px;color:var(--text3)">Banco + Caixa + Receber − Pagar</div><div class="kpi-value" id="lan-total-geral">—</div></div>
       </div>
-      <!-- Gráficos de categorias + fluxo de caixa projetado -->
-      <div style="display:grid;grid-template-columns:260px 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
+      <!-- Categorias (receitas/despesas separadas) + fluxo de caixa projetado -->
+      <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;margin-bottom:16px" id="lan-charts-wrap">
         <div class="card" style="overflow:hidden">
           <div class="card-title">Por categoria</div>
-          <div style="position:relative;height:260px"><canvas id="lan-chart-pizza"></canvas></div>
+          <div id="lan-cat-tabelas" style="max-height:260px;overflow-y:auto"></div>
         </div>
         <div class="card" style="overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -5345,40 +5345,43 @@ function renderLanCharts(lancamentos){
   const w=document.getElementById('lan-charts-wrap');
   if(w)w.style.display='grid';
 
-  // ── Pizza por categoria ──
-  const grupos={};
+  // ── Categorias: RECEITAS e DESPESAS em tabelas separadas ──
+  const rec={}, desp={};
   lancamentos.forEach(function(l){
     const catNome=getNomeCat(l.categoria_id)||'Sem categoria';
-    if(!grupos[catNome])grupos[catNome]={pagar:0,receber:0};
     const v=Math.abs(parseFloat(l.valor)||0);
-    if(l.tipo_lancamento==='PAGAR')grupos[catNome].pagar+=v;
-    else grupos[catNome].receber+=v;
+    if(l.tipo_lancamento==='PAGAR'){desp[catNome]=(desp[catNome]||0)+v;}
+    else{rec[catNome]=(rec[catNome]||0)+v;}
   });
-  const itens=Object.entries(grupos)
-    .map(function(e){return{nome:e[0],pagar:e[1].pagar,receber:e[1].receber,total:e[1].pagar+e[1].receber};})
-    .sort(function(a,b){return b.total-a.total;});
-  const cores=['#1e9be8','#00d4a0','#ffb020','#a78bfa','#f87171','#34d399','#fb923c','#60a5fa','#f472b6','#e11d48'];
-  const ctxP=document.getElementById('lan-chart-pizza');
-  if(ctxP){
-    if(_chartLanPizza){_chartLanPizza.destroy();}
-    _chartLanPizza=new Chart(ctxP,{
-      type:'pie',
-      data:{
-        labels:itens.map(function(i){return i.nome;}),
-        datasets:[{data:itens.map(function(i){return i.total;}),backgroundColor:cores.slice(0,itens.length),borderWidth:2}]
-      },
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{
-          legend:{position:'bottom',labels:{font:{size:10},boxWidth:10,padding:6}},
-          tooltip:{callbacks:{label:function(ctx){
-            const tot=_chartLanPizza.data.datasets[0].data.reduce(function(a,b){return a+b;},0);
-            const pct=(ctx.parsed/tot*100).toFixed(1);
-            return ' '+ctx.label+': '+fBRL(ctx.parsed)+' ('+pct+'%)';
-          }}}
-        }
-      }
-    });
+
+  function tabelaCat(titulo,mapa,cor){
+    const itens=Object.entries(mapa)
+      .map(function(e){return{nome:e[0],valor:e[1]};})
+      .filter(function(i){return i.valor>0;})
+      .sort(function(a,b){return b.valor-a.valor;});
+    if(!itens.length)return'';
+    const tot=itens.reduce(function(s,i){return s+i.valor;},0);
+    return '<div style="margin-bottom:14px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'+
+        '<span style="font-size:11px;font-weight:700;color:'+cor+';text-transform:uppercase;letter-spacing:.5px">'+titulo+'</span>'+
+        '<span style="font-size:12px;font-weight:700;color:'+cor+'">'+fBRL(tot)+'</span>'+
+      '</div>'+
+      '<table style="width:100%;font-size:11px;border-collapse:collapse">'+
+        itens.map(function(i){
+          const pct=tot>0?(i.valor/tot*100):0;
+          return '<tr>'+
+            '<td style="padding:3px 0;border-bottom:1px solid var(--border);color:var(--text2)">'+i.nome+'</td>'+
+            '<td style="padding:3px 0;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;font-weight:500">'+fBRL(i.valor)+'</td>'+
+            '<td style="padding:3px 0 3px 8px;border-bottom:1px solid var(--border);text-align:right;color:var(--text3);white-space:nowrap">'+pct.toFixed(1)+'%</td>'+
+          '</tr>';
+        }).join('')+
+      '</table></div>';
+  }
+
+  const elCat=document.getElementById('lan-cat-tabelas');
+  if(elCat){
+    const html=tabelaCat('Receitas',rec,'var(--green)')+tabelaCat('Despesas',desp,'var(--red)');
+    elCat.innerHTML=html||'<div style="color:var(--text3);font-size:12px;padding:12px">Sem dados no período</div>';
   }
 
   // ── Fluxo de caixa projetado ──
