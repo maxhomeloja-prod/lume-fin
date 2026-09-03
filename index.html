@@ -6769,15 +6769,19 @@ async function associarSKU(skuVenda,empresaIdVenda,btnEl){
     } else {
       await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
     }
-    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario');
+    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario,valor_total,valor_bruto');
     for(const v of vendasAfetadas){
       const qtdNova=v.quantidade*multiplicador;
       const precoUnitNovo=v.valor_unitario/multiplicador;
       // Verificar se já existe venda com o SKU canônico no mesmo pedido (conflito de constraint)
-      const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade');
+      const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade,valor_total,valor_bruto');
       if(jaExiste.length>0){
-        // Somar a quantidade ao registro existente e deletar este
-        await sbPatch('vendas','id=eq.'+jaExiste[0].id,{quantidade:jaExiste[0].quantidade+qtdNova});
+        // Consolidar no registro existente: quantidade E valores (senão o faturamento da linha removida se perde)
+        await sbPatch('vendas','id=eq.'+jaExiste[0].id,{
+          quantidade:(parseFloat(jaExiste[0].quantidade)||0)+qtdNova,
+          valor_total:(parseFloat(jaExiste[0].valor_total)||0)+(parseFloat(v.valor_total)||0),
+          valor_bruto:(parseFloat(jaExiste[0].valor_bruto)||0)+(parseFloat(v.valor_bruto)||0)
+        });
         await sbDelete('vendas','id=eq.'+v.id);
       } else {
         await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
@@ -6883,13 +6887,18 @@ async function uploadCorrelacao(input){
       const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
       if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan,multiplicador});}
       else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});}
-      const vendasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario');
+      const vendasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario,valor_total,valor_bruto');
       for(const v of vendasUp){
         const qtdNova=v.quantidade*multiplicador;
         const precoNovo=v.valor_unitario/multiplicador;
-        const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade');
+        const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade,valor_total,valor_bruto');
         if(jaExiste.length>0){
-          await sbPatch('vendas','id=eq.'+jaExiste[0].id,{quantidade:jaExiste[0].quantidade+qtdNova});
+          // Consolidar quantidade E valores — a linha removida não pode levar o faturamento junto
+          await sbPatch('vendas','id=eq.'+jaExiste[0].id,{
+            quantidade:(parseFloat(jaExiste[0].quantidade)||0)+qtdNova,
+            valor_total:(parseFloat(jaExiste[0].valor_total)||0)+(parseFloat(v.valor_total)||0),
+            valor_bruto:(parseFloat(jaExiste[0].valor_bruto)||0)+(parseFloat(v.valor_bruto)||0)
+          });
           await sbDelete('vendas','id=eq.'+v.id);
         } else {
           await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoNovo});
