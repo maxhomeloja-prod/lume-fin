@@ -1515,6 +1515,50 @@ tr:hover td{background:var(--surface2);}
   </div>
 </div>
 
+<!-- ── MODAL CONECTAR TEMU ── -->
+<div class="modal-overlay" id="modal-temu-conectar">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">Conectar Temu</div>
+    <div id="temu-etapa1">
+      <div class="modal-sub" style="margin-bottom:14px">A Temu exige que a autorização seja feita dentro do Seller Center. Primeiro registre a loja aqui.</div>
+      <div class="form-group">
+        <label class="form-label">Empresa</label>
+        <select class="form-control" id="temu-emp-sel"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mall ID da loja</label>
+        <input class="form-control" type="text" id="temu-mall-id" placeholder="Ex: 635517741319322" inputmode="numeric">
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">
+          No Seller Center da loja, abra o console do navegador (F12) e cole:<br>
+          <code style="font-size:10px;background:var(--surface2);padding:2px 4px;border-radius:3px;display:inline-block;margin-top:3px">document.documentElement.innerHTML.match(/"mallId":\s*"?(\d+)"?/)?.[1]</code>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="fecharModal('modal-temu-conectar')">Cancelar</button>
+        <button class="btn btn-primary" onclick="preRegistrarTemu()">Registrar loja</button>
+      </div>
+    </div>
+    <div id="temu-etapa2" style="display:none">
+      <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:8px">✓ Loja registrada — Mall ID <span id="temu-mall-confirmado"></span></div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          Agora autorize o app na Temu:<br><br>
+          <b>1.</b> Acesse <b>seller.temu.com</b> com a conta desta loja<br>
+          <b>2.</b> Menu <b>Apps and services → App Store</b><br>
+          <b>3.</b> Procure <b>Lume Gestão</b> e clique em <b>Authorize</b><br>
+          <b>4.</b> Confirme as permissões
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.5">
+        Após autorizar, a loja aparece como <b>conectada</b> nesta tela e as vendas dos últimos 30 dias são importadas automaticamente.
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="fecharModal('modal-temu-conectar');loadMarketplaces()">Entendi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL EMPRESA MARKETPLACE ── -->
 <div class="modal-overlay" id="modal-mkt-empresa">
   <div class="modal" style="max-width:420px">
@@ -5624,7 +5668,7 @@ async function loadMarketplaces(){
       '<div><div style="font-weight:600">'+(c.shop_name||nomes[c.marketplace]||c.marketplace)+'</div>'+
       '<div style="font-size:11px;color:var(--text3)">'+(empMap[c.empresa_id]||'—')+'</div></div>'+
       '<span class="badge '+(c.status==='conectado'?'badge-green':c.status==='erro'?'badge-red':'badge-amber')+'" style="margin-left:auto">'+
-      (c.status==='conectado'?'CONECTADO':c.status==='erro'?'ERRO':'PENDENTE')+'</span></div>'+
+      (c.status==='conectado'?'CONECTADO':c.status==='erro'?'ERRO':c.status==='aguardando_autorizacao'?'AGUARDANDO AUTORIZAÇÃO':'PENDENTE')+'</span></div>'+
       '<div style="font-size:11px;color:var(--text3)">Último sync: '+(c.ultimo_sync?fDate(c.ultimo_sync.split('T')[0]):'Nunca')+'</div>'+
       '<div style="display:flex;gap:8px;margin-top:12px">'+
       '<button class="btn btn-secondary btn-sm" onclick="reconectarMarketplace(this.dataset.id,this.dataset.mkt)" data-id="'+c.id+'" data-mkt="'+c.marketplace+'">↻ Reconectar</button>'+
@@ -5640,6 +5684,7 @@ function abrirModalAddMarketplace(){
 function selecionarMarketplace(mkt){
   _mktSelecionado=mkt;
   fecharModal('modal-add-marketplace');
+  if(mkt==='temu'){abrirModalTemu();return;}
   // Preencher select de empresas
   const sel=document.getElementById('mkt-emp-sel');
   sel.innerHTML='<option value="">Selecione...</option>'+
@@ -5648,6 +5693,40 @@ function selecionarMarketplace(mkt){
   document.getElementById('mkt-emp-titulo').textContent='Conectar '+nomes[mkt];
   document.getElementById('mkt-emp-nome-mkt').textContent=nomes[mkt];
   abrirModal('modal-mkt-empresa');
+}
+
+function abrirModalTemu(){
+  const sel=document.getElementById('temu-emp-sel');
+  sel.innerHTML='<option value="">Selecione...</option>'+
+    EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  document.getElementById('temu-mall-id').value='';
+  document.getElementById('temu-etapa1').style.display='block';
+  document.getElementById('temu-etapa2').style.display='none';
+  abrirModal('modal-temu-conectar');
+}
+
+async function preRegistrarTemu(){
+  const empresaId=document.getElementById('temu-emp-sel').value;
+  const mallId=(document.getElementById('temu-mall-id').value||'').trim();
+  if(!empresaId){alert('Selecione a empresa');return;}
+  if(!/^\d{6,}$/.test(mallId)){alert('Informe um Mall ID válido (só números)');return;}
+  try{
+    const jaExiste=await sbGet('marketplace_conexoes','?marketplace=eq.temu&shop_id=eq.'+encodeURIComponent(mallId)+'&select=id,empresa_id,status');
+    if(jaExiste.length){
+      const c=jaExiste[0];
+      if(c.status==='conectado'){alert('Esta loja Temu já está conectada.');return;}
+      await sbPatch('marketplace_conexoes','id=eq.'+c.id,{empresa_id:empresaId,status:'aguardando_autorizacao'});
+    }else{
+      await sbPost('marketplace_conexoes',{
+        empresa_id:empresaId,marketplace:'temu',shop_id:mallId,
+        shop_name:'Loja Temu '+mallId,status:'aguardando_autorizacao'
+      });
+    }
+    document.getElementById('temu-etapa1').style.display='none';
+    document.getElementById('temu-etapa2').style.display='block';
+    document.getElementById('temu-mall-confirmado').textContent=mallId;
+    loadMarketplaces();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 async function confirmarConectarMarketplace(){
