@@ -2149,14 +2149,13 @@ async function loadDashboard(){
     const elSkus=document.getElementById('dash-top-skus-hoje');
     if(elSkus){
       try{
-        const vendasSkus=await sbGet('vendas',
-          `?empresa_id=in.(${EMPRESAS.map(e=>e.id).join(',')})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_total,valor_bruto&limit=10000`);
+        const vendasSkus=await sbRpc('vendas_agregado_sku_dia',{p_empresa_ids:EMPRESAS.map(e=>e.id),p_de:hoje2,p_ate:hoje2});
         const skuMap={};
         vendasSkus.forEach(v=>{
           const s=v.sku||'—';
           if(!skuMap[s])skuMap[s]={receita:0,qtd:0};
-          skuMap[s].receita+=parseFloat(v.valor_bruto||v.valor_total||0);
-          skuMap[s].qtd+=parseInt(v.quantidade||0);
+          skuMap[s].receita+=parseFloat(v.val||0);
+          skuMap[s].qtd+=parseInt(v.qtd||0);
         });
         const topSkus=Object.entries(skuMap).sort((a,b)=>b[1].receita-a[1].receita).slice(0,15);
         if(!topSkus.length){
@@ -2198,28 +2197,35 @@ async function renderTempoReal(){
   const hISO=hoje.toISOString().split('T')[0];
   const empIds=EMPRESAS.map(e=>e.id).join(',');
 
-  // Buscar todas as vendas de hoje com hora (criado_em ou data_pedido)
-  const vendas=await sbGet('vendas',
-    `?empresa_id=in.(${empIds})&data_pedido=eq.${hISO}&select=sku,quantidade,criado_em&limit=5000`);
+  // Agregação por SKU+hora no banco; se a RPC ainda não existir, usa o método antigo
+  const porSku={};
+  let temDados=false;
+  try{
+    const agg=await sbRpc('vendas_agregado_sku_hora',{p_empresa_ids:EMPRESAS.map(e=>e.id),p_dia:hISO});
+    agg.forEach(v=>{
+      const s=v.sku||'—';
+      if(!porSku[s])porSku[s]=Array(24).fill(0);
+      porSku[s][parseInt(v.hora)||0]+=parseInt(v.qtd||0);
+      temDados=true;
+    });
+  }catch(e){
+    const vendas=await sbGet('vendas',
+      `?empresa_id=in.(${empIds})&data_pedido=eq.${hISO}&select=sku,quantidade,criado_em&limit=10000`);
+    vendas.forEach(v=>{
+      const s=v.sku||'—';
+      if(!porSku[s])porSku[s]=Array(24).fill(0);
+      porSku[s][new Date(v.criado_em).getHours()]+=(v.quantidade||1);
+      temDados=true;
+    });
+  }
 
-  if(!vendas.length){
+  if(!temDados){
     canvas.parentElement.innerHTML='<div style="color:var(--text3);font-size:12px;padding:20px;text-align:center">Sem vendas registradas hoje</div>';
     return;
   }
 
   // Montar 24 slots de hora
   const horas=Array.from({length:24},(_,i)=>String(i).padStart(2,'0')+':00');
-
-  // Agrupar por SKU e hora
-  const porSku={};
-  vendas.forEach(v=>{
-    const s=v.sku||'—';
-    if(!porSku[s])porSku[s]=Array(24).fill(0);
-    // usar criado_em para extrair a hora
-    const dt=new Date(v.criado_em);
-    const h=dt.getHours();
-    porSku[s][h]+=(v.quantidade||1);
-  });
 
   // Paleta de cores — gerar dinamicamente
   const skus=Object.keys(porSku);
