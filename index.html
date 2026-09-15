@@ -1522,15 +1522,21 @@ tr:hover td{background:var(--surface2);}
     <div class="modal-title">📋 Gerar DRE</div>
     <div class="modal-sub" style="margin-bottom:16px">Demonstração do Resultado do Exercício — consolidado mês a mês</div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Empresa</label>
-        <select class="form-control" id="dre-empresa"></select>
+    <div class="form-group">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <label class="form-label" style="margin:0">Empresas</label>
+        <span style="font-size:11px">
+          <a href="#" onclick="dreSelTodas(true);return false" style="color:var(--accent);text-decoration:none">todas</a>
+          <span style="color:var(--text3)"> · </span>
+          <a href="#" onclick="dreSelTodas(false);return false" style="color:var(--accent);text-decoration:none">nenhuma</a>
+        </span>
       </div>
-      <div class="form-group">
-        <label class="form-label">Ano</label>
-        <select class="form-control" id="dre-ano"></select>
-      </div>
+      <div id="dre-empresas" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface2)"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px">Selecione uma ou mais para consolidar em uma única DRE.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ano</label>
+      <select class="form-control" id="dre-ano"></select>
     </div>
 
     <div style="margin:18px 0 8px;font-size:12px;font-weight:600;color:var(--text2)">Formato do arquivo</div>
@@ -3624,8 +3630,13 @@ const DRE_SECOES=[
 ];
 
 function abrirModalDRE(){
-  const selE=document.getElementById('dre-empresa');
-  selE.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  const box=document.getElementById('dre-empresas');
+  box.innerHTML=EMPRESAS.map(e=>{
+    const cnpj=(e.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px">'+
+      '<input type="checkbox" class="dre-emp-chk" value="'+e.id+'" checked>'+
+      '<span><b>'+e.nome+'</b>'+(cnpj?'<span style="color:var(--text3);font-size:11px"> · '+cnpj+'</span>':'')+'</span></label>';
+  }).join('');
   const anoAtual=new Date().getFullYear();
   const selA=document.getElementById('dre-ano');
   selA.innerHTML='';
@@ -3635,6 +3646,10 @@ function abrirModalDRE(){
   abrirModal('modal-dre');
 }
 
+function dreSelTodas(v){
+  document.querySelectorAll('.dre-emp-chk').forEach(c=>c.checked=v);
+}
+
 function selecionarFormatoDRE(f){
   _dreFormato=f;
   document.getElementById('dre-opt-xlsx').style.borderColor = f==='xlsx'?'var(--accent)':'transparent';
@@ -3642,15 +3657,17 @@ function selecionarFormatoDRE(f){
 }
 
 // Busca o ano inteiro e distribui os valores nas linhas da DRE
-async function _montarDadosDRE(empresaId,ano){
+async function _montarDadosDRE(empresaIds,ano){
   const de=ano+'-01-01', ate=ano+'-12-31';
+  const ids=Array.isArray(empresaIds)?empresaIds:[empresaIds];
+  const filtro=`empresa_id=in.(${ids.join(',')})`;
   const catNome={}, catPai={};
   CATEGORIAS.forEach(c=>{catNome[c.id]=c.nome;catPai[c.id]=c.categoria_pai_id;});
 
   const [trans,cxEnt,cxSai]=await Promise.all([
-    sbGet('transacoes',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&status=eq.CONFIRMADA&select=valor,tipo,data,categoria_id&limit=20000`),
-    sbGet('caixa_entradas',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&select=valor_original,data,categoria_id&limit=5000`),
-    sbGet('caixa_saidas',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&select=valor_total,data,categoria_id&limit=5000`)
+    sbGet('transacoes',`?${filtro}&data=gte.${de}&data=lte.${ate}&status=eq.CONFIRMADA&select=valor,tipo,data,categoria_id&limit=20000`),
+    sbGet('caixa_entradas',`?${filtro}&data=gte.${de}&data=lte.${ate}&select=valor_original,data,categoria_id&limit=5000`),
+    sbGet('caixa_saidas',`?${filtro}&data=gte.${de}&data=lte.${ate}&select=valor_total,data,categoria_id&limit=5000`)
   ]);
 
   // linhas[secao][categoria][mes]
@@ -3686,17 +3703,18 @@ async function _montarDadosDRE(empresaId,ano){
 }
 
 async function gerarDRE(){
-  const empresaId=document.getElementById('dre-empresa').value;
+  const ids=[...document.querySelectorAll('.dre-emp-chk:checked')].map(c=>c.value);
   const ano=parseInt(document.getElementById('dre-ano').value);
   const st=document.getElementById('dre-status');
   const btn=document.getElementById('dre-btn-gerar');
-  st.textContent='Consolidando lançamentos do ano...';
+  if(!ids.length){st.textContent='Selecione ao menos uma empresa.';return;}
+  st.textContent='Consolidando lançamentos'+(ids.length>1?' de '+ids.length+' empresas':'')+'...';
   btn.disabled=true;
   try{
-    const d=await _montarDadosDRE(empresaId,ano);
-    const emp=EMPRESAS.find(e=>e.id===empresaId)||{};
-    if(_dreFormato==='xlsx') _dreExportarXLSX(d,emp,ano);
-    else                     _dreExportarPDF(d,emp,ano);
+    const d=await _montarDadosDRE(ids,ano);
+    const emps=EMPRESAS.filter(e=>ids.indexOf(e.id)>=0);
+    if(_dreFormato==='xlsx') _dreExportarXLSX(d,emps,ano);
+    else                     _dreExportarPDF(d,emps,ano);
     st.textContent='✓ Arquivo gerado';
     setTimeout(()=>fecharModal('modal-dre'),900);
   }catch(e){
@@ -3723,9 +3741,16 @@ function _dreMatriz(d){
   return out;
 }
 
-function _dreExportarXLSX(d,emp,ano){
+function _dreExportarXLSX(d,emps,ano){
+  const lista=Array.isArray(emps)?emps:[emps];
+  const titulo=lista.length===1?(lista[0].nome||'empresa'):('Consolidado_'+lista.length+'_empresas');
   const matriz=_dreMatriz(d);
   const aoa=[];
+  if(lista.length>1){
+    aoa.push(['DRE CONSOLIDADA — '+lista.length+' empresas · Exercício '+ano]);
+    aoa.push([lista.map(e=>e.nome).join('  |  ')]);
+    aoa.push([]);
+  }
   aoa.push([''].concat(DRE_MESES).concat(['Total']));
   matriz.forEach(l=>{
     const tot=l.vals.reduce((a,b)=>a+b,0);
@@ -3737,7 +3762,8 @@ function _dreExportarXLSX(d,emp,ano){
 
   // Formato numérico brasileiro nas células de valor
   const range=XLSX.utils.decode_range(ws['!ref']);
-  for(let R=1;R<=range.e.r;R++){
+  const R0=lista.length>1?4:1;
+  for(let R=R0;R<=range.e.r;R++){
     for(let C=1;C<=13;C++){
       const cel=ws[XLSX.utils.encode_cell({r:R,c:C})];
       if(cel&&typeof cel.v==='number'){cel.t='n';cel.z='#,##0.00;[Red]-#,##0.00';}
@@ -3746,7 +3772,7 @@ function _dreExportarXLSX(d,emp,ano){
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'DRE '+ano);
-  XLSX.writeFile(wb,`DRE_${(emp.nome||'empresa').replace(/[^\w]/g,'_')}_${ano}.xlsx`);
+  XLSX.writeFile(wb,`DRE_${titulo.replace(/[^\w]/g,'_')}_${ano}.xlsx`);
 }
 
 // fBRL do sistema usa Math.abs e apaga o sinal; na DRE o sinal importa
@@ -3756,12 +3782,18 @@ function _dreNum(v){
   return (v<0?'-':'')+s;
 }
 
-function _dreExportarPDF(d,emp,ano){
+function _dreExportarPDF(d,emps,ano){
+  const lista=Array.isArray(emps)?emps:[emps];
   const matriz=_dreMatriz(d);
   const totalAno=v=>v.reduce((a,b)=>a+b,0);
   // Base da análise vertical: receita operacional líquida do ano
   const baseAV=totalAno(d.calc.__rol)||1;
-  const cnpjFmt=(emp.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+  const fmtCnpj=c=>(c||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+  const consolidado=lista.length>1;
+  const tituloEmp=consolidado?('Consolidado — '+lista.length+' empresas'):(lista[0]&&lista[0].nome||'—');
+  const metaEmp=consolidado
+    ? lista.map(e=>e.nome+(e.cnpj?' ('+fmtCnpj(e.cnpj)+')':'')).join(' · ')
+    : (lista[0]&&lista[0].cnpj?'CNPJ: '+fmtCnpj(lista[0].cnpj):'');
 
   const linhasHtml=matriz.map(l=>{
     const tot=totalAno(l.vals);
@@ -3778,12 +3810,12 @@ function _dreExportarPDF(d,emp,ano){
   }).join('');
 
   const html='<!DOCTYPE html><html><head><meta charset="UTF-8">'+
-  '<title>DRE '+ano+' — '+(emp.nome||'')+'</title><style>'+
+  '<title>DRE '+ano+' — '+tituloEmp+'</title><style>'+
   '*{box-sizing:border-box;margin:0;padding:0}'+
   'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;padding:18px;font-size:10px}'+
   '.cab{border-bottom:3px solid #1e9be8;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end}'+
   '.emp{font-size:17px;font-weight:bold;color:#0d1b2a}'+
-  '.meta{font-size:10px;color:#666;margin-top:3px;line-height:1.5}'+
+  '.meta{font-size:9px;color:#666;margin-top:3px;line-height:1.5;max-width:620px}'+
   '.tit{font-size:14px;font-weight:bold;color:#1e9be8;text-align:right}'+
   '.sub{font-size:9px;color:#888;text-align:right;margin-top:2px}'+
   'table{width:100%;border-collapse:collapse;margin-top:6px}'+
@@ -3805,8 +3837,8 @@ function _dreExportarPDF(d,emp,ano){
   '@media print{body{padding:8px}@page{size:A4 landscape;margin:8mm}}'+
   '</style></head><body>'+
   '<div class="cab"><div>'+
-    '<div class="emp">'+(emp.nome||'—')+'</div>'+
-    '<div class="meta">'+(cnpjFmt?'CNPJ: '+cnpjFmt:'')+'</div>'+
+    '<div class="emp">'+tituloEmp+'</div>'+
+    '<div class="meta">'+metaEmp+'</div>'+
   '</div><div>'+
     '<div class="tit">DEMONSTRAÇÃO DO RESULTADO</div>'+
     '<div class="sub">Exercício '+ano+' · Emitido em '+new Date().toLocaleString('pt-BR')+'</div>'+
@@ -3816,7 +3848,7 @@ function _dreExportarPDF(d,emp,ano){
     '<th>Total</th><th>AV%</th></tr></thead><tbody>'+linhasHtml+'</tbody></table>'+
   '<div class="nota"><b>AV%</b> = análise vertical: peso de cada conta sobre a Receita Operacional Líquida do exercício. '+
   'Transferências entre contas são excluídas por não representarem resultado. Valores em reais.</div>'+
-  '<div class="rod"><span>Lume Financeiro — DRE gerencial</span><span>'+(emp.nome||'')+' · '+ano+'</span></div>'+
+  '<div class="rod"><span>Lume Financeiro — DRE gerencial</span><span>'+tituloEmp+' · '+ano+'</span></div>'+
   '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>'+
   '</body></html>';
 
