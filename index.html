@@ -1044,6 +1044,7 @@ tr:hover td{background:var(--surface2);}
         <div><div class="page-title">Balancete</div><div class="page-sub">Receitas e despesas realizadas</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">📅 Visão Semanal</button>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalDRE()">📋 Gerar DRE</button>
           <button class="btn btn-secondary btn-sm" onclick="gerarFluxoCaixaReal()">📊 Fluxo de Caixa</button>
           <button class="btn btn-secondary btn-sm" onclick="imprimirBalancete()">🖨️ Imprimir</button>
           <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
@@ -1511,6 +1512,49 @@ tr:hover td{background:var(--surface2);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModal('modal-add-marketplace')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL GERAR DRE ── -->
+<div class="modal-overlay" id="modal-dre">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title">📋 Gerar DRE</div>
+    <div class="modal-sub" style="margin-bottom:16px">Demonstração do Resultado do Exercício — consolidado mês a mês</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Empresa</label>
+        <select class="form-control" id="dre-empresa"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ano</label>
+        <select class="form-control" id="dre-ano"></select>
+      </div>
+    </div>
+
+    <div style="margin:18px 0 8px;font-size:12px;font-weight:600;color:var(--text2)">Formato do arquivo</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div id="dre-opt-xlsx" onclick="selecionarFormatoDRE('xlsx')"
+           style="cursor:pointer;border:2px solid var(--accent);border-radius:8px;padding:16px;text-align:center;background:var(--surface2)">
+        <div style="font-size:26px;margin-bottom:6px">📊</div>
+        <div style="font-weight:600;font-size:13px">Excel (XLSX)</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4">Planilha editável,<br>meses em colunas</div>
+      </div>
+      <div id="dre-opt-pdf" onclick="selecionarFormatoDRE('pdf')"
+           style="cursor:pointer;border:2px solid transparent;border-radius:8px;padding:16px;text-align:center;background:var(--surface2)">
+        <div style="font-size:26px;margin-bottom:6px">📄</div>
+        <div style="font-weight:600;font-size:13px">PDF Gerencial</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4">Com cabeçalho da empresa<br>e análise vertical</div>
+      </div>
+    </div>
+
+    <div id="dre-status" style="font-size:12px;color:var(--text3);margin-top:14px;min-height:18px"></div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-dre')">Cancelar</button>
+      <button class="btn btn-primary" id="dre-btn-gerar" onclick="gerarDRE()">Gerar</button>
     </div>
   </div>
 </div>
@@ -3542,6 +3586,235 @@ async function importarBOMCSV(input){
 
   alert(`Importação concluída!\n✅ ${ok} SKUs importados${erros?`\n❌ ${erros} com erro`:''}`);
   loadBOM();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — Demonstração do Resultado do Exercício
+//  Estrutura dedutiva: parte da receita bruta e vai subtraindo
+//  custos e despesas até o resultado líquido.
+// ═══════════════════════════════════════════════════════════════
+
+let _dreFormato='xlsx';
+
+// Mapeia cada categoria do Lume para sua linha na DRE.
+// O que não estiver aqui cai automaticamente em Outras Receitas
+// ou Outras Despesas, conforme o tipo.
+const DRE_MAPA={
+  // Receita Operacional Bruta — receitas da tabela principal do balancete
+  'Vendas E-commerce':'receita_bruta',
+  'Vendas Atacado':'receita_bruta',
+  'Antecipação de Recebíveis':'receita_bruta',
+  // Deduções da Receita Bruta
+  'Impostos e Taxas':'deducoes',
+  'Despesas Bancárias':'deducoes',
+  'Empréstimos e Financiamentos':'deducoes',
+  'Investimentos em Maquinário/Estrutura':'deducoes',
+  'Investimento em Capital Intelectual':'deducoes',
+};
+
+// Categorias fora da DRE (não representam resultado operacional)
+const DRE_EXCLUIR=['Transferências entre Contas','Outras Receitas','Outras Despesas'];
+
+const DRE_SECOES=[
+  {k:'receita_bruta',t:'(+) Receita Operacional Bruta',sinal:1},
+  {k:'deducoes',     t:'(-) Deduções da Receita Bruta',sinal:-1},
+  {k:'__rol',        t:'(=) Receita Operacional Líquida',calc:true},
+  {k:'desp_op',      t:'(-) Despesas Operacionais',sinal:-1},
+  {k:'__liq',        t:'(=) Resultado Líquido do Exercício',calc:true},
+];
+
+function abrirModalDRE(){
+  const selE=document.getElementById('dre-empresa');
+  selE.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  const anoAtual=new Date().getFullYear();
+  const selA=document.getElementById('dre-ano');
+  selA.innerHTML='';
+  for(let a=anoAtual;a>=anoAtual-3;a--)selA.innerHTML+='<option value="'+a+'">'+a+'</option>';
+  document.getElementById('dre-status').textContent='';
+  selecionarFormatoDRE('xlsx');
+  abrirModal('modal-dre');
+}
+
+function selecionarFormatoDRE(f){
+  _dreFormato=f;
+  document.getElementById('dre-opt-xlsx').style.borderColor = f==='xlsx'?'var(--accent)':'transparent';
+  document.getElementById('dre-opt-pdf').style.borderColor  = f==='pdf' ?'var(--accent)':'transparent';
+}
+
+// Busca o ano inteiro e distribui os valores nas linhas da DRE
+async function _montarDadosDRE(empresaId,ano){
+  const de=ano+'-01-01', ate=ano+'-12-31';
+  const catNome={}, catPai={};
+  CATEGORIAS.forEach(c=>{catNome[c.id]=c.nome;catPai[c.id]=c.categoria_pai_id;});
+
+  const [trans,cxEnt,cxSai]=await Promise.all([
+    sbGet('transacoes',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&status=eq.CONFIRMADA&select=valor,tipo,data,categoria_id&limit=20000`),
+    sbGet('caixa_entradas',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&select=valor_original,data,categoria_id&limit=5000`),
+    sbGet('caixa_saidas',`?empresa_id=eq.${empresaId}&data=gte.${de}&data=lte.${ate}&select=valor_total,data,categoria_id&limit=5000`)
+  ]);
+
+  // linhas[secao][categoria][mes]
+  const linhas={}, totalSecao={};
+  DRE_SECOES.forEach(s=>{linhas[s.k]={};totalSecao[s.k]=Array(12).fill(0);});
+
+  function lancar(catId,data,valor,ehReceita){
+    if(!data)return;
+    if(CATS_ESPECIAIS.has(catId))return; // transferências ficam de fora
+    const m=parseInt(String(data).substring(5,7))-1;
+    if(m<0||m>11)return;
+    let nome=catNome[catId]||'Sem categoria';
+    if(DRE_EXCLUIR.indexOf(nome)>=0)return;
+    // a categoria manda; se for subcategoria sem regra própria, usa a do pai
+    let secao=DRE_MAPA[nome];
+    if(!secao&&catPai[catId])secao=DRE_MAPA[catNome[catPai[catId]]];
+    if(!secao)secao=ehReceita?'receita_bruta':'desp_op';
+    if(!linhas[secao][nome])linhas[secao][nome]=Array(12).fill(0);
+    linhas[secao][nome][m]+=Math.abs(valor);
+    totalSecao[secao][m]+=Math.abs(valor);
+  }
+
+  trans.forEach(t=>lancar(t.categoria_id,t.data,parseFloat(t.valor)||0,t.tipo!=='DEBIT'));
+  cxEnt.forEach(e=>lancar(e.categoria_id,e.data,parseFloat(e.valor_original)||0,true));
+  cxSai.forEach(s=>lancar(s.categoria_id,s.data,parseFloat(s.valor_total)||0,false));
+
+  // Linhas calculadas
+  const calc={};
+  calc.__rol=totalSecao.receita_bruta.map((v,i)=>v-totalSecao.deducoes[i]);
+  calc.__liq=calc.__rol.map((v,i)=>v-totalSecao.desp_op[i]);
+
+  return {linhas,totalSecao,calc};
+}
+
+async function gerarDRE(){
+  const empresaId=document.getElementById('dre-empresa').value;
+  const ano=parseInt(document.getElementById('dre-ano').value);
+  const st=document.getElementById('dre-status');
+  const btn=document.getElementById('dre-btn-gerar');
+  st.textContent='Consolidando lançamentos do ano...';
+  btn.disabled=true;
+  try{
+    const d=await _montarDadosDRE(empresaId,ano);
+    const emp=EMPRESAS.find(e=>e.id===empresaId)||{};
+    if(_dreFormato==='xlsx') _dreExportarXLSX(d,emp,ano);
+    else                     _dreExportarPDF(d,emp,ano);
+    st.textContent='✓ Arquivo gerado';
+    setTimeout(()=>fecharModal('modal-dre'),900);
+  }catch(e){
+    st.textContent='Erro: '+e.message;
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+const DRE_MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+// Monta a matriz da DRE (usada pelos dois formatos)
+function _dreMatriz(d){
+  const out=[];
+  DRE_SECOES.forEach(s=>{
+    if(s.calc){
+      out.push({tipo:'calc',nome:s.t,vals:d.calc[s.k]});
+      return;
+    }
+    const cats=Object.keys(d.linhas[s.k]).sort();
+    out.push({tipo:'grupo',nome:s.t,vals:d.totalSecao[s.k]});
+    cats.forEach(c=>out.push({tipo:'item',nome:c,vals:d.linhas[s.k][c]}));
+  });
+  return out;
+}
+
+function _dreExportarXLSX(d,emp,ano){
+  const matriz=_dreMatriz(d);
+  const aoa=[];
+  aoa.push([''].concat(DRE_MESES).concat(['Total']));
+  matriz.forEach(l=>{
+    const tot=l.vals.reduce((a,b)=>a+b,0);
+    aoa.push([l.nome].concat(l.vals.map(v=>Math.round(v*100)/100)).concat([Math.round(tot*100)/100]));
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:42}].concat(Array(13).fill({wch:14}));
+
+  // Formato numérico brasileiro nas células de valor
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=1;R<=range.e.r;R++){
+    for(let C=1;C<=13;C++){
+      const cel=ws[XLSX.utils.encode_cell({r:R,c:C})];
+      if(cel&&typeof cel.v==='number'){cel.t='n';cel.z='#,##0.00';}
+    }
+  }
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'DRE '+ano);
+  XLSX.writeFile(wb,`DRE_${(emp.nome||'empresa').replace(/[^\w]/g,'_')}_${ano}.xlsx`);
+}
+
+function _dreExportarPDF(d,emp,ano){
+  const matriz=_dreMatriz(d);
+  const totalAno=v=>v.reduce((a,b)=>a+b,0);
+  // Base da análise vertical: receita operacional líquida do ano
+  const baseAV=totalAno(d.calc.__rol)||1;
+  const cnpjFmt=(emp.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+
+  const linhasHtml=matriz.map(l=>{
+    const tot=totalAno(l.vals);
+    const av=(tot/baseAV*100);
+    let cls='item';
+    if(l.tipo==='grupo')cls='grupo';
+    if(l.tipo==='calc') cls='calc';
+    const cor=(l.tipo==='calc'&&tot<0)?'style="color:#c00"':'';
+    return '<tr class="'+cls+'">'+
+      '<td class="nome">'+l.nome+'</td>'+
+      l.vals.map(v=>'<td class="num">'+(v?fBRL(v).replace('R$','').trim():'—')+'</td>').join('')+
+      '<td class="num tot" '+cor+'>'+fBRL(tot).replace('R$','').trim()+'</td>'+
+      '<td class="num av">'+(isFinite(av)?av.toFixed(1)+'%':'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+  '<title>DRE '+ano+' — '+(emp.nome||'')+'</title><style>'+
+  '*{box-sizing:border-box;margin:0;padding:0}'+
+  'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;padding:18px;font-size:10px}'+
+  '.cab{border-bottom:3px solid #1e9be8;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end}'+
+  '.emp{font-size:17px;font-weight:bold;color:#0d1b2a}'+
+  '.meta{font-size:10px;color:#666;margin-top:3px;line-height:1.5}'+
+  '.tit{font-size:14px;font-weight:bold;color:#1e9be8;text-align:right}'+
+  '.sub{font-size:9px;color:#888;text-align:right;margin-top:2px}'+
+  'table{width:100%;border-collapse:collapse;margin-top:6px}'+
+  'th{background:#0d1b2a;color:#fff;padding:5px 4px;font-size:9px;text-align:right;font-weight:600}'+
+  'th:first-child{text-align:left;padding-left:8px}'+
+  'td{padding:3px 4px;border-bottom:1px solid #eee}'+
+  '.nome{text-align:left;padding-left:8px}'+
+  '.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+  '.tot{font-weight:bold;border-left:2px solid #ddd}'+
+  '.av{color:#888;font-size:9px}'+
+  'tr.grupo{background:#f1f5f9;font-weight:bold}'+
+  'tr.item .nome{padding-left:22px;color:#444}'+
+  'tr.item{font-size:9px}'+
+  'tr.calc{background:#e0f2fe;font-weight:bold;border-top:2px solid #1e9be8}'+
+  '.rod{margin-top:14px;padding-top:8px;border-top:1px solid #ddd;font-size:8px;color:#999;display:flex;justify-content:space-between}'+
+  '.nota{margin-top:10px;font-size:8px;color:#777;line-height:1.5}'+
+  '@media print{body{padding:8px}@page{size:A4 landscape;margin:8mm}}'+
+  '</style></head><body>'+
+  '<div class="cab"><div>'+
+    '<div class="emp">'+(emp.nome||'—')+'</div>'+
+    '<div class="meta">'+(cnpjFmt?'CNPJ: '+cnpjFmt:'')+'</div>'+
+  '</div><div>'+
+    '<div class="tit">DEMONSTRAÇÃO DO RESULTADO</div>'+
+    '<div class="sub">Exercício '+ano+' · Emitido em '+new Date().toLocaleString('pt-BR')+'</div>'+
+  '</div></div>'+
+  '<table><thead><tr><th>Conta</th>'+
+    DRE_MESES.map(m=>'<th>'+m+'</th>').join('')+
+    '<th>Total</th><th>AV%</th></tr></thead><tbody>'+linhasHtml+'</tbody></table>'+
+  '<div class="nota"><b>AV%</b> = análise vertical: peso de cada conta sobre a Receita Operacional Líquida do exercício. '+
+  'Transferências entre contas são excluídas por não representarem resultado. Valores em reais.</div>'+
+  '<div class="rod"><span>Lume Financeiro — DRE gerencial</span><span>'+(emp.nome||'')+' · '+ano+'</span></div>'+
+  '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>'+
+  '</body></html>';
+
+  const w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+  else alert('Permita pop-ups para gerar o PDF.');
 }
 
 // ── EDITAR TRANSAÇÃO (BALANCETE) ───────────────────────────────
