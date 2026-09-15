@@ -3740,13 +3740,20 @@ function _dreExportarXLSX(d,emp,ano){
   for(let R=1;R<=range.e.r;R++){
     for(let C=1;C<=13;C++){
       const cel=ws[XLSX.utils.encode_cell({r:R,c:C})];
-      if(cel&&typeof cel.v==='number'){cel.t='n';cel.z='#,##0.00';}
+      if(cel&&typeof cel.v==='number'){cel.t='n';cel.z='#,##0.00;[Red]-#,##0.00';}
     }
   }
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'DRE '+ano);
   XLSX.writeFile(wb,`DRE_${(emp.nome||'empresa').replace(/[^\w]/g,'_')}_${ano}.xlsx`);
+}
+
+// fBRL do sistema usa Math.abs e apaga o sinal; na DRE o sinal importa
+function _dreNum(v){
+  if(!v)return '—';
+  const s=Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (v<0?'-':'')+s;
 }
 
 function _dreExportarPDF(d,emp,ano){
@@ -3762,11 +3769,10 @@ function _dreExportarPDF(d,emp,ano){
     let cls='item';
     if(l.tipo==='grupo')cls='grupo';
     if(l.tipo==='calc') cls='calc';
-    const cor=(l.tipo==='calc'&&tot<0)?'style="color:#c00"':'';
     return '<tr class="'+cls+'">'+
       '<td class="nome">'+l.nome+'</td>'+
-      l.vals.map(v=>'<td class="num">'+(v?fBRL(v).replace('R$','').trim():'—')+'</td>').join('')+
-      '<td class="num tot" '+cor+'>'+fBRL(tot).replace('R$','').trim()+'</td>'+
+      l.vals.map(v=>'<td class="num'+(v<0?' neg':'')+'">'+_dreNum(v)+'</td>').join('')+
+      '<td class="num tot'+(tot<0?' neg':'')+'">'+_dreNum(tot)+'</td>'+
       '<td class="num av">'+(isFinite(av)?av.toFixed(1)+'%':'—')+'</td>'+
     '</tr>';
   }).join('');
@@ -3788,6 +3794,8 @@ function _dreExportarPDF(d,emp,ano){
   '.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
   '.tot{font-weight:bold;border-left:2px solid #ddd}'+
   '.av{color:#888;font-size:9px}'+
+  '.neg{color:#c00}'+
+  'tr.calc .neg{color:#a00;font-weight:bold}'+
   'tr.grupo{background:#f1f5f9;font-weight:bold}'+
   'tr.item .nome{padding-left:22px;color:#444}'+
   'tr.item{font-size:9px}'+
