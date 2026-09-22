@@ -1648,6 +1648,19 @@ tr:hover td{background:var(--surface2);}
       <label class="form-label">Observação</label>
       <input type="text" class="form-control" id="of-obs">
     </div>
+    <div style="background:var(--surface2);border-radius:6px;padding:10px 12px;margin-bottom:12px">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px">
+        <input type="checkbox" id="of-gerar-receb" style="margin-top:2px">
+        <span><b>Gerar lançamento do valor recebido</b>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:2px">
+          Marque apenas se o dinheiro <b>ainda não entrou</b> na conta. Se já entrou,
+          ele aparecerá como transação bancária e este lançamento duplicaria a entrada.
+        </div></span>
+      </label>
+      <div style="font-size:10px;color:var(--text3);margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">
+        As <b>parcelas a pagar</b> são sempre geradas na aba Lançamentos.
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModal('modal-opfin')">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarOpFin()">Salvar</button>
@@ -4589,6 +4602,19 @@ async function excluirInventario(id){
 //  rateado proporcionalmente pelas parcelas.
 // ═══════════════════════════════════════════════════════════════
 const _rotuloOp=t=>({ROLAGEM:'Rolagem',ANTECIPACAO:'Antecipação',EMPRESTIMO:'Empréstimo'}[t]||t);
+// Categoria dos lançamentos gerados por uma operação financeira
+function _catOperacao(tipo){
+  const nome={ROLAGEM:'Rolagem (Rollover)',ANTECIPACAO:'Antecipação de Recebíveis',
+              EMPRESTIMO:'Empréstimos e Financiamentos'}[tipo];
+  const c=CATEGORIAS.find(x=>x.nome===nome&&x.tipo==='DESPESA');
+  return c?c.id:null;
+}
+function _catOperacaoReceita(tipo){
+  const nome={ROLAGEM:'Rolagem (Rollover)',ANTECIPACAO:'Antecipação de Recebíveis',
+              EMPRESTIMO:'Empréstimos e Financiamentos'}[tipo];
+  const c=CATEGORIAS.find(x=>x.nome===nome&&x.tipo==='RECEITA');
+  return c?c.id:(CATEGORIAS.find(x=>x.nome==='Outras Receitas'&&x.tipo==='RECEITA')||{}).id||null;
+}
 
 async function loadOperacoesFin(){
   const emp=document.getElementById('of-f-empresa').value;
@@ -4627,6 +4653,7 @@ function abrirModalOpFin(){
   ['of-contraparte','of-recebido','of-pagar','of-obs'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('of-parcelas').value=1;
   document.getElementById('of-venc-wrap').innerHTML='';
+  document.getElementById('of-gerar-receb').checked=false;
   ofCalcular();
   abrirModal('modal-opfin');
 }
@@ -4713,6 +4740,36 @@ async function salvarOpFin(){
       return {operacao_id:opId,numero:i+1,data_vencimento:vencs[i],valor_parcela:v,custo_apropriado:c};
     });
     await sbPost('operacoes_financeiras_parcelas',parcelas);
+
+    // ── Lançamentos de caixa ──
+    // As parcelas são saídas reais e precisam aparecer no fluxo.
+    const catOp=_catOperacao(tipo);
+    const rot=_rotuloOp(tipo);
+    const lanc=parcelas.map(p=>({
+      empresa_id,user_id:SESSION?.user?.id,
+      tipo_lancamento:'PAGAR',situacao:'EM_ABERTO',
+      fornecedor:contraparte||rot,
+      descricao:rot+' — parcela '+p.numero+'/'+parcelas.length,
+      valor:p.valor_parcela,
+      data:data_operacao,data_vencimento:p.data_vencimento,
+      categoria_id:catOp,meio_pagamento:'CHEQUE',
+      operacao_financeira_id:opId
+    }));
+    // Entrada do valor recebido, se marcado
+    if(document.getElementById('of-gerar-receb').checked){
+      lanc.push({
+        empresa_id,user_id:SESSION?.user?.id,
+        tipo_lancamento:'RECEBER',situacao:'EM_ABERTO',
+        cliente:contraparte||rot,
+        descricao:rot+' — valor recebido',
+        valor:valor_recebido,
+        data:data_operacao,data_vencimento:data_operacao,
+        categoria_id:_catOperacaoReceita(tipo),meio_pagamento:'TRANSFERENCIA',
+        operacao_financeira_id:opId
+      });
+    }
+    if(lanc.length)await sbPost('lancamentos_externos',lanc);
+
     fecharModal('modal-opfin');
     loadOperacoesFin();
   }catch(e){alert('Erro: '+e.message);}
@@ -4738,8 +4795,12 @@ async function verParcelasOpFin(id){
 }
 
 async function excluirOpFin(id){
-  if(!confirm('Excluir esta operação e suas parcelas?'))return;
+  const lanc=await sbGet('lancamentos_externos','?operacao_financeira_id=eq.'+id+'&select=id');
+  let msg='Excluir esta operação e suas parcelas?';
+  if(lanc.length)msg+='\n\nExistem '+lanc.length+' lançamento(s) vinculado(s) no fluxo de caixa. Eles também serão excluídos.';
+  if(!confirm(msg))return;
   try{
+    if(lanc.length)await sbDelete('lancamentos_externos','operacao_financeira_id=eq.'+id);
     await sbDelete('operacoes_financeiras_parcelas','operacao_id=eq.'+id);
     await sbDelete('operacoes_financeiras','id=eq.'+id);
     loadOperacoesFin();
