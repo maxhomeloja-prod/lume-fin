@@ -318,6 +318,23 @@ tr:hover td{background:var(--surface2);}
 .ac-item:hover,.ac-item.active{background:var(--surface2)}
 .ac-empty{padding:9px 14px;font-size:12px;color:var(--text3);font-style:italic}
 
+
+    .dre-tab{background:none;border:none;border-bottom:2px solid transparent;padding:9px 15px;font-size:13px;color:var(--text3);cursor:pointer;font-weight:500;white-space:nowrap}
+    .dre-tab:hover{color:var(--text2)}
+    .dre-tab-on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .dre-tab{background:none;border:none;border-bottom:2px solid transparent;padding:9px 14px;font-size:13px;color:var(--text3);cursor:pointer;font-weight:500}
+    .dre-tab:hover{color:var(--text2)}
+    .dre-tab-on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+    .dre-tbl{width:100%;border-collapse:collapse;font-size:12px}
+    .dre-tbl th{background:var(--surface2);padding:7px 8px;font-size:11px;color:var(--text2);text-align:left;border-bottom:1px solid var(--border)}
+    .dre-tbl td{padding:5px 8px;border-bottom:1px solid var(--border)}
+    .dre-tbl .dre-v,.dre-tbl .dre-av{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .dre-tbl .dre-av{color:var(--text3);font-size:11px;width:72px}
+    .dre-tbl .dre-v{width:130px}
+    .dre-tbl tr.dre-grupo{background:var(--surface2);font-weight:600}
+    .dre-tbl tr.dre-calc{background:var(--accent-bg);font-weight:700;border-top:2px solid var(--accent)}
+    .dre-tbl tr.dre-item td.dre-n{padding-left:26px;color:var(--text2);font-size:11px}
+    .dre-tbl .neg{color:var(--red)}
 </style>
 
 </head>
@@ -546,6 +563,7 @@ tr:hover td{background:var(--surface2);}
           <button class="nav-dd-item" onclick="irPara('balancete')">📊 Balancete</button>
           <button class="nav-dd-item" onclick="irPara('lancamentos')">📋 Lançamentos</button>
           <button class="nav-dd-item" onclick="irPara('caixa')">💵 Caixa</button>
+          <button class="nav-dd-item" onclick="irPara('dre')">📐 DRE</button>
         </div>
       </div>
 
@@ -1039,12 +1057,121 @@ tr:hover td{background:var(--surface2);}
     </div>
 
     <!-- BALANCETE -->
+    <div id="page-dre" class="page">
+      <div class="page-head">
+        <div><div class="page-title">DRE</div><div class="page-sub">Demonstração do Resultado — regime de competência</div></div>
+      </div>
+
+      <div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px">
+        <button class="dre-tab dre-tab-on" data-sub="resultado"  onclick="dreSubAba('resultado')">📊 Resultado</button>
+        <button class="dre-tab"            data-sub="registros"  onclick="dreSubAba('registros')">🧾 Registros de Despesa</button>
+        <button class="dre-tab"            data-sub="inventario" onclick="dreSubAba('inventario')">📦 Inventário</button>
+        <button class="dre-tab"            data-sub="opfin"      onclick="dreSubAba('opfin')">🏦 Operações Financeiras</button>
+      </div>
+
+      <!-- ─────────── RESULTADO ─────────── -->
+      <div id="dre-sub-resultado" class="dre-sub">
+        <div class="filters">
+          <div class="filter-group">
+            <label class="filter-label">Empresas</label>
+            <div id="dre-empresas" style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:7px;background:var(--surface2);min-width:250px"></div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">De</label>
+            <input type="month" class="filter-control" id="dre-de">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Até</label>
+            <input type="month" class="filter-control" id="dre-ate">
+          </div>
+          <div class="filter-group" style="justify-content:flex-end">
+            <button class="btn btn-secondary btn-sm" onclick="dreVerificar()">✓ Verificar pendências</button>
+          </div>
+        </div>
+
+        <div class="card" id="dre-checklist-card" style="margin-bottom:16px">
+          <div class="card-title">Checklist do período</div>
+          <div id="dre-checklist" style="font-family:ui-monospace,monospace;font-size:12px;line-height:1.9;padding:4px 0">
+            <span style="color:var(--text3)">Selecione o período e clique em Verificar pendências.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="card-title" style="margin:0">Resultado do período</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" id="dre-btn-xlsx" onclick="dreExportar('xlsx')" disabled>📊 Excel</button>
+              <button class="btn btn-secondary btn-sm" id="dre-btn-pdf"  onclick="dreExportar('pdf')"  disabled>📄 PDF Gerencial</button>
+            </div>
+          </div>
+          <div id="dre-resultado"><div style="color:var(--text3);font-size:12px;padding:16px">Verifique as pendências para gerar.</div></div>
+        </div>
+      </div>
+
+      <!-- ─────────── REGISTROS DE DESPESA ─────────── -->
+      <div id="dre-sub-registros" class="dre-sub" style="display:none">
+        <div class="filters">
+          <div class="filter-group">
+            <label class="filter-label">Empresa</label>
+            <select class="filter-control" id="rd-f-empresa" onchange="loadRegistrosDespesa()"></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">De</label>
+            <input type="date" class="filter-control" id="rd-f-de" onchange="loadRegistrosDespesa()">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Até</label>
+            <input type="date" class="filter-control" id="rd-f-ate" onchange="loadRegistrosDespesa()">
+          </div>
+          <div class="filter-group" style="justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="abrirModalRegistro()">+ Novo Registro</button>
+          </div>
+        </div>
+        <div class="card"><div id="rd-lista"></div></div>
+      </div>
+
+      <!-- ─────────── INVENTÁRIO ─────────── -->
+      <div id="dre-sub-inventario" class="dre-sub" style="display:none">
+        <div style="background:var(--red-bg);border-left:3px solid var(--red);border-radius:6px;padding:11px 14px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:3px">⚠ ATENÇÃO — posição do último dia do mês</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6">
+            A contagem deve refletir a posição do <b>último dia</b> do mês de referência.
+            O lançamento pode ser feito em outra data, mas os valores precisam ser os do último dia.
+            Este controle é responsabilidade sua — o sistema não tem como verificar.
+          </div>
+        </div>
+        <div class="filters">
+          <div class="filter-group">
+            <label class="filter-label">Empresa</label>
+            <select class="filter-control" id="inv-f-empresa" onchange="loadInventario()"></select>
+          </div>
+          <div class="filter-group" style="justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="abrirModalInventario()">+ Novo Inventário</button>
+          </div>
+        </div>
+        <div class="card"><div id="inv-lista"></div></div>
+      </div>
+
+      <!-- ─────────── OPERAÇÕES FINANCEIRAS ─────────── -->
+      <div id="dre-sub-opfin" class="dre-sub" style="display:none">
+        <div class="filters">
+          <div class="filter-group">
+            <label class="filter-label">Empresa</label>
+            <select class="filter-control" id="of-f-empresa" onchange="loadOperacoesFin()"></select>
+          </div>
+          <div class="filter-group" style="justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="abrirModalOpFin()">+ Nova Operação</button>
+          </div>
+        </div>
+        <div class="card"><div id="of-lista"></div></div>
+      </div>
+    </div>
+
     <div id="page-balancete" class="page">
       <div class="page-header">
         <div><div class="page-title">Balancete</div><div class="page-sub">Receitas e despesas realizadas</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" id="btn-bal-semanal" onclick="toggleBalSemanal()">📅 Visão Semanal</button>
-          <button class="btn btn-primary btn-sm" onclick="abrirModalDRE()">📋 Gerar DRE</button>
           <button class="btn btn-secondary btn-sm" onclick="gerarFluxoCaixaReal()">📊 Fluxo de Caixa</button>
           <button class="btn btn-secondary btn-sm" onclick="imprimirBalancete()">🖨️ Imprimir</button>
           <button class="btn btn-secondary btn-sm" onclick="loadBalancete()">↻ Atualizar</button>
@@ -1464,6 +1591,212 @@ tr:hover td{background:var(--surface2);}
 </div>
 
 
+<!-- ── MODAL OPERAÇÃO FINANCEIRA ── -->
+<div class="modal-overlay" id="modal-opfin">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-title">Nova Operação Financeira</div>
+    <div class="modal-sub" style="margin-bottom:14px">Rolagem, antecipação ou empréstimo. Só o <b>custo</b> entra na DRE — o principal é apenas caixa.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Empresa</label>
+        <select class="form-control" id="of-empresa"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-control" id="of-tipo">
+          <option value="ROLAGEM">Rolagem</option>
+          <option value="ANTECIPACAO">Antecipação</option>
+          <option value="EMPRESTIMO">Empréstimo</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Contraparte</label>
+        <input type="text" class="form-control" id="of-contraparte" placeholder="Tadeu Factor">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data da operação</label>
+        <input type="date" class="form-control" id="of-data" onchange="ofGerarParcelas()">
+      </div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Valor recebido</label>
+        <input type="number" step="0.01" class="form-control" id="of-recebido" oninput="ofCalcular()" placeholder="200000,00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Valor total a pagar</label>
+        <input type="number" step="0.01" class="form-control" id="of-pagar" oninput="ofCalcular()" placeholder="240000,00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Parcelas</label>
+        <input type="number" min="1" max="60" class="form-control" id="of-parcelas" value="1" onchange="ofCalcular()">
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;padding:9px 12px;background:var(--surface2);border-radius:6px;margin-bottom:14px">
+      <div style="flex:1"><div style="font-size:10px;color:var(--text3)">CUSTO DA OPERAÇÃO (vai para a DRE)</div>
+        <div style="font-size:16px;font-weight:700" id="of-custo">R$ 0,00</div>
+        <div style="font-size:10px;color:var(--text3)" id="of-custo-mes"></div></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Parcelas e vencimentos</label>
+      <div id="of-venc-wrap" style="max-height:180px;overflow-y:auto"></div>
+      <div id="of-soma-parc" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <input type="text" class="form-control" id="of-obs">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-opfin')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarOpFin()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL PARCELAS DA OPERAÇÃO ── -->
+<div class="modal-overlay" id="modal-opfin-parcelas">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-title">Parcelas da Operação</div>
+    <div id="of-parc-corpo" style="margin-top:12px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="fecharModal('modal-opfin-parcelas')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL INVENTÁRIO ── -->
+<div class="modal-overlay" id="modal-inventario">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-title" id="inv-titulo">Novo Inventário</div>
+    <div style="background:var(--red-bg);border-left:3px solid var(--red);border-radius:6px;padding:9px 12px;margin:10px 0 14px">
+      <div style="font-size:11px;font-weight:700;color:var(--red)">⚠ Posição do ÚLTIMO DIA do mês</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">
+        Os valores precisam refletir a contagem do último dia do mês de referência.
+        O fechamento deste mês será a abertura do mês seguinte.
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Empresa</label>
+        <select class="form-control" id="inv-empresa"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mês de referência</label>
+        <input type="month" class="form-control" id="inv-mes">
+      </div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">MP em estoque</label>
+        <input type="number" step="0.01" class="form-control" id="inv-mp" oninput="invAtualizaTotais()" placeholder="0,00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">MP em processo</label>
+        <input type="number" step="0.01" class="form-control" id="inv-proc" oninput="invAtualizaTotais()" placeholder="0,00">
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">Só matéria-prima</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Produtos acabados</label>
+        <input type="number" step="0.01" class="form-control" id="inv-acab" oninput="invAtualizaTotais()" placeholder="0,00">
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">MP + mão de obra</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;padding:9px 12px;background:var(--surface2);border-radius:6px;margin-bottom:14px">
+      <div style="flex:1"><div style="font-size:10px;color:var(--text3)">ESTOQUE TOTAL</div>
+        <div style="font-size:15px;font-weight:700" id="inv-total">R$ 0,00</div></div>
+      <div style="flex:1"><div style="font-size:10px;color:var(--text3)">MO INTERNA SELECIONADA</div>
+        <div style="font-size:15px;font-weight:700;color:var(--amber)" id="inv-mo-total">R$ 0,00</div></div>
+    </div>
+    <div class="form-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <label class="form-label" style="margin:0">Gastos de produção interna</label>
+        <button class="btn btn-secondary btn-sm" onclick="invBuscarGastos()">🔍 Buscar gastos do mês</button>
+      </div>
+      <div id="inv-mo-lista" style="max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <input type="text" class="form-control" id="inv-obs">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-inventario')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarInventario()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL REGISTRO DE DESPESA ── -->
+<div class="modal-overlay" id="modal-registro-despesa">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-title" id="rd-titulo">Novo Registro de Despesa</div>
+    <div class="modal-sub" style="margin-bottom:14px">O fato econômico: o que foi comprado ou consumido, e quando.</div>
+    <input type="hidden" id="rd-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Empresa</label>
+        <select class="form-control" id="rd-empresa"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data de competência</label>
+        <input type="date" class="form-control" id="rd-data" onchange="rdGerarVencimentos()">
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">Quando o fato ocorreu — é esta data que a DRE usa.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fornecedor</label>
+        <input type="text" class="form-control" id="rd-fornecedor" placeholder="EDDI CASA">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoria</label>
+        <select class="form-control" id="rd-categoria"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tipo de custo</label>
+      <select class="form-control" id="rd-tipo"></select>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">Define onde entra na DRE. Matéria-prima vai para o CPV e não aparece em Despesas Operacionais.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descrição</label>
+      <input type="text" class="form-control" id="rd-descricao" placeholder="NF 1234 — micropercal">
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Valor total</label>
+        <input type="number" step="0.01" class="form-control" id="rd-valor" placeholder="0,00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Parcelas</label>
+        <input type="number" min="1" max="36" class="form-control" id="rd-parcelas" value="1" onchange="rdGerarVencimentos()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Meio</label>
+        <select class="form-control" id="rd-meio">
+          <option>BOLETO</option><option>CHEQUE</option><option>PIX</option>
+          <option>TRANSFERENCIA</option><option>DINHEIRO</option><option>CARTAO</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Vencimentos</label>
+      <div id="rd-venc-wrap" style="max-height:160px;overflow-y:auto"></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">Geram os lançamentos na aba Lançamentos (fluxo de caixa).</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <input type="text" class="form-control" id="rd-obs">
+    </div>
+    <div id="rd-aviso" style="font-size:11px;min-height:16px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-registro-despesa')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarRegistroDespesa()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL ADD MARKETPLACE ── -->
 <div class="modal-overlay" id="modal-add-marketplace">
   <div class="modal" style="max-width:520px">
@@ -1512,55 +1845,6 @@ tr:hover td{background:var(--surface2);}
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="fecharModal('modal-add-marketplace')">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── MODAL GERAR DRE ── -->
-<div class="modal-overlay" id="modal-dre">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-title">📋 Gerar DRE</div>
-    <div class="modal-sub" style="margin-bottom:16px">Demonstração do Resultado do Exercício — consolidado mês a mês</div>
-
-    <div class="form-group">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-        <label class="form-label" style="margin:0">Empresas</label>
-        <span style="font-size:11px">
-          <a href="#" onclick="dreSelTodas(true);return false" style="color:var(--accent);text-decoration:none">todas</a>
-          <span style="color:var(--text3)"> · </span>
-          <a href="#" onclick="dreSelTodas(false);return false" style="color:var(--accent);text-decoration:none">nenhuma</a>
-        </span>
-      </div>
-      <div id="dre-empresas" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--surface2)"></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:5px">Selecione uma ou mais para consolidar em uma única DRE.</div>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Ano</label>
-      <select class="form-control" id="dre-ano"></select>
-    </div>
-
-    <div style="margin:18px 0 8px;font-size:12px;font-weight:600;color:var(--text2)">Formato do arquivo</div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div id="dre-opt-xlsx" onclick="selecionarFormatoDRE('xlsx')"
-           style="cursor:pointer;border:2px solid var(--accent);border-radius:8px;padding:16px;text-align:center;background:var(--surface2)">
-        <div style="font-size:26px;margin-bottom:6px">📊</div>
-        <div style="font-weight:600;font-size:13px">Excel (XLSX)</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4">Planilha editável,<br>meses em colunas</div>
-      </div>
-      <div id="dre-opt-pdf" onclick="selecionarFormatoDRE('pdf')"
-           style="cursor:pointer;border:2px solid transparent;border-radius:8px;padding:16px;text-align:center;background:var(--surface2)">
-        <div style="font-size:26px;margin-bottom:6px">📄</div>
-        <div style="font-weight:600;font-size:13px">PDF Gerencial</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4">Com cabeçalho da empresa<br>e análise vertical</div>
-      </div>
-    </div>
-
-    <div id="dre-status" style="font-size:12px;color:var(--text3);margin-top:14px;min-height:18px"></div>
-
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="fecharModal('modal-dre')">Cancelar</button>
-      <button class="btn btn-primary" id="dre-btn-gerar" onclick="gerarDRE()">Gerar</button>
     </div>
   </div>
 </div>
@@ -1984,7 +2268,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces
+    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -3629,100 +3913,14 @@ const DRE_SECOES=[
   {k:'__liq',        t:'(=) Resultado Líquido do Exercício',calc:true},
 ];
 
-function abrirModalDRE(){
-  const box=document.getElementById('dre-empresas');
-  box.innerHTML=EMPRESAS.map(e=>{
-    const cnpj=(e.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
-    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:12px">'+
-      '<input type="checkbox" class="dre-emp-chk" value="'+e.id+'" checked>'+
-      '<span><b>'+e.nome+'</b>'+(cnpj?'<span style="color:var(--text3);font-size:11px"> · '+cnpj+'</span>':'')+'</span></label>';
-  }).join('');
-  const anoAtual=new Date().getFullYear();
-  const selA=document.getElementById('dre-ano');
-  selA.innerHTML='';
-  for(let a=anoAtual;a>=anoAtual-3;a--)selA.innerHTML+='<option value="'+a+'">'+a+'</option>';
-  document.getElementById('dre-status').textContent='';
-  selecionarFormatoDRE('xlsx');
-  abrirModal('modal-dre');
-}
 
 function dreSelTodas(v){
   document.querySelectorAll('.dre-emp-chk').forEach(c=>c.checked=v);
 }
 
-function selecionarFormatoDRE(f){
-  _dreFormato=f;
-  document.getElementById('dre-opt-xlsx').style.borderColor = f==='xlsx'?'var(--accent)':'transparent';
-  document.getElementById('dre-opt-pdf').style.borderColor  = f==='pdf' ?'var(--accent)':'transparent';
-}
 
 // Busca o ano inteiro e distribui os valores nas linhas da DRE
-async function _montarDadosDRE(empresaIds,ano){
-  const de=ano+'-01-01', ate=ano+'-12-31';
-  const ids=Array.isArray(empresaIds)?empresaIds:[empresaIds];
-  const filtro=`empresa_id=in.(${ids.join(',')})`;
-  const catNome={}, catPai={};
-  CATEGORIAS.forEach(c=>{catNome[c.id]=c.nome;catPai[c.id]=c.categoria_pai_id;});
 
-  const [trans,cxEnt,cxSai]=await Promise.all([
-    sbGet('transacoes',`?${filtro}&data=gte.${de}&data=lte.${ate}&status=eq.CONFIRMADA&select=valor,tipo,data,categoria_id&limit=20000`),
-    sbGet('caixa_entradas',`?${filtro}&data=gte.${de}&data=lte.${ate}&select=valor_original,data,categoria_id&limit=5000`),
-    sbGet('caixa_saidas',`?${filtro}&data=gte.${de}&data=lte.${ate}&select=valor_total,data,categoria_id&limit=5000`)
-  ]);
-
-  // linhas[secao][categoria][mes]
-  const linhas={}, totalSecao={};
-  DRE_SECOES.forEach(s=>{linhas[s.k]={};totalSecao[s.k]=Array(12).fill(0);});
-
-  function lancar(catId,data,valor,ehReceita){
-    if(!data)return;
-    if(CATS_ESPECIAIS.has(catId))return; // transferências ficam de fora
-    const m=parseInt(String(data).substring(5,7))-1;
-    if(m<0||m>11)return;
-    let nome=catNome[catId]||'Sem categoria';
-    if(DRE_EXCLUIR.indexOf(nome)>=0)return;
-    // a categoria manda; se for subcategoria sem regra própria, usa a do pai
-    let secao=DRE_MAPA[nome];
-    if(!secao&&catPai[catId])secao=DRE_MAPA[catNome[catPai[catId]]];
-    if(!secao)secao=ehReceita?'receita_bruta':'desp_op';
-    if(!linhas[secao][nome])linhas[secao][nome]=Array(12).fill(0);
-    linhas[secao][nome][m]+=Math.abs(valor);
-    totalSecao[secao][m]+=Math.abs(valor);
-  }
-
-  trans.forEach(t=>lancar(t.categoria_id,t.data,parseFloat(t.valor)||0,t.tipo!=='DEBIT'));
-  cxEnt.forEach(e=>lancar(e.categoria_id,e.data,parseFloat(e.valor_original)||0,true));
-  cxSai.forEach(s=>lancar(s.categoria_id,s.data,parseFloat(s.valor_total)||0,false));
-
-  // Linhas calculadas
-  const calc={};
-  calc.__rol=totalSecao.receita_bruta.map((v,i)=>v-totalSecao.deducoes[i]);
-  calc.__liq=calc.__rol.map((v,i)=>v-totalSecao.desp_op[i]);
-
-  return {linhas,totalSecao,calc};
-}
-
-async function gerarDRE(){
-  const ids=[...document.querySelectorAll('.dre-emp-chk:checked')].map(c=>c.value);
-  const ano=parseInt(document.getElementById('dre-ano').value);
-  const st=document.getElementById('dre-status');
-  const btn=document.getElementById('dre-btn-gerar');
-  if(!ids.length){st.textContent='Selecione ao menos uma empresa.';return;}
-  st.textContent='Consolidando lançamentos'+(ids.length>1?' de '+ids.length+' empresas':'')+'...';
-  btn.disabled=true;
-  try{
-    const d=await _montarDadosDRE(ids,ano);
-    const emps=EMPRESAS.filter(e=>ids.indexOf(e.id)>=0);
-    if(_dreFormato==='xlsx') _dreExportarXLSX(d,emps,ano);
-    else                     _dreExportarPDF(d,emps,ano);
-    st.textContent='✓ Arquivo gerado';
-    setTimeout(()=>fecharModal('modal-dre'),900);
-  }catch(e){
-    st.textContent='Erro: '+e.message;
-  }finally{
-    btn.disabled=false;
-  }
-}
 
 const DRE_MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -3852,6 +4050,806 @@ function _dreExportarPDF(d,emps,ano){
   '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>'+
   '</body></html>';
 
+  const w=window.open('','_blank');
+  if(w){w.document.write(html);w.document.close();}
+  else alert('Permita pop-ups para gerar o PDF.');
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — REGIME DE COMPETÊNCIA
+//  Fontes: vendas (receita) + registros_despesa + inventario +
+//          entregas_op (facção externa) + operacoes_financeiras
+//  O balancete NÃO alimenta a DRE.
+// ═══════════════════════════════════════════════════════════════
+
+let _dreDados=null;
+
+function loadDRE(){
+  const box=document.getElementById('dre-empresas');
+  if(box&&!box.children.length){
+    box.innerHTML=EMPRESAS.map(e=>{
+      const c=(e.cnpj||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+      return '<label style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px">'+
+        '<input type="checkbox" class="dre-emp-chk" value="'+e.id+'" checked>'+
+        '<span>'+e.nome+(c?'<span style="color:var(--text3);font-size:10px"> · '+c+'</span>':'')+'</span></label>';
+    }).join('');
+  }
+  ['rd-f-empresa','inv-f-empresa','of-f-empresa'].forEach(id=>{
+    const s=document.getElementById(id);
+    if(s&&!s.children.length) s.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  });
+  const h=new Date();
+  const mm=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const de=document.getElementById('dre-de'), ate=document.getElementById('dre-ate');
+  if(de&&!de.value)de.value=mm(new Date(h.getFullYear(),h.getMonth()-1,1));
+  if(ate&&!ate.value)ate.value=mm(h);
+  const rdde=document.getElementById('rd-f-de'), rdate=document.getElementById('rd-f-ate');
+  if(rdde&&!rdde.value)rdde.value=new Date(h.getFullYear(),h.getMonth(),1).toISOString().split('T')[0];
+  if(rdate&&!rdate.value)rdate.value=new Date(h.getFullYear(),h.getMonth()+1,0).toISOString().split('T')[0];
+}
+
+function dreSubAba(nome){
+  document.querySelectorAll('.dre-sub').forEach(d=>d.style.display='none');
+  document.querySelectorAll('.dre-tab').forEach(b=>b.classList.remove('dre-tab-on'));
+  const el=document.getElementById('dre-sub-'+nome);
+  if(el)el.style.display='';
+  const btn=document.querySelector('.dre-tab[data-sub="'+nome+'"]');
+  if(btn)btn.classList.add('dre-tab-on');
+  if(nome==='registros')loadRegistrosDespesa();
+  if(nome==='inventario')loadInventario();
+  if(nome==='opfin')loadOperacoesFin();
+}
+
+const _ultimoDia=(ano,mes)=>new Date(ano,mes,0).toISOString().split('T')[0];
+function _mesesEntre(de,ate){
+  const out=[];
+  let [a,m]=de.split('-').map(Number);
+  const [a2,m2]=ate.split('-').map(Number);
+  while(a<a2||(a===a2&&m<=m2)){
+    out.push(a+'-'+String(m).padStart(2,'0'));
+    m++; if(m>12){m=1;a++;}
+  }
+  return out;
+}
+
+async function dreVerificar(){
+  const ids=[...document.querySelectorAll('.dre-emp-chk:checked')].map(c=>c.value);
+  const de=document.getElementById('dre-de').value;
+  const ate=document.getElementById('dre-ate').value;
+  const el=document.getElementById('dre-checklist');
+  if(!ids.length){el.innerHTML='<span style="color:var(--red)">Selecione ao menos uma empresa.</span>';return;}
+  if(!de||!ate){el.innerHTML='<span style="color:var(--red)">Informe o período.</span>';return;}
+  if(de>ate){el.innerHTML='<span style="color:var(--red)">Período invertido.</span>';return;}
+
+  el.innerHTML='<span style="color:var(--text3)">Verificando...</span>';
+  const meses=_mesesEntre(de,ate);
+  const dIni=de+'-01';
+  const [aF,mF]=ate.split('-').map(Number);
+  const dFim=_ultimoDia(aF,mF);
+  const dAnt=new Date(Number(de.split('-')[0]),Number(de.split('-')[1])-1,0).toISOString().split('T')[0];
+
+  const q='empresa_id=in.('+ids.join(',')+')';
+  const [vendas,invs,regs,regSemTipo]=await Promise.all([
+    sbRpc('vendas_kpis',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim,p_canal:null,p_canais:null,p_sku:null,p_cliente:null}),
+    sbGet('inventario','?'+q+'&select=mes_referencia,mo_interna&order=mes_referencia.asc'),
+    sbGet('registros_despesa','?'+q+'&data_competencia=gte.'+dIni+'&data_competencia=lte.'+dFim+'&select=id,tipo_custo'),
+    sbGet('registros_despesa','?'+q+'&data_competencia=gte.'+dIni+'&data_competencia=lte.'+dFim+'&tipo_custo=is.null&select=id')
+  ]);
+
+  const k=(vendas&&vendas[0])||{};
+  const invMap={};
+  invs.forEach(i=>{invMap[i.mes_referencia]=i;});
+
+  const linhas=[];
+  const pad=t=>t+' '+'.'.repeat(Math.max(2,34-t.length));
+  const ok=(t,d)=>linhas.push('<div><span style="color:var(--green)">✓</span> '+pad(t)+' '+d+'</div>');
+  const no=(t,d)=>linhas.push('<div><span style="color:var(--red)">✗</span> '+pad(t)+' <span style="color:var(--red)">'+d+'</span></div>');
+  let pend=0;
+
+  if(k.total_linhas>0) ok('Receita de vendas',fN(k.total_unidades||0)+' un · '+fBRL(k.total_receita||0));
+  else {no('Receita de vendas','nenhuma venda no período');pend++;}
+
+  if(invMap[dAnt]) ok('Inventário de abertura',fDate(dAnt));
+  else {no('Inventário de abertura','falta '+fDate(dAnt));pend++;}
+
+  const faltam=meses.filter(m=>{const [a,mm]=m.split('-').map(Number);return !invMap[_ultimoDia(a,mm)];});
+  if(!faltam.length) ok('Inventários mensais',meses.length+' de '+meses.length);
+  else {no('Inventários mensais','falta em '+faltam.join(', '));pend++;}
+
+  const semMO=meses.filter(m=>{
+    const [a,mm]=m.split('-').map(Number);
+    const i=invMap[_ultimoDia(a,mm)];
+    return i&&(!i.mo_interna||Number(i.mo_interna)===0);
+  });
+  if(!faltam.length&&!semMO.length) ok('Seleção de MO interna','OK');
+  else if(semMO.length){no('Seleção de MO interna','sem gastos em '+semMO.join(', '));pend++;}
+
+  if(!regSemTipo.length) ok('Registros classificados',regs.length+' registros');
+  else {no('Registros classificados',regSemTipo.length+' sem tipo de custo');pend++;}
+
+  el.innerHTML=linhas.join('')+
+    '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">'+
+    (pend? '<span style="color:var(--red);font-weight:600">'+pend+' pendência(s) — corrija para gerar a DRE.</span>'
+         : '<span style="color:var(--green);font-weight:600">Tudo pronto.</span>')+'</div>';
+
+  document.getElementById('dre-btn-xlsx').disabled=pend>0;
+  document.getElementById('dre-btn-pdf').disabled=pend>0;
+  if(pend>0){
+    _dreDados=null;
+    document.getElementById('dre-resultado').innerHTML='<div style="color:var(--text3);font-size:12px;padding:16px">Corrija as pendências acima para gerar o resultado.</div>';
+    return;
+  }
+  await dreMontarResultado(ids,dIni,dFim);
+}
+
+async function dreMontarResultado(ids,dIni,dFim){
+  const q='empresa_id=in.('+ids.join(',')+')';
+  const [kpis,cpv,custoFin,regs] = await Promise.all([
+    sbRpc('vendas_kpis',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim,p_canal:null,p_canais:null,p_sku:null,p_cliente:null}),
+    sbRpc('dre_cpv',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim}),
+    sbRpc('dre_custo_financeiro',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim}),
+    sbGet('registros_despesa','?'+q+'&data_competencia=gte.'+dIni+'&data_competencia=lte.'+dFim+'&select=valor_total,tipo_custo,categoria_id')
+  ]);
+
+  const receita=Number((kpis&&kpis[0]&&kpis[0].total_receita)||0);
+  const c=(cpv&&cpv[0])||{};
+  const cpvVal=Number(c.cpv||0);
+  const finVal=Number(custoFin||0);
+
+  const ded={}, ope={};
+  let totDed=0, totOpe=0;
+  regs.forEach(r=>{
+    const v=Math.abs(Number(r.valor_total)||0);
+    const nome=getNomeCat(r.categoria_id)||'Sem categoria';
+    if(r.tipo_custo==='DEDUCAO'){ded[nome]=(ded[nome]||0)+v;totDed+=v;}
+    else if(r.tipo_custo==='OPERACIONAL'){ope[nome]=(ope[nome]||0)+v;totOpe+=v;}
+  });
+
+  const rol=receita-totDed;
+  const lucroBruto=rol-cpvVal;
+  const resOper=lucroBruto-totOpe;
+  const resAntesIR=resOper-finVal;
+
+  _dreDados={receita,ded,totDed,rol,c,cpvVal,lucroBruto,ope,totOpe,resOper,finVal,resAntesIR,
+             dIni,dFim,empresas:EMPRESAS.filter(e=>ids.indexOf(e.id)>=0)};
+
+  document.getElementById('dre-resultado').innerHTML=dreHtmlTabela(_dreDados,'dre-tbl');
+}
+
+function dreNum(v){
+  const s=Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (v<0?'-':'')+s;
+}
+
+function dreHtmlTabela(d,cls){
+  const base=d.rol||1;
+  const av=v=>(v/base*100).toFixed(1)+'%';
+  const L=(t,v,k)=>'<tr class="'+(k||'')+'"><td class="dre-n">'+t+'</td><td class="dre-v'+(v<0?' neg':'')+'">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
+  const I=(t,v)=>'<tr class="dre-item"><td class="dre-n">'+t+'</td><td class="dre-v">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
+  let h='<table class="'+cls+'"><thead><tr><th>Conta</th><th style="text-align:right">Valor</th><th style="text-align:right">AV%</th></tr></thead><tbody>';
+  h+=L('(+) Receita Operacional Bruta',d.receita,'dre-grupo');
+  h+=L('(-) Deduções da Receita Bruta',d.totDed,'dre-grupo');
+  Object.entries(d.ded).sort((a,b)=>b[1]-a[1]).forEach(e=>h+=I(e[0],e[1]));
+  h+=L('(=) Receita Operacional Líquida',d.rol,'dre-calc');
+  h+=L('(-) CPV',d.cpvVal,'dre-grupo');
+  h+=I('Estoque inicial',Number(d.c.estoque_inicial||0));
+  h+=I('(+) Compras de matéria-prima',Number(d.c.compras_mp||0));
+  h+=I('(+) Mão de obra externa (facção)',Number(d.c.mo_externa||0));
+  h+=I('(+) Mão de obra interna',Number(d.c.mo_interna||0));
+  h+=I('(-) Estoque final',Number(d.c.estoque_final||0));
+  h+=L('(=) Lucro Bruto',d.lucroBruto,'dre-calc');
+  h+=L('(-) Despesas Operacionais',d.totOpe,'dre-grupo');
+  Object.entries(d.ope).sort((a,b)=>b[1]-a[1]).forEach(e=>h+=I(e[0],e[1]));
+  h+=L('(=) Resultado Operacional',d.resOper,'dre-calc');
+  h+=L('(-) Resultado Financeiro',d.finVal,'dre-grupo');
+  h+=L('(=) Resultado antes do IR',d.resAntesIR,'dre-calc');
+  h+='</tbody></table>';
+  return h;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — REGISTROS DE DESPESA
+// ═══════════════════════════════════════════════════════════════
+const TIPOS_CUSTO=[
+  ['MATERIA_PRIMA','Matéria-prima (vai para o CPV)'],
+  ['OPERACIONAL','Despesa operacional'],
+  ['DEDUCAO','Dedução da receita (impostos sobre venda)']
+];
+const _rotuloTipo=t=>({MATERIA_PRIMA:'Matéria-prima',OPERACIONAL:'Operacional',DEDUCAO:'Dedução'}[t]||'—');
+const _corTipo=t=>({MATERIA_PRIMA:'var(--amber)',OPERACIONAL:'var(--accent)',DEDUCAO:'var(--red)'}[t]||'var(--text3)');
+
+async function loadRegistrosDespesa(){
+  const emp=document.getElementById('rd-f-empresa').value;
+  const de=document.getElementById('rd-f-de').value;
+  const ate=document.getElementById('rd-f-ate').value;
+  const el=document.getElementById('rd-lista');
+  if(!emp){el.innerHTML='<div class="empty"><div class="empty-title">Selecione a empresa</div></div>';return;}
+  let q='?empresa_id=eq.'+emp+'&select=*&order=data_competencia.desc&limit=500';
+  if(de)q+='&data_competencia=gte.'+de;
+  if(ate)q+='&data_competencia=lte.'+ate;
+  const regs=await sbGet('registros_despesa',q);
+  if(!regs.length){el.innerHTML='<div class="empty"><div class="empty-icon">🧾</div><div class="empty-title">Nenhum registro no período</div></div>';return;}
+  const tot=regs.reduce((s,r)=>s+Number(r.valor_total||0),0);
+  el.innerHTML='<table class="tbl"><thead><tr><th>Competência</th><th>Fornecedor</th><th>Categoria</th><th>Tipo</th>'+
+    '<th style="text-align:right">Valor</th><th>Parc.</th><th></th></tr></thead><tbody>'+
+    regs.map(r=>'<tr>'+
+      '<td>'+fDate(r.data_competencia)+'</td>'+
+      '<td>'+(r.fornecedor||'—')+'<div style="font-size:10px;color:var(--text3)">'+(r.descricao||'')+'</div></td>'+
+      '<td>'+(getNomeCat(r.categoria_id)||'—')+'</td>'+
+      '<td><span style="font-size:10px;font-weight:600;color:'+_corTipo(r.tipo_custo)+'">'+_rotuloTipo(r.tipo_custo)+'</span></td>'+
+      '<td style="text-align:right;white-space:nowrap">'+fBRL(r.valor_total)+'</td>'+
+      '<td>'+(r.num_parcelas||1)+'x</td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+        '<button class="btn btn-secondary btn-sm" onclick="abrirModalRegistro(\''+r.id+'\')">✎</button> '+
+        '<button class="btn btn-danger btn-sm" onclick="excluirRegistroDespesa(\''+r.id+'\')">🗑</button></td>'+
+    '</tr>').join('')+
+    '</tbody><tfoot><tr style="background:var(--surface2);font-weight:700">'+
+    '<td colspan="4">TOTAL — '+regs.length+' registro(s)</td>'+
+    '<td style="text-align:right">'+fBRL(tot)+'</td><td colspan="2"></td></tr></tfoot></table>';
+}
+
+function abrirModalRegistro(id){
+  const emp=document.getElementById('rd-f-empresa').value;
+  document.getElementById('rd-id').value=id||'';
+  document.getElementById('rd-titulo').textContent=id?'Editar Registro':'Novo Registro de Despesa';
+  const selE=document.getElementById('rd-empresa');
+  selE.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  if(emp)selE.value=emp;
+  const selC=document.getElementById('rd-categoria');
+  selC.innerHTML='<option value="">Selecione...</option>'+
+    CATEGORIAS.filter(c=>c.tipo==='DESPESA').sort((a,b)=>a.nome.localeCompare(b.nome))
+      .map(c=>'<option value="'+c.id+'">'+c.nome+'</option>').join('');
+  const selT=document.getElementById('rd-tipo');
+  selT.innerHTML=TIPOS_CUSTO.map(t=>'<option value="'+t[0]+'">'+t[1]+'</option>').join('');
+  ['rd-fornecedor','rd-descricao','rd-valor','rd-obs'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('rd-data').value=new Date().toISOString().split('T')[0];
+  document.getElementById('rd-parcelas').value=1;
+  document.getElementById('rd-meio').value='BOLETO';
+  document.getElementById('rd-venc-wrap').innerHTML='';
+  document.getElementById('rd-aviso').textContent='';
+  if(id){
+    sbGet('registros_despesa','?id=eq.'+id+'&select=*').then(r=>{
+      if(!r.length)return;
+      const x=r[0];
+      selE.value=x.empresa_id; selC.value=x.categoria_id||''; selT.value=x.tipo_custo||'OPERACIONAL';
+      document.getElementById('rd-data').value=x.data_competencia;
+      document.getElementById('rd-fornecedor').value=x.fornecedor||'';
+      document.getElementById('rd-descricao').value=x.descricao||'';
+      document.getElementById('rd-valor').value=x.valor_total;
+      document.getElementById('rd-parcelas').value=x.num_parcelas||1;
+      document.getElementById('rd-meio').value=x.meio_pagamento||'BOLETO';
+      document.getElementById('rd-obs').value=x.observacao||'';
+      document.getElementById('rd-aviso').innerHTML='<span style="color:var(--amber)">Editar o registro não altera os lançamentos já gerados.</span>';
+    });
+  }
+  rdGerarVencimentos();
+  abrirModal('modal-registro-despesa');
+}
+
+function rdGerarVencimentos(){
+  const n=Math.max(1,parseInt(document.getElementById('rd-parcelas').value)||1);
+  const base=document.getElementById('rd-data').value||new Date().toISOString().split('T')[0];
+  const wrap=document.getElementById('rd-venc-wrap');
+  const atuais=[...wrap.querySelectorAll('.rd-venc')].map(i=>i.value);
+  let h='';
+  for(let i=0;i<n;i++){
+    let v=atuais[i];
+    if(!v){
+      const d=new Date(base+'T12:00:00');
+      d.setMonth(d.getMonth()+i+1);
+      v=d.toISOString().split('T')[0];
+    }
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">'+
+       '<span style="font-size:11px;color:var(--text3);width:26px">'+(i+1)+'ª</span>'+
+       '<input type="date" class="form-control rd-venc" value="'+v+'" style="flex:1">'+
+       '</div>';
+  }
+  wrap.innerHTML=h;
+}
+
+async function salvarRegistroDespesa(){
+  const id=document.getElementById('rd-id').value;
+  const empresa_id=document.getElementById('rd-empresa').value;
+  const data_competencia=document.getElementById('rd-data').value;
+  const categoria_id=document.getElementById('rd-categoria').value||null;
+  const tipo_custo=document.getElementById('rd-tipo').value;
+  const fornecedor=document.getElementById('rd-fornecedor').value.trim();
+  const descricao=document.getElementById('rd-descricao').value.trim();
+  const valor_total=parseFloat(document.getElementById('rd-valor').value);
+  const num_parcelas=Math.max(1,parseInt(document.getElementById('rd-parcelas').value)||1);
+  const meio_pagamento=document.getElementById('rd-meio').value;
+  const observacao=document.getElementById('rd-obs').value.trim();
+  const vencs=[...document.querySelectorAll('.rd-venc')].map(i=>i.value).filter(Boolean);
+
+  if(!empresa_id||!data_competencia||!valor_total||valor_total<=0){
+    alert('Preencha empresa, data de competência e valor.');return;
+  }
+  if(vencs.length!==num_parcelas){alert('Informe todos os vencimentos.');return;}
+
+  const body={empresa_id,data_competencia,categoria_id,tipo_custo,fornecedor,descricao,
+              valor_total,num_parcelas,meio_pagamento,observacao,user_id:SESSION?.user?.id};
+  try{
+    if(id){
+      await sbPatch('registros_despesa','id=eq.'+id,body);
+    }else{
+      const r=await sbPost('registros_despesa',body);
+      const regId=Array.isArray(r)?r[0].id:r.id;
+      const valorParc=Math.round(valor_total/num_parcelas*100)/100;
+      const lanc=vencs.map((v,i)=>({
+        empresa_id,user_id:SESSION?.user?.id,
+        tipo_lancamento:'PAGAR',situacao:'EM_ABERTO',
+        fornecedor:fornecedor||descricao||'—',
+        descricao:(descricao||fornecedor||'Registro')+' — '+(i+1)+'/'+num_parcelas,
+        valor: i===num_parcelas-1 ? Math.round((valor_total-valorParc*(num_parcelas-1))*100)/100 : valorParc,
+        data:data_competencia, data_vencimento:v,
+        categoria_id, meio_pagamento, registro_despesa_id:regId
+      }));
+      if(lanc.length)await sbPost('lancamentos_externos',lanc);
+    }
+    fecharModal('modal-registro-despesa');
+    loadRegistrosDespesa();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function excluirRegistroDespesa(id){
+  const lanc=await sbGet('lancamentos_externos','?registro_despesa_id=eq.'+id+'&select=id');
+  let msg='Excluir este registro?';
+  if(lanc.length)msg+='\n\nExistem '+lanc.length+' lançamento(s) vinculado(s). Eles também serão excluídos.';
+  if(!confirm(msg))return;
+  try{
+    if(lanc.length)await sbDelete('lancamentos_externos','registro_despesa_id=eq.'+id);
+    await sbDelete('registros_despesa','id=eq.'+id);
+    loadRegistrosDespesa();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — INVENTÁRIO (mensal)
+//  Um lançamento por mês, sempre referente ao ÚLTIMO DIA.
+//  O fechamento de um mês É a abertura do seguinte.
+// ═══════════════════════════════════════════════════════════════
+let _invMoSel={};   // {chave: {origem,origem_id,descricao,data,valor}}
+let _invEditId=null;
+
+async function loadInventario(){
+  const emp=document.getElementById('inv-f-empresa').value;
+  const el=document.getElementById('inv-lista');
+  if(!emp){el.innerHTML='<div class="empty"><div class="empty-title">Selecione a empresa</div></div>';return;}
+  const invs=await sbGet('inventario','?empresa_id=eq.'+emp+'&select=*&order=mes_referencia.desc&limit=60');
+  if(!invs.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Nenhum inventário</div>'+
+      '<div class="empty-sub">Comece pelo inventário de abertura — o mês anterior ao primeiro período da DRE.</div></div>';
+    return;
+  }
+  el.innerHTML='<table class="tbl"><thead><tr><th>Mês (último dia)</th><th style="text-align:right">MP estoque</th>'+
+    '<th style="text-align:right">MP processo</th><th style="text-align:right">Acabados</th>'+
+    '<th style="text-align:right">Estoque Total</th><th style="text-align:right">MO interna</th><th></th></tr></thead><tbody>'+
+    invs.map(i=>{
+      const tot=Number(i.mp_estoque||0)+Number(i.mp_processo||0)+Number(i.produtos_acabados||0);
+      return '<tr>'+
+      '<td><b>'+fDate(i.mes_referencia)+'</b></td>'+
+      '<td style="text-align:right">'+fBRL(i.mp_estoque)+'</td>'+
+      '<td style="text-align:right">'+fBRL(i.mp_processo)+'</td>'+
+      '<td style="text-align:right">'+fBRL(i.produtos_acabados)+'</td>'+
+      '<td style="text-align:right;font-weight:700">'+fBRL(tot)+'</td>'+
+      '<td style="text-align:right'+(Number(i.mo_interna)>0?'':';color:var(--red)')+'">'+fBRL(i.mo_interna)+'</td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+        '<button class="btn btn-secondary btn-sm" onclick="abrirModalInventario(\''+i.id+'\')">✎</button> '+
+        '<button class="btn btn-danger btn-sm" onclick="excluirInventario(\''+i.id+'\')">🗑</button></td>'+
+      '</tr>';
+    }).join('')+'</tbody></table>';
+}
+
+function abrirModalInventario(id){
+  _invEditId=id||null;
+  _invMoSel={};
+  const emp=document.getElementById('inv-f-empresa').value;
+  const selE=document.getElementById('inv-empresa');
+  selE.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  if(emp)selE.value=emp;
+  document.getElementById('inv-titulo').textContent=id?'Editar Inventário':'Novo Inventário';
+  ['inv-mp','inv-proc','inv-acab','inv-obs'].forEach(i=>document.getElementById(i).value='');
+  // mês padrão: mês anterior ao corrente
+  const h=new Date();
+  document.getElementById('inv-mes').value=h.getFullYear()+'-'+String(h.getMonth()).padStart(2,'0');
+  document.getElementById('inv-mo-lista').innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Clique em "Buscar gastos do mês" para selecionar.</div>';
+  invAtualizaTotais();
+  if(id){
+    sbGet('inventario','?id=eq.'+id+'&select=*').then(async r=>{
+      if(!r.length)return;
+      const x=r[0];
+      selE.value=x.empresa_id;
+      const d=new Date(x.mes_referencia+'T12:00:00');
+      document.getElementById('inv-mes').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      document.getElementById('inv-mp').value=x.mp_estoque;
+      document.getElementById('inv-proc').value=x.mp_processo;
+      document.getElementById('inv-acab').value=x.produtos_acabados;
+      document.getElementById('inv-obs').value=x.observacao||'';
+      const itens=await sbGet('inventario_mo_itens','?inventario_id=eq.'+id+'&select=*');
+      itens.forEach(i=>{_invMoSel[i.origem+':'+i.origem_id]={origem:i.origem,origem_id:i.origem_id,descricao:i.descricao,data:i.data,valor:Number(i.valor)};});
+      invRenderMoSelecionados();
+      invAtualizaTotais();
+    });
+  }
+  abrirModal('modal-inventario');
+}
+
+function invAtualizaTotais(){
+  const v=id=>parseFloat(document.getElementById(id).value)||0;
+  const tot=v('inv-mp')+v('inv-proc')+v('inv-acab');
+  document.getElementById('inv-total').textContent=fBRL(tot);
+  const mo=Object.values(_invMoSel).reduce((s,x)=>s+Number(x.valor||0),0);
+  document.getElementById('inv-mo-total').textContent=fBRL(mo);
+}
+
+// Busca gastos reais do mês para o usuário marcar quais são produção interna
+async function invBuscarGastos(){
+  const emp=document.getElementById('inv-empresa').value;
+  const mes=document.getElementById('inv-mes').value;
+  if(!emp||!mes){alert('Informe empresa e mês.');return;}
+  const [a,m]=mes.split('-').map(Number);
+  const de=mes+'-01', ate=new Date(a,m,0).toISOString().split('T')[0];
+  const el=document.getElementById('inv-mo-lista');
+  el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Buscando...</div>';
+
+  const [trans,saidas]=await Promise.all([
+    sbGet('transacoes','?empresa_id=eq.'+emp+'&data=gte.'+de+'&data=lte.'+ate+'&status=eq.CONFIRMADA&tipo=eq.DEBIT&select=id,data,descricao,valor,categoria_id&order=data.asc&limit=1000'),
+    sbGet('caixa_saidas','?empresa_id=eq.'+emp+'&data=gte.'+de+'&data=lte.'+ate+'&select=id,data,descricao,fornecedor,valor_total,categoria_id&order=data.asc&limit=500')
+  ]);
+  const linhas=[
+    ...trans.map(t=>({origem:'transacao',origem_id:t.id,data:t.data,descricao:t.descricao||'—',valor:Math.abs(Number(t.valor)||0),cat:getNomeCat(t.categoria_id)||'—'})),
+    ...saidas.map(s=>({origem:'caixa_saida',origem_id:s.id,data:s.data,descricao:s.descricao||s.fornecedor||'—',valor:Math.abs(Number(s.valor_total)||0),cat:getNomeCat(s.categoria_id)||'—'}))
+  ].sort((x,y)=>(x.data||'').localeCompare(y.data||''));
+
+  if(!linhas.length){el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Nenhum gasto no mês.</div>';return;}
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Marque os gastos que são <b>produção interna</b> — eles formam a MO interna do CPV.</div>'+
+    '<table class="tbl" style="font-size:11px"><thead><tr><th style="width:26px"></th><th>Data</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead><tbody>'+
+    linhas.map(l=>{
+      const k=l.origem+':'+l.origem_id;
+      const ck=_invMoSel[k]?' checked':'';
+      return '<tr><td><input type="checkbox" class="inv-mo-chk"'+ck+
+        ' data-k="'+k+'" data-origem="'+l.origem+'" data-id="'+l.origem_id+'"'+
+        ' data-desc="'+(l.descricao||'').replace(/"/g,'&quot;')+'" data-data="'+l.data+'" data-valor="'+l.valor+'"'+
+        ' onchange="invToggleMo(this)"></td>'+
+        '<td>'+fDate(l.data)+'</td><td>'+l.descricao+'</td><td>'+l.cat+'</td>'+
+        '<td style="text-align:right">'+fBRL(l.valor)+'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+
+function invToggleMo(chk){
+  const k=chk.dataset.k;
+  if(chk.checked){
+    _invMoSel[k]={origem:chk.dataset.origem,origem_id:chk.dataset.id,
+                  descricao:chk.dataset.desc,data:chk.dataset.data,valor:Number(chk.dataset.valor)};
+  }else{ delete _invMoSel[k]; }
+  invAtualizaTotais();
+}
+
+function invRenderMoSelecionados(){
+  const el=document.getElementById('inv-mo-lista');
+  const itens=Object.values(_invMoSel);
+  if(!itens.length)return;
+  el.innerHTML='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">'+itens.length+' gasto(s) já selecionado(s). Use "Buscar gastos do mês" para revisar.</div>'+
+    '<table class="tbl" style="font-size:11px"><tbody>'+
+    itens.sort((a,b)=>(a.data||'').localeCompare(b.data||'')).map(i=>
+      '<tr><td>'+fDate(i.data)+'</td><td>'+i.descricao+'</td><td style="text-align:right">'+fBRL(i.valor)+'</td></tr>'
+    ).join('')+'</tbody></table>';
+}
+
+async function salvarInventario(){
+  const empresa_id=document.getElementById('inv-empresa').value;
+  const mes=document.getElementById('inv-mes').value;
+  if(!empresa_id||!mes){alert('Informe empresa e mês de referência.');return;}
+  const [a,m]=mes.split('-').map(Number);
+  const mes_referencia=new Date(a,m,0).toISOString().split('T')[0]; // último dia
+  const v=id=>parseFloat(document.getElementById(id).value)||0;
+  const itens=Object.values(_invMoSel);
+  const mo_interna=itens.reduce((s,x)=>s+Number(x.valor||0),0);
+  const body={empresa_id,mes_referencia,mp_estoque:v('inv-mp'),mp_processo:v('inv-proc'),
+              produtos_acabados:v('inv-acab'),mo_interna,
+              observacao:document.getElementById('inv-obs').value.trim(),user_id:SESSION?.user?.id};
+  try{
+    let invId=_invEditId;
+    if(invId){
+      await sbPatch('inventario','id=eq.'+invId,body);
+      await sbDelete('inventario_mo_itens','inventario_id=eq.'+invId);
+    }else{
+      const ex=await sbGet('inventario','?empresa_id=eq.'+empresa_id+'&mes_referencia=eq.'+mes_referencia+'&select=id');
+      if(ex.length){alert('Já existe inventário para '+fDate(mes_referencia)+'. Edite o existente.');return;}
+      const r=await sbPost('inventario',body);
+      invId=Array.isArray(r)?r[0].id:r.id;
+    }
+    if(itens.length){
+      await sbPost('inventario_mo_itens',itens.map(i=>({
+        inventario_id:invId,origem:i.origem,origem_id:i.origem_id,
+        descricao:i.descricao,data:i.data,valor:i.valor
+      })));
+    }
+    fecharModal('modal-inventario');
+    loadInventario();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function excluirInventario(id){
+  if(!confirm('Excluir este inventário? A seleção de gastos vinculada também será removida.'))return;
+  try{
+    await sbDelete('inventario_mo_itens','inventario_id=eq.'+id);
+    await sbDelete('inventario','id=eq.'+id);
+    loadInventario();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — OPERAÇÕES FINANCEIRAS
+//  Só o CUSTO (valor a pagar − valor recebido) vai para a DRE,
+//  rateado proporcionalmente pelas parcelas.
+// ═══════════════════════════════════════════════════════════════
+const _rotuloOp=t=>({ROLAGEM:'Rolagem',ANTECIPACAO:'Antecipação',EMPRESTIMO:'Empréstimo'}[t]||t);
+
+async function loadOperacoesFin(){
+  const emp=document.getElementById('of-f-empresa').value;
+  const el=document.getElementById('of-lista');
+  if(!emp){el.innerHTML='<div class="empty"><div class="empty-title">Selecione a empresa</div></div>';return;}
+  const ops=await sbGet('operacoes_financeiras','?empresa_id=eq.'+emp+'&select=*&order=data_operacao.desc&limit=200');
+  if(!ops.length){el.innerHTML='<div class="empty"><div class="empty-icon">🏦</div><div class="empty-title">Nenhuma operação</div>'+
+    '<div class="empty-sub">Rolagens, antecipações e empréstimos. Só o custo entra na DRE.</div></div>';return;}
+  el.innerHTML='<table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>Contraparte</th>'+
+    '<th style="text-align:right">Recebido</th><th style="text-align:right">A pagar</th>'+
+    '<th style="text-align:right">Custo</th><th>Parc.</th><th></th></tr></thead><tbody>'+
+    ops.map(o=>{
+      const custo=Number(o.valor_total_pagar||0)-Number(o.valor_recebido||0);
+      return '<tr>'+
+      '<td>'+fDate(o.data_operacao)+'</td>'+
+      '<td>'+_rotuloOp(o.tipo)+'</td>'+
+      '<td>'+(o.contraparte||'—')+'</td>'+
+      '<td style="text-align:right">'+fBRL(o.valor_recebido)+'</td>'+
+      '<td style="text-align:right">'+fBRL(o.valor_total_pagar)+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:var(--red)">'+fBRL(custo)+'</td>'+
+      '<td>'+(o.num_parcelas||1)+'x</td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+        '<button class="btn btn-secondary btn-sm" onclick="verParcelasOpFin(\''+o.id+'\')">📋</button> '+
+        '<button class="btn btn-danger btn-sm" onclick="excluirOpFin(\''+o.id+'\')">🗑</button></td>'+
+      '</tr>';
+    }).join('')+'</tbody></table>';
+}
+
+function abrirModalOpFin(){
+  const emp=document.getElementById('of-f-empresa').value;
+  const selE=document.getElementById('of-empresa');
+  selE.innerHTML=EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
+  if(emp)selE.value=emp;
+  document.getElementById('of-tipo').value='ROLAGEM';
+  document.getElementById('of-data').value=new Date().toISOString().split('T')[0];
+  ['of-contraparte','of-recebido','of-pagar','of-obs'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('of-parcelas').value=1;
+  document.getElementById('of-venc-wrap').innerHTML='';
+  ofCalcular();
+  abrirModal('modal-opfin');
+}
+
+function ofCalcular(){
+  const rec=parseFloat(document.getElementById('of-recebido').value)||0;
+  const pag=parseFloat(document.getElementById('of-pagar').value)||0;
+  const custo=pag-rec;
+  const el=document.getElementById('of-custo');
+  el.textContent=fBRL(custo);
+  el.style.color=custo<0?'var(--red)':'var(--amber)';
+  const n=Math.max(1,parseInt(document.getElementById('of-parcelas').value)||1);
+  document.getElementById('of-custo-mes').textContent=fBRL(custo/n)+' / parcela';
+  ofGerarParcelas();
+}
+
+function ofGerarParcelas(){
+  const n=Math.max(1,parseInt(document.getElementById('of-parcelas').value)||1);
+  const base=document.getElementById('of-data').value||new Date().toISOString().split('T')[0];
+  const pag=parseFloat(document.getElementById('of-pagar').value)||0;
+  const wrap=document.getElementById('of-venc-wrap');
+  const atuaisD=[...wrap.querySelectorAll('.of-venc')].map(i=>i.value);
+  const atuaisV=[...wrap.querySelectorAll('.of-valor')].map(i=>i.value);
+  const vPad=Math.round(pag/n*100)/100;
+  let h='';
+  for(let i=0;i<n;i++){
+    let d=atuaisD[i];
+    if(!d){const x=new Date(base+'T12:00:00');x.setMonth(x.getMonth()+i+1);d=x.toISOString().split('T')[0];}
+    let v=atuaisV[i];
+    if(!v) v = (i===n-1) ? Math.round((pag-vPad*(n-1))*100)/100 : vPad;
+    h+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'+
+       '<span style="font-size:11px;color:var(--text3);width:24px">'+(i+1)+'ª</span>'+
+       '<input type="date" class="form-control of-venc" value="'+d+'" style="flex:1">'+
+       '<input type="number" step="0.01" class="form-control of-valor" value="'+v+'" style="width:120px" oninput="ofResumoParcelas()">'+
+       '</div>';
+  }
+  wrap.innerHTML=h;
+  ofResumoParcelas();
+}
+
+function ofResumoParcelas(){
+  const vals=[...document.querySelectorAll('.of-valor')].map(i=>parseFloat(i.value)||0);
+  const soma=vals.reduce((a,b)=>a+b,0);
+  const pag=parseFloat(document.getElementById('of-pagar').value)||0;
+  const el=document.getElementById('of-soma-parc');
+  const dif=soma-pag;
+  el.innerHTML='Soma das parcelas: <b>'+fBRL(soma)+'</b>'+
+    (Math.abs(dif)>0.01?' <span style="color:var(--red)">— difere do total a pagar em '+fBRL(dif)+'</span>':' <span style="color:var(--green)">✓</span>');
+}
+
+async function salvarOpFin(){
+  const empresa_id=document.getElementById('of-empresa').value;
+  const tipo=document.getElementById('of-tipo').value;
+  const contraparte=document.getElementById('of-contraparte').value.trim();
+  const data_operacao=document.getElementById('of-data').value;
+  const valor_recebido=parseFloat(document.getElementById('of-recebido').value)||0;
+  const valor_total_pagar=parseFloat(document.getElementById('of-pagar').value)||0;
+  const observacao=document.getElementById('of-obs').value.trim();
+  const vencs=[...document.querySelectorAll('.of-venc')].map(i=>i.value);
+  const vals=[...document.querySelectorAll('.of-valor')].map(i=>parseFloat(i.value)||0);
+
+  if(!empresa_id||!data_operacao||!valor_recebido||!valor_total_pagar){
+    alert('Preencha empresa, data, valor recebido e valor a pagar.');return;
+  }
+  if(valor_total_pagar<valor_recebido){
+    if(!confirm('O valor a pagar é MENOR que o recebido. Isso gera custo negativo (ganho). Continuar?'))return;
+  }
+  const soma=vals.reduce((a,b)=>a+b,0);
+  if(Math.abs(soma-valor_total_pagar)>0.01){
+    alert('A soma das parcelas ('+fBRL(soma)+') difere do valor total a pagar ('+fBRL(valor_total_pagar)+').');return;
+  }
+
+  const custoTotal=valor_total_pagar-valor_recebido;
+  try{
+    const r=await sbPost('operacoes_financeiras',{empresa_id,tipo,contraparte,data_operacao,
+      valor_recebido,valor_total_pagar,num_parcelas:vals.length,observacao,user_id:SESSION?.user?.id});
+    const opId=Array.isArray(r)?r[0].id:r.id;
+    // custo rateado proporcionalmente ao valor de cada parcela
+    let acum=0;
+    const parcelas=vals.map((v,i)=>{
+      let c;
+      if(i===vals.length-1){ c=Math.round((custoTotal-acum)*100)/100; }
+      else { c=Math.round(custoTotal*(v/valor_total_pagar)*100)/100; acum+=c; }
+      return {operacao_id:opId,numero:i+1,data_vencimento:vencs[i],valor_parcela:v,custo_apropriado:c};
+    });
+    await sbPost('operacoes_financeiras_parcelas',parcelas);
+    fecharModal('modal-opfin');
+    loadOperacoesFin();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+async function verParcelasOpFin(id){
+  const p=await sbGet('operacoes_financeiras_parcelas','?operacao_id=eq.'+id+'&select=*&order=numero.asc');
+  if(!p.length){alert('Sem parcelas registradas.');return;}
+  const tc=p.reduce((s,x)=>s+Number(x.custo_apropriado||0),0);
+  const tv=p.reduce((s,x)=>s+Number(x.valor_parcela||0),0);
+  document.getElementById('of-parc-corpo').innerHTML=
+    '<table class="tbl"><thead><tr><th>#</th><th>Vencimento</th>'+
+    '<th style="text-align:right">Parcela (caixa)</th><th style="text-align:right">Custo na DRE</th></tr></thead><tbody>'+
+    p.map(x=>'<tr><td>'+x.numero+'</td><td>'+fDate(x.data_vencimento)+'</td>'+
+      '<td style="text-align:right">'+fBRL(x.valor_parcela)+'</td>'+
+      '<td style="text-align:right;color:var(--amber)">'+fBRL(x.custo_apropriado)+'</td></tr>').join('')+
+    '</tbody><tfoot><tr style="background:var(--surface2);font-weight:700">'+
+    '<td colspan="2">TOTAL</td><td style="text-align:right">'+fBRL(tv)+'</td>'+
+    '<td style="text-align:right">'+fBRL(tc)+'</td></tr></tfoot></table>'+
+    '<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6">'+
+    'O caixa vê as parcelas inteiras saindo. A DRE vê apenas o custo, distribuído pelos meses de vencimento.</div>';
+  abrirModal('modal-opfin-parcelas');
+}
+
+async function excluirOpFin(id){
+  if(!confirm('Excluir esta operação e suas parcelas?'))return;
+  try{
+    await sbDelete('operacoes_financeiras_parcelas','operacao_id=eq.'+id);
+    await sbDelete('operacoes_financeiras','id=eq.'+id);
+    loadOperacoesFin();
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DRE — EXPORTAÇÃO
+// ═══════════════════════════════════════════════════════════════
+function dreExportar(fmt){
+  if(!_dreDados){alert('Gere o resultado primeiro.');return;}
+  if(fmt==='xlsx')dreExportXLSX(); else dreExportPDF();
+}
+
+function _dreLinhas(d){
+  const L=[];
+  L.push(['(+) Receita Operacional Bruta',d.receita,'grupo']);
+  L.push(['(-) Deduções da Receita Bruta',d.totDed,'grupo']);
+  Object.entries(d.ded).sort((a,b)=>b[1]-a[1]).forEach(e=>L.push(['    '+e[0],e[1],'item']));
+  L.push(['(=) Receita Operacional Líquida',d.rol,'calc']);
+  L.push(['(-) CPV',d.cpvVal,'grupo']);
+  L.push(['    Estoque inicial',Number(d.c.estoque_inicial||0),'item']);
+  L.push(['    (+) Compras de matéria-prima',Number(d.c.compras_mp||0),'item']);
+  L.push(['    (+) Mão de obra externa (facção)',Number(d.c.mo_externa||0),'item']);
+  L.push(['    (+) Mão de obra interna',Number(d.c.mo_interna||0),'item']);
+  L.push(['    (-) Estoque final',Number(d.c.estoque_final||0),'item']);
+  L.push(['(=) Lucro Bruto',d.lucroBruto,'calc']);
+  L.push(['(-) Despesas Operacionais',d.totOpe,'grupo']);
+  Object.entries(d.ope).sort((a,b)=>b[1]-a[1]).forEach(e=>L.push(['    '+e[0],e[1],'item']));
+  L.push(['(=) Resultado Operacional',d.resOper,'calc']);
+  L.push(['(-) Resultado Financeiro',d.finVal,'grupo']);
+  L.push(['(=) Resultado antes do IR',d.resAntesIR,'calc']);
+  return L;
+}
+
+function dreExportXLSX(){
+  const d=_dreDados;
+  const base=d.rol||1;
+  const lista=d.empresas;
+  const titulo=lista.length===1?(lista[0].nome||'empresa'):('Consolidado_'+lista.length+'_empresas');
+  const aoa=[];
+  aoa.push(['DRE — Regime de Competência']);
+  aoa.push([lista.map(e=>e.nome).join('  |  ')]);
+  aoa.push(['Período: '+fDate(d.dIni)+' a '+fDate(d.dFim)]);
+  aoa.push([]);
+  aoa.push(['Conta','Valor','AV%']);
+  _dreLinhas(d).forEach(l=>aoa.push([l[0],Math.round(l[1]*100)/100,Math.round(l[1]/base*1000)/10]));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:44},{wch:16},{wch:10}];
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let R=5;R<=range.e.r;R++){
+    const c1=ws[XLSX.utils.encode_cell({r:R,c:1})];
+    if(c1&&typeof c1.v==='number'){c1.t='n';c1.z='#,##0.00;[Red]-#,##0.00';}
+    const c2=ws[XLSX.utils.encode_cell({r:R,c:2})];
+    if(c2&&typeof c2.v==='number'){c2.t='n';c2.z='0.0"%"';}
+  }
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'DRE');
+  XLSX.writeFile(wb,'DRE_'+titulo.replace(/[^\w]/g,'_')+'_'+d.dIni.substring(0,7)+'.xlsx');
+}
+
+function dreExportPDF(){
+  const d=_dreDados;
+  const base=d.rol||1;
+  const lista=d.empresas;
+  const fmtCnpj=c=>(c||'').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5');
+  const consolidado=lista.length>1;
+  const tituloEmp=consolidado?('Consolidado — '+lista.length+' empresas'):(lista[0]&&lista[0].nome||'—');
+  const metaEmp=consolidado
+    ? lista.map(e=>e.nome+(e.cnpj?' ('+fmtCnpj(e.cnpj)+')':'')).join(' · ')
+    : (lista[0]&&lista[0].cnpj?'CNPJ: '+fmtCnpj(lista[0].cnpj):'');
+  const linhas=_dreLinhas(d).map(l=>{
+    const av=(l[1]/base*100).toFixed(1)+'%';
+    const neg=l[1]<0?' neg':'';
+    return '<tr class="'+l[2]+'"><td class="n">'+l[0]+'</td>'+
+      '<td class="v'+neg+'">'+dreNum(l[1])+'</td><td class="av">'+av+'</td></tr>';
+  }).join('');
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>DRE — '+tituloEmp+'</title><style>'+
+  '*{box-sizing:border-box;margin:0;padding:0}'+
+  'body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;padding:22px;font-size:11px}'+
+  '.cab{border-bottom:3px solid #1e9be8;padding-bottom:11px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end}'+
+  '.emp{font-size:18px;font-weight:bold;color:#0d1b2a}'+
+  '.meta{font-size:9px;color:#666;margin-top:3px;line-height:1.5;max-width:560px}'+
+  '.tit{font-size:15px;font-weight:bold;color:#1e9be8;text-align:right}'+
+  '.sub{font-size:9px;color:#888;text-align:right;margin-top:2px}'+
+  'table{width:100%;border-collapse:collapse;margin-top:8px}'+
+  'th{background:#0d1b2a;color:#fff;padding:6px 8px;font-size:10px;text-align:right}'+
+  'th:first-child{text-align:left}'+
+  'td{padding:4px 8px;border-bottom:1px solid #eee}'+
+  '.n{text-align:left}.v,.av{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'+
+  '.v{width:140px;font-weight:500}.av{width:70px;color:#888;font-size:10px}'+
+  'tr.grupo{background:#f1f5f9;font-weight:bold}'+
+  'tr.item{font-size:10px}tr.item .n{padding-left:26px;color:#555}'+
+  'tr.calc{background:#e0f2fe;font-weight:bold;border-top:2px solid #1e9be8}'+
+  '.neg{color:#c00}tr.calc .neg{color:#a00}'+
+  '.nota{margin-top:12px;font-size:9px;color:#777;line-height:1.6}'+
+  '.rod{margin-top:16px;padding-top:9px;border-top:1px solid #ddd;font-size:8px;color:#999;display:flex;justify-content:space-between}'+
+  '@media print{body{padding:10px}@page{size:A4 portrait;margin:10mm}}'+
+  '</style></head><body>'+
+  '<div class="cab"><div><div class="emp">'+tituloEmp+'</div><div class="meta">'+metaEmp+'</div></div>'+
+  '<div><div class="tit">DEMONSTRAÇÃO DO RESULTADO</div>'+
+  '<div class="sub">'+fDate(d.dIni)+' a '+fDate(d.dFim)+' · Emitido em '+new Date().toLocaleString('pt-BR')+'</div></div></div>'+
+  '<table><thead><tr><th>Conta</th><th>Valor</th><th>AV%</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
+  '<div class="nota"><b>Regime de competência.</b> Receita pela data do pedido; despesas pela data de competência. '+
+  '<b>AV%</b> = peso sobre a Receita Operacional Líquida. '+
+  'Transferências entre contas, movimentação de caixa físico, principal de empréstimos e compra de ativos não entram na DRE. '+
+  'CPV apurado por inventário: estoque inicial + compras de MP + mão de obra − estoque final.</div>'+
+  '<div class="rod"><span>Lume Financeiro — DRE gerencial</span><span>'+tituloEmp+'</span></div>'+
+  '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>'+
+  '</body></html>';
   const w=window.open('','_blank');
   if(w){w.document.write(html);w.document.close();}
   else alert('Permita pop-ups para gerar o PDF.');
