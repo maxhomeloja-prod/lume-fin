@@ -2203,7 +2203,7 @@ async function carregarBase(){
   atualizarEmpresaUI();
 
   try{CATEGORIAS=await sbGet('categorias','?ativa=eq.true&order=tipo,nome');}catch(e){CATEGORIAS=[];}
-  CATEGORIAS.forEach(c=>{if(c.nome.includes('Transferência')||c.nome.includes('Outras'))CATS_ESPECIAIS.add(c.id);});
+  CATEGORIAS.forEach(c=>{if(c.nome.includes('Transferência')||c.nome.includes('Outras')||c.nome.includes('Compensação de Mercadorias')||c.nome.includes('Rolagem'))CATS_ESPECIAIS.add(c.id);});
   preencherSelects();
   await carregarSkuCategorias();
 
@@ -5434,8 +5434,18 @@ function renderBalancete(){
   document.getElementById('bal-corpo').innerHTML=
     secao('Receitas',rec,'recei',totalRec)+
     secao('Despesas',desp,'desp',totalRec)+
-    (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div><div class="bal-table">'+
-      esp.map(function(i){return '<div class="bal-row"><span class="bal-row-name">'+i.nome+'</span><span class="bal-row-val" style="color:var(--text2)">'+fBRL(i.total)+'</span></div>';}).join('')+
+    (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div>'+
+      '<div style="font-size:10px;color:var(--text3);padding:6px 12px 2px">N\u00e3o entram no total de receitas nem na an\u00e1lise vertical \u00b7 clique na linha para expandir e editar</div>'+
+      '<div class="bal-table">'+
+      esp.map(function(item,idx){
+        var rowId='baltr'+idx;
+        return '<div class="bal-row" style="cursor:pointer;display:flex;justify-content:space-between" onclick="toggleBalRow(\''+rowId+'\')">'+
+          '<span class="bal-row-name">\u25b6 '+item.nome+'</span>'+
+          '<span class="bal-row-val" style="color:var(--text2)">'+fBRL(item.total)+'</span>'+
+          '</div>'+buildDetalhes(item.trans,rowId);
+      }).join('')+
+      '<div class="bal-row bal-subtotal"><span class="bal-row-name">Total Transfer\u00eancias</span>'+
+      '<span class="bal-row-val" style="color:var(--text2)">'+fBRL(esp.reduce(function(s,i){return s+i.total;},0))+'</span></div>'+
       '</div></div>':'');
 }
 
