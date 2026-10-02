@@ -5937,6 +5937,31 @@ async function gerarFechamentoCliente(){
 let _venPaginaAtual=0;
 const VEN_PAGE_SIZE=100;
 
+// Celula de receita liquida: o valor que entra na conta depois das taxas do
+// marketplace, com a taxa de retencao da propria linha embaixo.
+// Pedido cancelado tem liquido 0 e nao e "sem dado" — por isso o teste e por
+// liquido_status, nao por valor zero.
+function celulaLiquido(v,bruto){
+  const liq=v.receita_liquida;
+  if(liq===null||liq===undefined){
+    const st=v.liquido_status;
+    const rotulo = st==='sem_dados' ? 'não casou'
+                 : st==='desistido' ? 'sem retorno'
+                 : 'aguardando';
+    const ajuda = st==='sem_dados' ? 'O marketplace respondeu, mas os valores não casaram com esta linha'
+                 : st==='desistido' ? 'Tentativas esgotadas sem resposta utilizável'
+                 : 'O marketplace libera o valor líquido alguns dias após a venda';
+    return '<span title="'+ajuda+'" style="color:var(--text2);font-size:11px">'+rotulo+'</span>';
+  }
+  const n=parseFloat(liq)||0;
+  if(v.liquido_status==='cancelado')
+    return '<span title="Pedido cancelado ou devolvido" style="color:var(--text2);font-size:11px">cancelado</span>';
+  const b=parseFloat(bruto)||0;
+  const taxa = b>0 ? (b-n)/b*100 : null;
+  return '<div style="font-weight:500;color:var(--blue,#2563eb)">'+fBRL(n)+'</div>'
+       + (taxa!==null ? '<div style="font-size:10px;color:var(--text2)">−'+taxa.toFixed(1)+'%</div>' : '');
+}
+
 async function loadVendas(resetarPagina=true){
   if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
   document.getElementById('ven-table')?.innerHTML && (document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando vendas...</div>');
@@ -5994,6 +6019,7 @@ async function loadVendas(resetarPagina=true){
 
     const hdr='<table><thead><tr><th>Nº Pedido</th><th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>'
       +'<th style="text-align:right">Qtd</th><th style="text-align:right">Total</th>'
+      +'<th style="text-align:right">Líquido</th>'
       +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
       const totalExibir=v.valor_bruto||v.valor_total||v.valor_unitario*v.quantidade;
@@ -6008,6 +6034,7 @@ async function loadVendas(resetarPagina=true){
         +'<td style="color:var(--text2)">'+(v.cliente_nome||'—')+'</td>'
         +'<td style="text-align:right">'+fN(v.quantidade)+'</td>'
         +'<td style="text-align:right;color:var(--green);font-weight:500">'+fBRL(totalExibir)+'</td>'
+        +'<td style="text-align:right">'+celulaLiquido(v,totalExibir)+'</td>'
         +'<td style="display:flex;gap:4px">'+btnImprimir+'<button class="btn btn-danger btn-sm" onclick="excluirVenda(\''+v.id+'\')">✕</button></td>'
         +'</tr>';
     }).join('');
