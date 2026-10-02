@@ -7100,7 +7100,16 @@ async function loadMarketplaces(){
   el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
   try{
     const empIds=EMPRESAS.map(e=>e.id).join(',');
-    const conexoes=await sbGet('marketplace_conexoes','?empresa_id=in.('+empIds+')&order=criado_em.desc');
+    const todas=await sbGet('marketplace_conexoes','?empresa_id=in.('+empIds+')&order=criado_em.desc');
+    // A conexao do app financeiro da Shopee (marketplace='shopee_fin') nao e uma
+    // loja: e uma autorizacao EXTRA da mesma loja, num segundo app da Shopee.
+    // Listada como cartao proprio aparecia como uma loja duplicada sem icone.
+    // Aqui ela sai da lista e passa a ser o indicador de receita liquida do
+    // cartao da loja correspondente, casada por shop_id — que e a mesma chave
+    // que o job usa para achar os pedidos da loja.
+    const finPorShop={};
+    todas.filter(c=>c.marketplace==='shopee_fin').forEach(c=>{finPorShop[String(c.shop_id)]=c;});
+    const conexoes=todas.filter(c=>c.marketplace!=='shopee_fin');
     if(!conexoes.length){
       el.innerHTML='<div class="empty"><div class="empty-icon">🛒</div>'+
         '<div class="empty-title">Nenhum marketplace conectado</div>'+
@@ -7124,11 +7133,84 @@ async function loadMarketplaces(){
       '<span class="badge '+(c.status==='conectado'?'badge-green':c.status==='erro'?'badge-red':'badge-amber')+'" style="margin-left:auto">'+
       (c.status==='conectado'?'CONECTADO':c.status==='erro'?'ERRO':c.status==='aguardando_autorizacao'?'AGUARDANDO AUTORIZAÇÃO':'PENDENTE')+'</span></div>'+
       '<div style="font-size:11px;color:var(--text3)">Último sync: '+(c.ultimo_sync?fDate(c.ultimo_sync.split('T')[0]):'Nunca')+'</div>'+
-      '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:2px">ID da loja: '+(c.shop_id||'—')+'</div>'+
+      blocoFinanceiro(c,finPorShop)+
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
       '<button class="btn btn-secondary btn-sm" onclick="reconectarMarketplace(this.dataset.id,this.dataset.mkt)" data-id="'+c.id+'" data-mkt="'+c.marketplace+'">↻ Reconectar</button>'+
       '<button class="btn btn-danger btn-sm" onclick="desconectarMarketplace(this.dataset.id)" data-id="'+c.id+'">Desconectar</button>'+
       '</div></div>').join('');
   }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
+}
+
+// ── RECEITA LIQUIDA DA SHOPEE: segunda autorizacao, mesma loja ───────────
+// A Shopee exige um app separado por modulo de API. O app de pedidos nao da
+// acesso aos valores financeiros; quem da e o app de Contabilidade e Financas,
+// com autorizacao propria. Sem ela a loja sincroniza vendas mas fica sem
+// receita liquida — e isso nao aparecia em lugar nenhum da tela.
+function blocoFinanceiro(c,finPorShop){
+  if(c.marketplace!=='shopee')return '';
+  const fin=finPorShop[String(c.shop_id)];
+  if(fin&&fin.status==='conectado'){
+    return '<div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:rgba(34,197,94,.10);'+
+      'border:1px solid rgba(34,197,94,.30);font-size:11px;line-height:1.5">'+
+      '<strong style="color:#16a34a">✓ Receita líquida ativa</strong><br>'+
+      '<span style="color:var(--text3)">App financeiro autorizado para esta mesma loja (ID '+c.shop_id+').</span></div>';
+  }
+  return '<div style="margin-top:10px;padding:8px 10px;border-radius:6px;background:rgba(245,158,11,.10);'+
+    'border:1px solid rgba(245,158,11,.35);font-size:11px;line-height:1.5">'+
+    '<strong style="color:#d97706">⚠ Sem receita líquida</strong><br>'+
+    '<span style="color:var(--text3)">As vendas desta loja são importadas, mas o valor líquido '+
+    '(descontadas comissão, taxas e frete) não. A Shopee exige uma segunda autorização, '+
+    'no app financeiro.</span><br>'+
+    '<button class="btn btn-primary btn-sm" style="margin-top:8px" '+
+    'onclick="conectarShopeeFin(this.dataset.emp,this.dataset.shop,this.dataset.nome)" '+
+    'data-emp="'+c.empresa_id+'" data-shop="'+(c.shop_id||'')+'" '+
+    'data-nome="'+String(c.shop_name||'').replace(/"/g,'&quot;')+'">'+
+    '🔓 Conectar Shopee Finanças</button></div>';
+}
+
+// O vinculo e por shop_id: o job acha os pedidos da loja pelo shop_id da
+// conexao de pedidos e procura a autorizacao financeira com o MESMO shop_id.
+// Autorizar outra loja nesta tela cria uma conexao que nunca sera usada por
+// esta aqui. Por isso o aviso nomeia a loja e o ID antes de sair da pagina.
+function conectarShopeeFin(empresaId,shopId,shopName){
+  const antigo=document.getElementById('ov-shopee-fin');
+  if(antigo)antigo.remove();
+  const ov=document.createElement('div');
+  ov.id='ov-shopee-fin';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;'+
+    'display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML='<div style="background:var(--bg2,#fff);color:var(--text,#111);max-width:460px;width:100%;'+
+    'border-radius:12px;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.3)">'+
+    '<div style="font-size:16px;font-weight:700;margin-bottom:10px">Conectar Shopee Finanças</div>'+
+    '<div style="font-size:13px;line-height:1.6;margin-bottom:14px">'+
+    'Você vai autorizar o app financeiro para esta loja:'+
+    '<div style="margin:10px 0;padding:10px;border-radius:8px;background:rgba(238,77,45,.10);'+
+    'border:1px solid rgba(238,77,45,.3)">'+
+    '<strong>'+(shopName||'(sem nome)')+'</strong><br>'+
+    '<span style="font-size:11px;color:var(--text3)">ID da loja: '+shopId+'</span></div>'+
+    '<strong>Na tela da Shopee, escolha exatamente esta loja.</strong> A vinculação é feita '+
+    'pelo ID acima: se você autorizar uma loja diferente, o sistema não vai conseguir '+
+    'ligar os valores financeiros aos pedidos desta loja, e ela continuará sem receita líquida.'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+    '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'ov-shopee-fin\').remove()">Cancelar</button>'+
+    '<button class="btn btn-primary btn-sm" id="btn-shopee-fin-go">Continuar para a Shopee</button>'+
+    '</div></div>';
+  document.body.appendChild(ov);
+  document.getElementById('btn-shopee-fin-go').onclick=async function(){
+    this.disabled=true;this.textContent='Abrindo...';
+    try{
+      const r=await fetch(MKT_WORKER+'/shopee-fin/auth?empresa_id='+encodeURIComponent(empresaId),
+        {headers:{Authorization:'Bearer '+SESSION.access_token}});
+      const d=await r.json();
+      if(d.url)window.location.href=d.url;
+      else throw new Error(d.error||'Erro ao gerar URL de autorização');
+    }catch(e){
+      alert('Erro: '+e.message);
+      this.disabled=false;this.textContent='Continuar para a Shopee';
+    }
+  };
 }
 
 function abrirModalAddMarketplace(){
