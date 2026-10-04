@@ -7172,6 +7172,7 @@ async function loadMarketplaces(){
       blocoFinanceiro(c,finPorShop)+
       '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
       '<button class="btn btn-secondary btn-sm" onclick="reconectarMarketplace(this.dataset.id,this.dataset.mkt)" data-id="'+c.id+'" data-mkt="'+c.marketplace+'">↻ Reconectar</button>'+
+      '<button class="btn btn-secondary btn-sm" onclick="renomearLoja(this.dataset.id,this.dataset.nome)" data-id="'+c.id+'" data-nome="'+String(c.shop_name||'').replace(/"/g,'&quot;')+'">✎ Renomear</button>'+
       '<button class="btn btn-danger btn-sm" onclick="desconectarMarketplace(this.dataset.id)" data-id="'+c.id+'">Desconectar</button>'+
       '</div></div>').join('');
   }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
@@ -7388,6 +7389,30 @@ async function confirmarConectarMarketplace(){
     }else{
       throw new Error(data.error||'Erro ao gerar URL de autorização');
     }
+  }catch(e){alert('Erro: '+e.message);}
+}
+
+// Renomear a loja mexe em DUAS coisas: o nome na conexão e o rótulo das vendas.
+// O job encontra as vendas por `${canal} ${shop_name}`, então trocar só o nome
+// deixaria o histórico num rótulo que ninguém mais procura — foi assim que as
+// 5.225 vendas Temu de setembro da Lume ficaram órfãs. A rota faz os dois juntos.
+async function renomearLoja(id,nomeAtual){
+  const novo=prompt('Novo nome para esta loja:\n\nO histórico de vendas é renomeado junto, para o sistema não perder as vendas antigas.',nomeAtual||'');
+  if(novo===null)return;
+  const nome=novo.trim();
+  if(!nome){alert('O nome não pode ficar vazio.');return;}
+  if(nome===nomeAtual)return;
+  try{
+    const r=await fetch(MKT_WORKER+'/loja/renomear',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+SESSION.access_token},
+      body:JSON.stringify({conexao_id:id,nome})
+    });
+    const d=await r.json();
+    if(!r.ok||!d.ok){alert('Não foi possível renomear: '+(d.error||r.status)+(d.motivo?' — '+d.motivo:''));return;}
+    if(d.inalterado){loadMarketplaces();return;}
+    alert('Loja renomeada.\n\nDe: '+d.de+'\nPara: '+d.para+'\nVendas atualizadas: '+d.vendas_renomeadas);
+    loadMarketplaces();
   }catch(e){alert('Erro: '+e.message);}
 }
 
