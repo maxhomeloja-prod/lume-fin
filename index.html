@@ -1902,6 +1902,39 @@ tr:hover td{background:var(--surface2);}
       <div style="font-size:11px;color:var(--text3);line-height:1.5">
         Ao autorizar, a loja aparece como conectada nesta tela e as vendas dos últimos 30 dias são importadas automaticamente.
       </div>
+
+      <!-- aguardando o retorno automatico -->
+      <div id="temu-aguardando" style="margin-top:14px;padding:10px 12px;border-radius:8px;
+           background:rgba(30,155,232,.10);border:1px solid rgba(30,155,232,.30);font-size:12px;
+           color:var(--text2);display:flex;align-items:center;gap:8px">
+        <div class="spinner" style="width:14px;height:14px;flex:0 0 auto"></div>
+        <span>Aguardando a autorização…</span>
+      </div>
+
+      <!-- conectou: some tudo o resto -->
+      <div id="temu-sucesso" style="display:none;margin-top:14px;padding:12px;border-radius:8px;
+           background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35)">
+        <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:4px">✓ Loja conectada</div>
+        <div style="font-size:12px;color:var(--text2)" id="temu-sucesso-loja"></div>
+      </div>
+
+      <!-- plano B: a Temu mostra o token ao vendedor; so aparece se o retorno demorar -->
+      <div id="temu-manual" style="display:none;margin-top:14px;padding:12px;border-radius:8px;
+           background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35)">
+        <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:6px">
+          Autorizou e não voltou automaticamente?
+        </div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px">
+          Na tela de autorização, a Temu mostra um <b>Access Token</b>. Copie e cole aqui para
+          concluir a conexão.
+        </div>
+        <input id="temu-token-input" type="text" class="form-control" autocomplete="off" spellcheck="false"
+               placeholder="Cole o Access Token da Temu" style="width:100%;font-family:monospace;font-size:11px">
+        <div id="temu-token-msg" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:8px" id="temu-token-btn"
+                onclick="conectarTemuPorToken()">Conectar com o token</button>
+      </div>
+
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="fecharModal('modal-temu-conectar');loadMarketplaces()">Entendi</button>
       </div>
@@ -7232,6 +7265,7 @@ function selecionarMarketplace(mkt){
 }
 
 function abrirModalTemu(){
+  pararEsperaTemu();
   const sel=document.getElementById('temu-emp-sel');
   sel.innerHTML='<option value="">Selecione...</option>'+
     EMPRESAS.map(e=>'<option value="'+e.id+'">'+e.nome+'</option>').join('');
@@ -7256,8 +7290,85 @@ async function preRegistrarTemu(){
     });
     document.getElementById('temu-etapa1').style.display='none';
     document.getElementById('temu-etapa2').style.display='block';
+    iniciarEsperaTemu(empresaId);
     loadMarketplaces();
   }catch(e){alert('Erro: '+e.message);}
+}
+
+// ── ESPERA DA AUTORIZAÇÃO DA TEMU ─────────────────────────────────
+// A Temu é o único canal que não deixa o sistema iniciar a autorização: ela
+// acontece no Seller Center e volta por redirect. Quando o redirect não chega
+// — aba fechada, conexão caída, autorizou pelo celular — a autorização existe
+// do lado da Temu mas o nosso lado não soube. Por isso há dois caminhos aqui:
+// o polling, que detecta o retorno automático, e o campo de token, que a Temu
+// mostra ao vendedor e só aparece se o automático demorar.
+let _temuEspera=null, _temuEmpresa=null;
+
+function iniciarEsperaTemu(empresaId){
+  pararEsperaTemu();
+  _temuEmpresa=empresaId;
+  document.getElementById('temu-aguardando').style.display='flex';
+  document.getElementById('temu-manual').style.display='none';
+  document.getElementById('temu-sucesso').style.display='none';
+  const t0=Date.now();
+  const SEGUNDOS_ATE_OFERECER_MANUAL=20;
+  _temuEspera=setInterval(async()=>{
+    // conectou? (o callback gravou shop_id real no lugar do AGUARDANDO_)
+    try{
+      const r=await sbGet('marketplace_conexoes',
+        '?empresa_id=eq.'+_temuEmpresa+'&marketplace=eq.temu&status=eq.conectado&select=shop_name,shop_id');
+      if(r.length){ mostrarSucessoTemu(r[0].shop_name||r[0].shop_id); return; }
+    }catch(e){ /* rede instável: segue tentando */ }
+    // demorou: oferece o caminho manual, sem esconder o automático
+    if(Date.now()-t0 > SEGUNDOS_ATE_OFERECER_MANUAL*1000){
+      const m=document.getElementById('temu-manual');
+      if(m && m.style.display==='none') m.style.display='block';
+    }
+  },3000);
+}
+
+function pararEsperaTemu(){
+  if(_temuEspera){ clearInterval(_temuEspera); _temuEspera=null; }
+}
+
+function mostrarSucessoTemu(nomeLoja){
+  pararEsperaTemu();
+  document.getElementById('temu-aguardando').style.display='none';
+  document.getElementById('temu-manual').style.display='none';
+  const ok=document.getElementById('temu-sucesso');
+  document.getElementById('temu-sucesso-loja').textContent=nomeLoja?('Loja: '+nomeLoja):'';
+  ok.style.display='block';
+  loadMarketplaces();
+}
+
+async function conectarTemuPorToken(){
+  const inp=document.getElementById('temu-token-input');
+  const msg=document.getElementById('temu-token-msg');
+  const btn=document.getElementById('temu-token-btn');
+  const token=(inp.value||'').trim();
+  if(!token){ msg.style.color='var(--red)'; msg.textContent='Cole o Access Token primeiro.'; return; }
+  if(!_temuEmpresa){ msg.style.color='var(--red)'; msg.textContent='Recomece a conexão: empresa não identificada.'; return; }
+  btn.disabled=true; btn.textContent='Validando...';
+  msg.style.color='var(--text3)'; msg.textContent='Conferindo o token na Temu...';
+  try{
+    const r=await fetch(MKT_WORKER+'/temu/conectar-token',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+SESSION.access_token},
+      body:JSON.stringify({token,empresa_id:_temuEmpresa})
+    });
+    const d=await r.json();
+    if(!r.ok||!d.ok){
+      msg.style.color='var(--red)';
+      msg.textContent=(d.error||'Não foi possível conectar')+(d.detalhe?' — '+d.detalhe:'')+(d.dica?' '+d.dica:'');
+      btn.disabled=false; btn.textContent='Conectar com o token';
+      return;
+    }
+    inp.value='';
+    mostrarSucessoTemu(d.loja);
+  }catch(e){
+    msg.style.color='var(--red)'; msg.textContent='Erro: '+e.message;
+    btn.disabled=false; btn.textContent='Conectar com o token';
+  }
 }
 
 async function confirmarConectarMarketplace(){
