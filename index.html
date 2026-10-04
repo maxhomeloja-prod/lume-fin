@@ -1893,22 +1893,23 @@ tr:hover td{background:var(--surface2);}
           <b>1.</b> Acesse <b>seller.temu.com</b> com a conta da loja<br>
           <b>2.</b> Menu <b>Apps and services → App Store</b><br>
           <b>3.</b> Procure <b>Lume Gestão</b> e clique em <b>Authorize</b><br>
-          <b>4.</b> Confirme as permissões
+          <b>4.</b> Confirme as permissões<br>
+          <b>5.</b> <b style="color:var(--amber)">Copie o Access Token que a Temu mostrar</b> e cole abaixo
         </div>
       </div>
       <div style="font-size:11px;color:var(--amber);line-height:1.5;margin-bottom:4px">
         ⏱ Faça a autorização em até <b>30 minutos</b>. Passado esse prazo, clique em Conectar novamente.
       </div>
       <div style="font-size:11px;color:var(--text3);line-height:1.5">
-        Ao autorizar, a loja aparece como conectada nesta tela e as vendas dos últimos 30 dias são importadas automaticamente.
+        Depois de colar o token, a loja aparece como conectada e as vendas dos últimos 30 dias são importadas automaticamente.
       </div>
 
-      <!-- aguardando o retorno automatico -->
+      <!-- fica de olho caso a loja apareça conectada por outro caminho -->
       <div id="temu-aguardando" style="margin-top:14px;padding:10px 12px;border-radius:8px;
            background:rgba(30,155,232,.10);border:1px solid rgba(30,155,232,.30);font-size:12px;
            color:var(--text2);display:flex;align-items:center;gap:8px">
         <div class="spinner" style="width:14px;height:14px;flex:0 0 auto"></div>
-        <span>Aguardando a autorização…</span>
+        <span>Aguardando o token da autorização…</span>
       </div>
 
       <!-- conectou: some tudo o resto -->
@@ -1918,15 +1919,16 @@ tr:hover td{background:var(--surface2);}
         <div style="font-size:12px;color:var(--text2)" id="temu-sucesso-loja"></div>
       </div>
 
-      <!-- plano B: a Temu mostra o token ao vendedor; so aparece se o retorno demorar -->
-      <div id="temu-manual" style="display:none;margin-top:14px;padding:12px;border-radius:8px;
+      <!-- CAMINHO PRINCIPAL: a Temu nao entrega o token a sistemas externos,
+           ela exibe na tela e so o vendedor pode copiar. Medido em 03/10/2026. -->
+      <div id="temu-manual" style="margin-top:14px;padding:12px;border-radius:8px;
            background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35)">
         <div style="font-size:12px;font-weight:600;color:#d97706;margin-bottom:6px">
-          Autorizou e não voltou automaticamente?
+          Cole aqui o Access Token da Temu
         </div>
         <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:8px">
-          Na tela de autorização, a Temu mostra um <b>Access Token</b>. Copie e cole aqui para
-          concluir a conexão.
+          A Temu não envia o token para outros sistemas — ela mostra na própria tela de
+          autorização. Copie de lá e cole aqui para concluir.
         </div>
         <input id="temu-token-input" type="text" class="form-control" autocomplete="off" spellcheck="false"
                placeholder="Cole o Access Token da Temu" style="width:100%;font-family:monospace;font-size:11px">
@@ -7308,23 +7310,21 @@ function iniciarEsperaTemu(empresaId){
   pararEsperaTemu();
   _temuEmpresa=empresaId;
   document.getElementById('temu-aguardando').style.display='flex';
-  document.getElementById('temu-manual').style.display='none';
+  document.getElementById('temu-manual').style.display='block';   // caminho principal
   document.getElementById('temu-sucesso').style.display='none';
-  const t0=Date.now();
-  const SEGUNDOS_ATE_OFERECER_MANUAL=20;
+  const msg=document.getElementById('temu-token-msg');
+  if(msg) msg.textContent='';
+  // O polling continua por um motivo diferente do original: não espera retorno
+  // automático da Temu (ela não envia token utilizável no redirect), mas detecta
+  // a loja conectada se ela entrar por outra via — suporte gravando o token,
+  // ou a mesma loja sendo conectada em outra aba.
   _temuEspera=setInterval(async()=>{
-    // conectou? (o callback gravou shop_id real no lugar do AGUARDANDO_)
     try{
       const r=await sbGet('marketplace_conexoes',
         '?empresa_id=eq.'+_temuEmpresa+'&marketplace=eq.temu&status=eq.conectado&select=shop_name,shop_id');
-      if(r.length){ mostrarSucessoTemu(r[0].shop_name||r[0].shop_id); return; }
+      if(r.length) mostrarSucessoTemu(r[0].shop_name||r[0].shop_id);
     }catch(e){ /* rede instável: segue tentando */ }
-    // demorou: oferece o caminho manual, sem esconder o automático
-    if(Date.now()-t0 > SEGUNDOS_ATE_OFERECER_MANUAL*1000){
-      const m=document.getElementById('temu-manual');
-      if(m && m.style.display==='none') m.style.display='block';
-    }
-  },3000);
+  },4000);
 }
 
 function pararEsperaTemu(){
