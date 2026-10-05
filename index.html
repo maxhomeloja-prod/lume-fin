@@ -2515,7 +2515,7 @@ async function loadDashboard(){
           vendasHoje.forEach(v=>{
             const c=v.marketplace||'—';
             if(!canais[c])canais[c]={receita:0,pedidos:new Set()};
-            canais[c].receita+=v.valor_bruto||v.valor_total||0;
+            canais[c].receita+=v.valor_total||v.valor_bruto||0;  /* valor_total = mercadoria; valor_bruto chegou a trazer o frete do comprador */
             canais[c].pedidos.add(v.order_id||v.pedido_id);
           });
           const linhasCanal=Object.entries(canais)
@@ -6102,7 +6102,7 @@ async function loadVendas(resetarPagina=true){
       +'<th style="text-align:right">Líquido</th>'
       +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
-      const totalExibir=v.valor_bruto||v.valor_total||v.valor_unitario*v.quantidade;
+      const totalExibir=v.valor_total||v.valor_bruto||v.valor_unitario*v.quantidade;  /* idem: mercadoria primeiro */
       const btnImprimir=(v.marketplace==='Venda Direta'||v.marketplace==='venda direta')
         ?`<button class="btn btn-secondary btn-sm" title="Reimprimir comprovante" onclick="reimprimirPedido('${v.order_id||v.pedido_id}')">🖨️</button>`
         :'';
