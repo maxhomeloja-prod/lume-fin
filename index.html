@@ -3883,7 +3883,26 @@ const MARKETPLACES_CONHECIDOS=['shopee','tiktok','tiktok shop','mercado livre','
 // (ex: "venda direta", "VENDA DIRETA", "  Venda  Direta " todos viram "Venda Direta")
 function normalizarCanal(canal){
   if(!canal)return canal;
-  return canal.trim().replace(/\s+/g,' ').split(' ').map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
+  // underscore e hifen contam como espaco: sem isso "venda_direta" virava
+  // "Venda_direta" e ficava como um canal diferente de "Venda Direta".
+  // Medido em 06/10/2026: havia QUATRO grafias do mesmo canal no banco —
+  // "Venda Direta" (308 linhas), "venda direta" (2), "venda_direta" (6) e
+  // "Vena Direta" (2, com erro de digitacao, R$ 6.118,42).
+  return canal.trim().replace(/[_-]+/g,' ').replace(/\s+/g,' ')
+    .split(' ').map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
+}
+
+// Venda direta nao passa por marketplace, entao nao ha taxa a descontar e nao ha
+// nada a esperar: o liquido E o varejo, no ato. Sem isto as 318 linhas de venda
+// direta ficavam fora do MCB/MCL para sempre, porque o job de liquido so trata os
+// quatro marketplaces.
+//
+// Devolve os campos de liquido quando e venda direta, e um objeto vazio quando
+// nao e — nesse caso o job do marketplace preenche depois.
+function camposLiquidoVendaDireta(canal,valorTotal){
+  if(!ehVendaDireta(canal))return {};
+  const v=Math.round((parseFloat(valorTotal)||0)*100)/100;
+  return {receita_liquida:v,comissao_marketplace:0,taxa_servico:0,liquido_status:'ok'};
 }
 
 function ehVendaDireta(canal){
@@ -3979,7 +3998,8 @@ async function finalizarVendaManual(){
         quantidade:item.quantidade,
         valor_unitario:item.valor_unitario,
         valor_total:item.quantidade*item.valor_unitario,
-        valor_bruto:item.quantidade*item.valor_unitario
+        valor_bruto:item.quantidade*item.valor_unitario,
+        ...camposLiquidoVendaDireta(canal||'Venda Direta',item.quantidade*item.valor_unitario)
       });
     }
     const itensSalvos=[..._vendaCarrinho];
@@ -4024,7 +4044,8 @@ async function uploadVendas(input){
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
     const canal=iCanal>=0&&cols[iCanal]?.trim()?normalizarCanal(cols[iCanal].trim()):'Venda Direta';
     const pedidoId='IMPORT-'+Date.now()+'-'+i;
-    batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco,valor_bruto:qtd*preco});
+    batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco,valor_bruto:qtd*preco,
+      ...camposLiquidoVendaDireta(canal,qtd*preco)});
   }
   // Inserir em lotes de 500
   const LOTE=500;
@@ -6550,7 +6571,8 @@ async function loadVendas(resetarPagina=true){
       +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
       const totalExibir=v.valor_total||v.valor_bruto||v.valor_unitario*v.quantidade;  /* idem: mercadoria primeiro */
-      const btnImprimir=(v.marketplace==='Venda Direta'||v.marketplace==='venda direta')
+      // antes testava duas grafias fixas e as outras duas ficavam sem o botao
+      const btnImprimir=ehVendaDireta(v.marketplace)
         ?`<button class="btn btn-secondary btn-sm" title="Reimprimir comprovante" onclick="reimprimirPedido('${v.order_id||v.pedido_id}')">🖨️</button>`
         :'';
       return '<tr>'
