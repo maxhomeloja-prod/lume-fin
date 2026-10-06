@@ -196,6 +196,13 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .btn-ghost{background:none;color:var(--text2);border-color:transparent;}
 .btn-ghost:hover{color:var(--text);background:var(--surface2);}
 .btn-sm{padding:5px 10px;font-size:11px;}
+/* interruptor Bruta/Liquida no topo dos quadros de hoje */
+.seg-base{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface2)}
+.seg-base .seg-btn{appearance:none;border:0;background:transparent;color:var(--text3);font:inherit;font-size:10px;
+  font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:4px 9px;cursor:pointer;line-height:1.6}
+.seg-base .seg-btn+.seg-btn{border-left:1px solid var(--border)}
+.seg-base .seg-btn:hover{color:var(--text2)}
+.seg-base .seg-btn.active{background:var(--accent);color:#fff}
 .btn-amber{background:var(--amber-bg);color:var(--amber);border-color:transparent;}
 
 /* ── BADGES ── */
@@ -618,13 +625,19 @@ tr:hover td{background:var(--surface2);}
       </div>
       <div class="grid-2">
         <div class="card">
-          <div class="card-title">Vendas — Hoje</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin:0">Vendas — Hoje</div>
+            <div class="seg-base" role="group" aria-label="Base da receita"><button type="button" class="seg-btn active" data-base="bruta" onclick="setDashBase('bruta')" title="Receita de varejo e MCB = (líquido − CPV) ÷ varejo">Bruta · MCB</button><button type="button" class="seg-btn" data-base="liquida" onclick="setDashBase('liquida')" title="Receita líquida e MCL = (líquido − CPV) ÷ líquido">Líquida · MCL</button></div>
+          </div>
           <div id="dash-vendas-hoje" style="padding:8px 0">
             <div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div>
           </div>
         </div>
         <div class="card">
-          <div class="card-title">Top SKUs — Hoje</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
+            <div class="card-title" style="margin:0">Top SKUs — Hoje</div>
+            <div class="seg-base" role="group" aria-label="Base da receita"><button type="button" class="seg-btn active" data-base="bruta" onclick="setDashBase('bruta')" title="Receita de varejo e MCB = (líquido − CPV) ÷ varejo">Bruta · MCB</button><button type="button" class="seg-btn" data-base="liquida" onclick="setDashBase('liquida')" title="Receita líquida e MCL = (líquido − CPV) ÷ líquido">Líquida · MCL</button></div>
+          </div>
           <div id="dash-top-skus-hoje"><div style="color:var(--text3);font-size:12px;padding:12px">Carregando...</div></div>
         </div>
       </div>
@@ -1534,18 +1547,19 @@ tr:hover td{background:var(--surface2);}
       <div class="form-group"><label class="form-label">Data</label><input class="form-control" type="date" id="venda-data"></div>
       <div class="form-group"><label class="form-label">Canal</label><input class="form-control" type="text" id="venda-canal" placeholder="Shopee, Loja, etc."></div>
     </div>
-    <div class="form-group"><label class="form-label">Cliente (opcional)</label><input class="form-control" type="text" id="venda-cliente" list="venda-cli-list"><datalist id="venda-cli-list"></datalist></div>
+    <div class="form-group" id="venda-empresa-wrap" style="display:none"><label class="form-label">Empresa</label><select class="form-control" id="venda-empresa" onchange="onVendaEmpresaChange()"></select><div style="font-size:11px;color:var(--text3);margin-top:3px">A lista de SKUs canônicos é a desta empresa.</div></div>
+    <div class="form-group"><label class="form-label">Cliente (opcional)</label><input class="form-control" type="text" id="venda-cliente" list="venda-cli-list" oninput="sugerirPrecoUltimaVenda()"><datalist id="venda-cli-list"></datalist></div>
 
     <div style="border-top:1px solid var(--border);margin:14px 0 10px;padding-top:10px">
       <div class="card-title" style="margin:0 0 8px">Itens da venda</div>
       <div id="venda-itens-lista" style="margin-bottom:10px"></div>
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label class="form-label">SKU</label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
+        <div class="form-group" style="flex:2"><label class="form-label">SKU canônico</label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" autocomplete="off" placeholder="digite para filtrar a lista…" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
         <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="venda-qtd" value="1" oninput="calcVenda()"></div>
-        <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="calcVenda()"></div>
+        <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="_vendaPrecoTocado=true;calcVenda()"><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-preco-hint"></div></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <button class="btn btn-secondary btn-sm" onclick="adicionarItemVenda()">+ Adicionar item</button>
+        <button class="btn btn-secondary btn-sm" id="venda-add-btn" onclick="adicionarItemVenda()" disabled>+ Adicionar item</button>
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;color:var(--text2)" id="venda-total-item"></div>
       </div>
     </div>
@@ -2442,6 +2456,211 @@ function preencherSelects(){
 }
 
 // ── DASHBOARD ──────────────────────────────────────────────────
+// ══ QUADROS DE HOJE — BASE DA RECEITA E MARGEM DE CONTRIBUICAO ═══════════
+//
+// O interruptor no topo de cada quadro troca DUAS coisas de uma vez:
+//   'bruta'   -> coluna Receita = varejo    e ultima coluna = MCB
+//   'liquida' -> coluna Receita = liquido   e ultima coluna = MCL
+// MCB = (liquido - CPV) / varejo    ·    MCL = (liquido - CPV) / liquido
+//
+// Os dois quadros saem do MESMO conjunto de linhas (_dashVendasHoje), entao o
+// total por canal e o total por SKU fecham entre si por construcao. Antes, o Top
+// SKUs vinha do RPC vendas_agregado_sku_dia e o quadro de canais de uma consulta
+// propria: duas fontes para o mesmo numero.
+//
+// REGRA DA MARGEM, identica a do RPC vendas_kpis_margem: so entram no calculo as
+// linhas que tem receita_liquida E tem CPV cadastrado vigente na data do pedido.
+// O denominador do MCB e o varejo DESSAS linhas, nao o varejo do grupo inteiro --
+// misturar os dois faria o MCB de um canal com 30% de cobertura parecer um terco
+// do que e. Linha sem liquido ou sem CPV nao entra como zero: zero seria lido
+// como "margem zero" quando o que existe e ausencia de dado. O asterisco ao lado
+// do percentual avisa quando a cobertura do grupo e parcial.
+let _dashBase='bruta';
+let _dashVendasHoje=[];
+let _dashKpisHoje={total_receita:0,total_unidades:0,total_pedidos:0};
+
+function setDashBase(b){
+  if(b!=='bruta'&&b!=='liquida')return;
+  _dashBase=b;
+  sincronizarBotoesDashBase();
+  renderDashVendasHoje();
+  renderDashTopSkus();
+}
+// os dois quadros compartilham o estado: mexer em um move o outro
+function sincronizarBotoesDashBase(){
+  document.querySelectorAll('.seg-base .seg-btn').forEach(el=>{
+    el.classList.toggle('active',el.dataset.base===_dashBase);
+  });
+}
+
+// varejo da linha pela MESMA regra do RPC vendas_kpis
+function brutoDaLinha(v){
+  const t=parseFloat(v.valor_total);
+  if(t)return t;
+  return (parseFloat(v.valor_unitario)||0)*(parseFloat(v.quantidade)||0);
+}
+function liquidoDaLinha(v){
+  if(v.receita_liquida===null||v.receita_liquida===undefined)return null;
+  const n=parseFloat(v.receita_liquida);
+  return isNaN(n)?null:n;
+}
+
+function novoAccMargem(){
+  return{pedidos:new Set(),unidades:0,linhas:0,
+         bruto:0,liquido:0,linhasComLiquido:0,
+         brutoNaMargem:0,liquidoNaMargem:0,cpvNaMargem:0,linhasNaMargem:0};
+}
+function acumularMargem(a,v){
+  const bru=brutoDaLinha(v);
+  const liq=liquidoDaLinha(v);
+  const cpv=cpvDaLinha(v);
+  a.linhas++;
+  a.unidades+=parseFloat(v.quantidade)||0;
+  a.bruto+=bru;
+  a.pedidos.add(v.order_id||v.pedido_id);
+  if(liq!==null){a.liquido+=liq;a.linhasComLiquido++;}
+  if(liq!==null&&cpv!==null){
+    a.brutoNaMargem+=bru;a.liquidoNaMargem+=liq;a.cpvNaMargem+=cpv;a.linhasNaMargem++;
+  }
+  return a;
+}
+// receita que a coluna mostra, conforme o interruptor
+function receitaDoAcc(a){return _dashBase==='liquida'?a.liquido:a.bruto;}
+// {pct,cobertura} ou null quando nenhuma linha do grupo tem liquido E CPV
+function margemDoAcc(a){
+  if(!a.linhasNaMargem)return null;
+  const den=_dashBase==='liquida'?a.liquidoNaMargem:a.brutoNaMargem;
+  if(!(den>0))return null;
+  return{pct:(a.liquidoNaMargem-a.cpvNaMargem)/den*100,
+         cobertura:a.linhas?a.linhasNaMargem/a.linhas:0};
+}
+function celulaMargemAgg(a,pad){
+  const p=pad||'4px 6px';
+  const base='padding:'+p+';border-bottom:1px solid var(--border);text-align:right';
+  const m=margemDoAcc(a);
+  if(!m){
+    const falta=a.linhasComLiquido?'sem CPV cadastrado':'aguardando a receita líquida do marketplace';
+    return '<td style="'+base+';color:var(--text3)" title="Fora da margem: '+falta+'">—</td>';
+  }
+  const cor=m.pct<-0.05?'var(--red,#dc2626)':(m.pct>0.05?'var(--green)':'var(--text2)');
+  const aviso=m.cobertura<0.999
+    ?'<span style="color:var(--amber);cursor:help" title="Calculado sobre '+Math.round(m.cobertura*100)
+      +'% das linhas do grupo; o restante está sem líquido ou sem CPV">*</span>':'';
+  return '<td style="'+base+';font-weight:500;color:'+cor+'">'+m.pct.toFixed(1)+'%'+aviso+'</td>';
+}
+function rotuloReceita(){return _dashBase==='liquida'?'Receita líq.':'Receita';}
+function rotuloMargem(){return _dashBase==='liquida'?'MCL':'MCB';}
+
+// ── Quadro "Vendas — Hoje" (por canal) ──────────────────────────────────
+function renderDashVendasHoje(){
+  const el=document.getElementById('dash-vendas-hoje');
+  if(!el)return;
+  const kh=_dashKpisHoje;
+  const ehLiq=_dashBase==='liquida';
+  const geral=_dashVendasHoje.reduce((a,v)=>acumularMargem(a,v),novoAccMargem());
+  // na base bruta o numero vem do RPC, que e a fonte do KPI do topo da pagina;
+  // na base liquida vem da soma das linhas, que e o unico lugar onde o liquido existe
+  const receitaTopo=ehLiq?geral.liquido:(kh.total_receita||0);
+  const subTopo=ehLiq
+    ?(geral.linhas
+        ?(geral.linhasComLiquido+' de '+geral.linhas+' linhas com líquido')
+        :'')
+    :'';
+  const mGeral=margemDoAcc(geral);
+  el.innerHTML=
+    // auto-fit: o quadro ocupa meia largura e agora tem 4 tiles; com 1fr fixo
+    // os valores quebravam em tela estreita.
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin-bottom:12px">'+
+      '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">'+(ehLiq?'Receita líquida':'Receita')+'</div>'+
+        '<div style="font-size:20px;font-weight:700;color:var(--green);margin-top:2px">'+fBRL(receitaTopo)+'</div>'+
+        (subTopo?'<div style="font-size:9px;color:var(--text3);margin-top:2px">'+subTopo+'</div>':'')+
+      '</div>'+
+      '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Pedidos</div>'+
+        '<div style="font-size:20px;font-weight:700;color:var(--text);margin-top:2px">'+fN(kh.total_pedidos)+'</div>'+
+      '</div>'+
+      '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Unidades</div>'+
+        '<div style="font-size:20px;font-weight:700;color:var(--accent);margin-top:2px">'+fN(kh.total_unidades)+'</div>'+
+      '</div>'+
+      '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
+        '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">'+rotuloMargem()+' do dia</div>'+
+        '<div style="font-size:20px;font-weight:700;margin-top:2px;color:'+
+          (mGeral?(mGeral.pct<-0.05?'var(--red,#dc2626)':(mGeral.pct>0.05?'var(--green)':'var(--text2)')):'var(--text3)')+'">'+
+          (mGeral?mGeral.pct.toFixed(1)+'%':'—')+'</div>'+
+        '<div style="font-size:9px;color:var(--text3);margin-top:2px">'+
+          (mGeral?(Math.round(mGeral.cobertura*100)+'% das linhas'):'sem líquido ou sem CPV')+'</div>'+
+      '</div>'+
+    '</div>'+
+    (()=>{
+      const canais={};
+      _dashVendasHoje.forEach(v=>{
+        const c=v.marketplace||'—';
+        if(!canais[c])canais[c]=novoAccMargem();
+        acumularMargem(canais[c],v);
+      });
+      const linhasCanal=Object.entries(canais).sort((a,b)=>receitaDoAcc(b[1])-receitaDoAcc(a[1]));
+      if(!linhasCanal.length)return '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">Sem vendas hoje</div>';
+      return '<table style="width:100%;font-size:12px"><thead><tr>'+
+        '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:left">Canal</th>'+
+        '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Pedidos</th>'+
+        '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">'+rotuloReceita()+'</th>'+
+        '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">'+rotuloMargem()+'</th>'+
+        '</tr></thead><tbody>'+
+        linhasCanal.map(([c,a])=>'<tr>'+
+          '<td style="padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text2)">'+c+'</td>'+
+          '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right">'+fN(a.pedidos.size)+'</td>'+
+          '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(receitaDoAcc(a))+'</td>'+
+          celulaMargemAgg(a)+
+        '</tr>').join('')+
+      '</tbody></table>';
+    })();
+}
+
+// ── Quadro "Top SKUs — Hoje" ────────────────────────────────────────────
+function renderDashTopSkus(){
+  const el=document.getElementById('dash-top-skus-hoje');
+  if(!el)return;
+  const skuMap={};
+  _dashVendasHoje.forEach(v=>{
+    const k=v.sku||'—';
+    if(!skuMap[k])skuMap[k]=novoAccMargem();
+    acumularMargem(skuMap[k],v);
+  });
+  const todos=Object.entries(skuMap).sort((a,b)=>receitaDoAcc(b[1])-receitaDoAcc(a[1]));
+  if(!todos.length){
+    el.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Sem vendas hoje</div>';
+    return;
+  }
+  // o "% do dia" tem como base o dia INTEIRO, nao a soma dos 15 do topo:
+  // com a soma dos 15 os percentuais somariam 100% e esconderiam a cauda.
+  const totalDia=todos.reduce((s,[,a])=>s+receitaDoAcc(a),0);
+  const topSkus=todos.slice(0,15);
+  el.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
+    '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:left">SKU</th>'+
+    '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
+    '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">'+rotuloReceita()+'</th>'+
+    '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">% do dia</th>'+
+    '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">'+rotuloMargem()+'</th>'+
+    '</tr></thead><tbody>'+
+    topSkus.map(([sku,a],i)=>{
+      const rec=receitaDoAcc(a);
+      const pct=totalDia>0?(rec/totalDia*100):0;
+      const cor=i<3?'var(--green)':i<8?'var(--amber)':'var(--text2)';
+      return '<tr>'+
+        '<td style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:500">'+sku+'</td>'+
+        '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+fN(a.unidades)+'</td>'+
+        '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(rec)+'</td>'+
+        '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+cor+'">'+pct.toFixed(1)+'%</td>'+
+        celulaMargemAgg(a,'5px 6px')+
+      '</tr>';
+    }).join('')+
+  '</tbody></table>'+
+  (todos.length>15?'<div style="font-size:10px;color:var(--text3);padding:6px 6px 0">'
+    +'mostrando 15 de '+fN(todos.length)+' SKUs · % sobre o dia inteiro</div>':'');
+}
+
 async function loadDashboard(){
   if(!EMPRESAS||!EMPRESAS.length)return;
   try{
@@ -2550,92 +2769,23 @@ async function loadDashboard(){
 
     // ── Vendas do dia corrente ──
     const hoje2=fd(hoje);
+    // empresa_id + data_pedido entram para o CPV vigente poder ser resolvido por linha;
+    // receita_liquida entra para a margem. valor_unitario entra para o varejo da linha
+    // seguir a MESMA regra do RPC vendas_kpis -- COALESCE(NULLIF(valor_total,0),
+    // valor_unitario*quantidade) -- e o quadro fechar com o KPI acima no centavo.
+    // valor_bruto SAIU: chegou a trazer o frete pago pelo comprador no ML, e era a
+    // primeira opcao do antigo `v.valor_total||v.valor_bruto`.
     const[kpisHoje,vendasHoje]=await Promise.all([
       sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:hoje2,p_ate:hoje2,p_canal:null,p_sku:null,p_cliente:null}),
-      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}&select=sku,quantidade,valor_bruto,valor_total,marketplace,order_id,pedido_id`)
+      sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}`
+        +`&select=empresa_id,data_pedido,sku,quantidade,valor_unitario,valor_total,receita_liquida,marketplace,order_id,pedido_id`),
+      carregarCPVParaVendas(empIdsArr)   // preenche _cpvVendas, usado por cpvDaLinha
     ]);
-    const kh=kpisHoje[0]||{total_receita:0,total_pedidos:0,total_unidades:0};
-    const elHoje=document.getElementById('dash-vendas-hoje');
-    if(elHoje){
-      elHoje.innerHTML=
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+
-          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Receita</div>'+
-            '<div style="font-size:20px;font-weight:700;color:var(--green);margin-top:2px">'+fBRL(kh.total_receita)+'</div>'+
-          '</div>'+
-          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Pedidos</div>'+
-            '<div style="font-size:20px;font-weight:700;color:var(--text);margin-top:2px">'+fN(kh.total_pedidos)+'</div>'+
-          '</div>'+
-          '<div style="text-align:center;padding:10px;background:var(--surface2);border-radius:6px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Unidades</div>'+
-            '<div style="font-size:20px;font-weight:700;color:var(--accent);margin-top:2px">'+fN(kh.total_unidades)+'</div>'+
-          '</div>'+
-        '</div>'+
-        // Breakdown por canal
-        (()=>{
-          const canais={};
-          vendasHoje.forEach(v=>{
-            const c=v.marketplace||'—';
-            if(!canais[c])canais[c]={receita:0,pedidos:new Set()};
-            canais[c].receita+=v.valor_total||v.valor_bruto||0;  /* valor_total = mercadoria; valor_bruto chegou a trazer o frete do comprador */
-            canais[c].pedidos.add(v.order_id||v.pedido_id);
-          });
-          const linhasCanal=Object.entries(canais)
-            .map(([c,d])=>([c,{receita:d.receita,pedidos:d.pedidos.size}]))
-            .sort((a,b)=>b[1].receita-a[1].receita);
-          if(!linhasCanal.length)return '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">Sem vendas hoje</div>';
-          return '<table style="width:100%;font-size:12px"><thead><tr>'+
-            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:left">Canal</th>'+
-            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Pedidos</th>'+
-            '<th style="padding:4px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
-            '</tr></thead><tbody>'+
-            linhasCanal.map(([c,d])=>'<tr>'+
-              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);color:var(--text2)">'+c+'</td>'+
-              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right">'+fN(d.pedidos)+'</td>'+
-              '<td style="padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
-            '</tr>').join('')+
-          '</tbody></table>';
-        })();
-    }
-
-    // ── Top SKUs do dia ──
-    const elSkus=document.getElementById('dash-top-skus-hoje');
-    if(elSkus){
-      try{
-        const vendasSkus=await sbRpc('vendas_agregado_sku_dia',{p_empresa_ids:EMPRESAS.map(e=>e.id),p_de:hoje2,p_ate:hoje2});
-        const skuMap={};
-        vendasSkus.forEach(v=>{
-          const s=v.sku||'—';
-          if(!skuMap[s])skuMap[s]={receita:0,qtd:0};
-          skuMap[s].receita+=parseFloat(v.val||0);
-          skuMap[s].qtd+=parseInt(v.qtd||0);
-        });
-        const topSkus=Object.entries(skuMap).sort((a,b)=>b[1].receita-a[1].receita).slice(0,15);
-        if(!topSkus.length){
-          elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Sem vendas hoje</div>';
-        }else{
-          const totalRec=topSkus.reduce((s,[,d])=>s+d.receita,0);
-          elSkus.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
-            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:left">SKU</th>'+
-            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Un.</th>'+
-            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">Receita</th>'+
-            '<th style="padding:5px 6px;color:var(--text3);font-weight:600;text-align:right">% do dia</th>'+
-            '</tr></thead><tbody>'+
-            topSkus.map(([s,d],i)=>{
-              const pct=totalRec>0?(d.receita/totalRec*100):0;
-              const cor=i<3?'var(--green)':i<8?'var(--amber)':'var(--text2)';
-              return '<tr>'+
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);font-weight:500">'+s+'</td>'+
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text2)">'+fN(d.qtd)+'</td>'+
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);font-weight:500">'+fBRL(d.receita)+'</td>'+
-                '<td style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:'+cor+'">'+pct.toFixed(1)+'%</td>'+
-              '</tr>';
-            }).join('')+
-          '</tbody></table>';
-        }
-      }catch(e){elSkus.innerHTML='<div style="color:var(--text3);font-size:12px;padding:12px">Erro ao carregar</div>';}
-    }
+    _dashKpisHoje=kpisHoje[0]||{total_receita:0,total_pedidos:0,total_unidades:0};
+    _dashVendasHoje=vendasHoje||[];
+    sincronizarBotoesDashBase();
+    renderDashVendasHoje();
+    renderDashTopSkus();
   }catch(e){console.error('loadDashboard:',e);}
   // Tempo Real — busca após o restante do dashboard
   renderTempoReal();
@@ -3814,29 +3964,180 @@ async function carregarProdutosClientes(){
     sbGet('clientes',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[]),
     sbGet('categorias_produto',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[])
   ]);
-  const dl=document.getElementById('venda-sku-list');if(dl)dl.innerHTML=_produtos.map(p=>`<option value="${p.sku}">`).join('');
+  // O datalist de SKU da venda manual NAO e alimentado aqui: ele vem do grupo
+  // canonico da empresa (carregarCanonicosVenda). Antes vinha de `produtos`, que tem
+  // 1 linha na Maxhome e 0 nas outras 13 -- e esta funcao e chamada tambem fora do
+  // modal (importacao, BOM), onde sobrescreveria a lista de canonicos.
   const dlC=document.getElementById('venda-cli-list');if(dlC)dlC.innerHTML=_clientes.map(c=>`<option value="${c.nome}">`).join('');
 }
 
 async function excluirVenda(id){if(!confirm('Excluir?'))return;await sbDelete('vendas',`id=eq.${id}`);loadVendas();}
+// ══ SKU DA VENDA MANUAL — SO CANONICO ════════════════════════════════════
+//
+// A lista sai de correlacao_sku.sku_canonico DA EMPRESA, a mesma fonte da aba de
+// CPV e da planilha modelo. Texto livre nao serve: um SKU que nao e canonico nunca
+// casa com custos_sku, entao a linha nasce sem CPV e fica fora do MCB/MCL para
+// sempre -- e e exatamente a venda direta que hoje tem liquido = varejo e deveria
+// ser a margem mais limpa do painel.
+//
+// A lista antiga vinha da tabela `produtos`, que foi medida em 06/10/2026: 1 linha
+// na Maxhome e 0 nas outras 13 empresas. Ou seja, o datalist chegava vazio e o
+// campo era texto livre na pratica, com o aviso "+ Novo produto sera criado" que
+// nenhum codigo cumpria -- nada criava produto.
+//
+// Por que input+datalist e nao <select>: sao de 52 a 356 canonicos por empresa, e
+// um <select> nativo desse tamanho nao se busca. O datalist da busca por digitacao
+// e a validacao abaixo e DURA -- o botao de adicionar fica travado e
+// adicionarItemVenda recusa -- entao nao ha como gravar um SKU fora da lista.
+//
+// A empresa passou para o TOPO do modal porque a lista depende dela. Antes a
+// empresa era escolhida no fim, em finalizarVendaManual: dava para montar o
+// carrinho com SKUs de uma empresa e salvar em outra.
+let _vendaCanon=[];            // canonicos da empresa selecionada no modal
+let _vendaPrecoTocado=false;   // usuario digitou o preco? entao nao sobrescreve
+let _vendaEmpresaAnterior=null;
+
+function empresaDaVenda(){
+  const sel=document.getElementById('venda-empresa');
+  if(sel&&sel.value)return sel.value;
+  return EMPRESAS.length===1?EMPRESAS[0].id:null;
+}
+
+// busca pura, sem tocar no DOM -- a importacao de planilha tambem usa
+async function canonicosDaEmpresa(emp){
+  if(!emp)return [];
+  try{
+    const cor=await sbGet('correlacao_sku',`?empresa_id=eq.${emp}&select=sku_canonico&limit=20000`);
+    return [...new Set((cor||[]).map(x=>String(x.sku_canonico||'').trim()).filter(Boolean))].sort();
+  }catch(e){return [];}
+}
+async function carregarCanonicosVenda(emp){
+  _vendaCanon=await canonicosDaEmpresa(emp);
+  const dl=document.getElementById('venda-sku-list');
+  if(dl)dl.innerHTML=_vendaCanon.map(x=>`<option value="${x}">`).join('');
+  onVendaSkuInput();
+}
+
+async function onVendaEmpresaChange(){
+  const nova=empresaDaVenda();
+  if(_vendaCarrinho.length&&nova!==_vendaEmpresaAnterior){
+    if(!confirm('Trocar de empresa limpa os itens já adicionados — os SKUs canônicos são de cada empresa. Continuar?')){
+      const sel=document.getElementById('venda-empresa');
+      if(sel&&_vendaEmpresaAnterior)sel.value=_vendaEmpresaAnterior;
+      return;
+    }
+    _vendaCarrinho=[];renderVendaCarrinho();
+  }
+  _vendaEmpresaAnterior=nova;
+  document.getElementById('venda-sku').value='';
+  document.getElementById('venda-preco').value='';
+  _vendaPrecoTocado=false;
+  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
+  await carregarCanonicosVenda(nova);
+}
+
 async function abrirModalVendaManual(){
   await carregarProdutosClientes();
   document.getElementById('venda-data').value=new Date().toISOString().split('T')[0];
   ['venda-sku','venda-canal','venda-cliente'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('venda-qtd').value='1';document.getElementById('venda-preco').value='';
-  document.getElementById('venda-total-item').textContent='';document.getElementById('venda-sku-hint').textContent='';
-  _vendaCarrinho=[];
+  document.getElementById('venda-total-item').textContent='';
+  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
+  _vendaCarrinho=[];_vendaPrecoTocado=false;
+  const wrap=document.getElementById('venda-empresa-wrap');
+  const sel=document.getElementById('venda-empresa');
+  if(sel){
+    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    if(EMPRESA_ID&&EMPRESAS.some(e=>e.id===EMPRESA_ID))sel.value=EMPRESA_ID;
+  }
+  if(wrap)wrap.style.display=EMPRESAS.length>1?'':'none';
+  _vendaEmpresaAnterior=empresaDaVenda();
   renderVendaCarrinho();
   abrirModal('modal-venda');
+  await carregarCanonicosVenda(_vendaEmpresaAnterior);
 }
+
+function skuEhCanonico(sku){
+  if(!sku)return false;
+  const u=sku.trim().toUpperCase();
+  return _vendaCanon.some(x=>x.toUpperCase()===u);
+}
+// grafia EXATA do canonico, nao a digitada: e ela que casa com custos_sku
+function grafiaCanonica(sku){
+  const u=String(sku||'').trim().toUpperCase();
+  return _vendaCanon.find(x=>x.toUpperCase()===u)||null;
+}
+
 function onVendaSkuInput(){
-  const sku=document.getElementById('venda-sku').value.trim().toUpperCase();
-  const p=_produtos.find(x=>x.sku.toUpperCase()===sku);
+  const el=document.getElementById('venda-sku');
+  if(!el)return;
+  const sku=el.value.trim();
   const hint=document.getElementById('venda-sku-hint');
-  if(p){hint.textContent='✓ Produto encontrado';hint.style.color='var(--green)';}
-  else if(sku){hint.textContent='+ Novo produto será criado';hint.style.color='var(--amber)';}
-  else hint.textContent='';
+  const btn=document.getElementById('venda-add-btn');
+  const ok=skuEhCanonico(sku);
+  if(hint){
+    if(!_vendaCanon.length){
+      hint.textContent='⚠ Esta empresa não tem SKU canônico — cadastre em Cadastros › Correlação de SKUs';
+      hint.style.color='var(--amber)';
+    }else if(!sku){
+      hint.textContent=_vendaCanon.length+' SKUs canônicos disponíveis';
+      hint.style.color='var(--text3)';
+    }else if(ok){
+      hint.textContent='✓ SKU canônico';
+      hint.style.color='var(--green)';
+    }else{
+      hint.textContent='✗ Fora da lista de canônicos desta empresa';
+      hint.style.color='var(--red,#dc2626)';
+    }
+  }
+  if(btn)btn.disabled=!ok;
+  if(ok)sugerirPrecoUltimaVenda();
+  else{const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';}
 }
+
+// ── PRECO SUGERIDO: ultima venda do MESMO SKU para o MESMO cliente ───────
+// Isto NAO existia: o campo nascia vazio e era digitado a mao em toda venda.
+// Ordem de preferencia, e o rotulo diz qual foi usada:
+//   1. mesmo cliente + mesmo SKU  -> verde
+//   2. mesmo SKU, qualquer cliente -> ambar (e um ponto de partida, nao o preco dele)
+//   3. nada -> campo fica vazio
+// Nunca sobrescreve preco que o usuario digitou (_vendaPrecoTocado).
+let _vendaPrecoBusca=0;
+async function sugerirPrecoUltimaVenda(){
+  const emp=empresaDaVenda();
+  const elP=document.getElementById('venda-preco');
+  const hint=document.getElementById('venda-preco-hint');
+  const sku=grafiaCanonica(document.getElementById('venda-sku')?.value);
+  if(!emp||!sku){if(hint)hint.textContent='';return;}
+  if(_vendaPrecoTocado&&elP.value){if(hint)hint.textContent='';return;}
+  const cli=document.getElementById('venda-cliente').value.trim();
+  const marca=++_vendaPrecoBusca;          // descarta resposta que chega fora de ordem
+  const base=`?empresa_id=eq.${emp}&sku=eq.${encodeURIComponent(sku)}&valor_unitario=gt.0`
+    +`&select=valor_unitario,data_pedido&order=data_pedido.desc,criado_em.desc&limit=1`;
+  try{
+    let r=[],doCliente=false;
+    if(cli){
+      r=await sbGet('vendas',base+`&cliente_nome=eq.${encodeURIComponent(cli)}`);
+      doCliente=!!(r&&r.length);
+    }
+    if(!r||!r.length)r=await sbGet('vendas',base);
+    if(marca!==_vendaPrecoBusca)return;
+    if(!r||!r.length){
+      if(hint){hint.textContent='sem venda anterior deste SKU';hint.style.color='var(--text3)';}
+      return;
+    }
+    const p=parseFloat(r[0].valor_unitario)||0;
+    if(!(p>0)){if(hint)hint.textContent='';return;}
+    if(!_vendaPrecoTocado||!elP.value){elP.value=p.toFixed(2);calcVenda();}
+    if(hint){
+      const d=String(r[0].data_pedido||'').slice(0,10).split('-').reverse().join('/');
+      hint.textContent=doCliente?('último preço deste cliente — '+d)
+                                :('último preço praticado (outro cliente) — '+d);
+      hint.style.color=doCliente?'var(--green)':'var(--amber)';
+    }
+  }catch(e){if(hint)hint.textContent='';}
+}
+
 let _vendaCarrinho=[];
 
 function calcVenda(){
@@ -3847,16 +4148,21 @@ function calcVenda(){
 }
 
 function adicionarItemVenda(){
-  const sku=document.getElementById('venda-sku').value.trim().toUpperCase();
+  const canon=grafiaCanonica(document.getElementById('venda-sku').value);
   const qtd=parseInt(document.getElementById('venda-qtd').value);
   const preco=parseFloat(document.getElementById('venda-preco').value);
-  if(!sku||!qtd||!preco){alert('Preencha SKU, quantidade e preço do item');return;}
-  _vendaCarrinho.push({sku,quantidade:qtd,valor_unitario:preco});
+  // trava dura: sem isto um SKU fora do grupo canonico entraria e a linha nunca
+  // teria CPV, logo nunca teria MCB nem MCL.
+  if(!canon){alert('Escolha um SKU da lista de canônicos desta empresa.');return;}
+  if(!qtd||!preco){alert('Preencha quantidade e preço do item');return;}
+  _vendaCarrinho.push({sku:canon,quantidade:qtd,valor_unitario:preco});
   document.getElementById('venda-sku').value='';
   document.getElementById('venda-qtd').value='1';
   document.getElementById('venda-preco').value='';
-  document.getElementById('venda-sku-hint').textContent='';
+  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
+  _vendaPrecoTocado=false;
   document.getElementById('venda-total-item').textContent='';
+  onVendaSkuInput();
   renderVendaCarrinho();
 }
 
@@ -3979,8 +4285,11 @@ async function finalizarVendaManual(){
   const canal=normalizarCanal(document.getElementById('venda-canal').value.trim());
   const dataVenda=document.getElementById('venda-data').value;
   const clienteNome=document.getElementById('venda-cliente').value.trim();
-  const empresaSel=await pedirEmpresaParaSalvar();
-  if(!empresaSel)return;
+  // empresa escolhida no TOPO do modal: e a mesma que filtrou a lista de canonicos.
+  // Pedir aqui, no fim, permitia montar o carrinho com SKUs de uma empresa e gravar
+  // em outra -- e os SKUs ficariam sem canonico correspondente na empresa de destino.
+  const empresaSel=empresaDaVenda();
+  if(!empresaSel){alert('Selecione a empresa da venda.');return;}
   // Abrir janela ANTES das chamadas assíncronas — evita bloqueio de popup do navegador
   const win=ehVendaDireta(canal)?window.open('','_blank'):null;
   if(ehVendaDireta(canal)&&!win){alert('Permita popups para este site para imprimir o comprovante.');}
@@ -4030,6 +4339,12 @@ async function uploadVendas(input){
   if(iSku<0||iQtd<0||iPreco<0){alert('Planilha inválida. Use o modelo fornecido.');prog.style.display='none';return;}
   const regs=linhas.slice(1).filter(l=>l.trim());
   txt.textContent='Preparando '+regs.length+' registros...';
+  // Canonicos da empresa, so para AVISAR no fim. NAO bloqueia: esta planilha tambem
+  // serve para importar marketplace, onde o SKU que vem e o da plataforma e o
+  // casamento acontece depois em correlacao_sku. Mas SKU fora do grupo canonico nunca
+  // casa com custos_sku, entao a linha nasce sem CPV e fica fora do MCB/MCL.
+  const _canonUp=new Set((await canonicosDaEmpresa(empresaSel)).map(x=>x.toUpperCase()));
+  const foraCanon=new Set();
   // Montar todos os registros primeiro
   let ok=0,erros=0;
   const batch=[];
@@ -4043,6 +4358,7 @@ async function uploadVendas(input){
     const cliNome=iCli>=0?cols[iCli]?.trim():'';
     const dataVenda=iData>=0&&cols[iData]?.trim()?cols[iData].trim():hoje;
     const canal=iCanal>=0&&cols[iCanal]?.trim()?normalizarCanal(cols[iCanal].trim()):'Venda Direta';
+    if(_canonUp.size&&!_canonUp.has(sku))foraCanon.add(sku);
     const pedidoId='IMPORT-'+Date.now()+'-'+i;
     batch.push({empresa_id:empresaSel,order_id:pedidoId,pedido_id:pedidoId,data_pedido:dataVenda,marketplace:canal,sku,cliente_nome:cliNome||null,quantidade:qtd,valor_unitario:preco,valor_total:qtd*preco,valor_bruto:qtd*preco,
       ...camposLiquidoVendaDireta(canal,qtd*preco)});
@@ -4066,7 +4382,10 @@ async function uploadVendas(input){
     txt.textContent='Inserindo... '+Math.min(i+LOTE,total)+'/'+total+' — '+ok+' ok'+(erros?', '+erros+' erros':'');
     await new Promise(r=>setTimeout(r,50)); // respirar o browser
   }
-  txt.textContent='✅ '+ok+' vendas importadas'+(erros?', '+erros+' erros com dados inválidos':'');
+  txt.textContent='✅ '+ok+' vendas importadas'+(erros?', '+erros+' erros com dados inválidos':'')
+    +(foraCanon.size?' · ⚠ '+foraCanon.size+' SKU(s) fora do grupo canônico ('
+      +[...foraCanon].slice(0,6).join(', ')+(foraCanon.size>6?'…':'')
+      +') — essas linhas ficam sem CPV, logo sem MCB/MCL':'');
 
   // Gerar 1 recibo por cliente para as linhas que tinham cliente preenchido
   const porCliente={};
