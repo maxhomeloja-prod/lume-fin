@@ -712,6 +712,10 @@ tr:hover td{background:var(--surface2);}
               <option value="sem">Só sem CPV</option>
             </select>
           </div>
+          <div class="form-group" style="margin:0;min-width:170px">
+            <label class="form-label">Vigência do próximo upload</label>
+            <input class="form-control" type="date" id="cpv-vigencia">
+          </div>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cpv-filtro').value='';document.getElementById('cpv-mostrar').value='todos';renderCustosCPV()">✕ Limpar</button>
         </div>
       </div>
@@ -3059,6 +3063,8 @@ async function loadCustosCPV(){
     // SKU com custo mas fora do grupo canonico tambem aparece na lista
     Object.keys(_cpvAtual).forEach(k=>{if(!_cpvCanon.includes(k))_cpvCanon.push(k);});
     _cpvCanon.sort();
+    const dv=document.getElementById('cpv-vigencia');
+    if(dv&&!dv.value)dv.value=new Date().toISOString().slice(0,10);
     renderCustosCPV();
     carregarCoberturaCPV(emp);
   }catch(e){
@@ -3207,7 +3213,10 @@ async function uploadCPVArquivo(input){
 function renderPreviewCPV(){
   const d=_cpvDiff;if(!d)return;
   const box=document.getElementById('cpv-preview');
-  const hoje=new Date().toISOString().slice(0,10).split('-').reverse().join('/');
+  const campoVig=document.getElementById('cpv-vigencia');
+  const vigISO=(campoVig&&campoVig.value)||new Date().toISOString().slice(0,10);
+  const hoje=vigISO.split('-').reverse().join('/');
+  const retro=vigISO<new Date().toISOString().slice(0,10);
   const amostra=(arr,cor)=>arr.slice(0,8).map(x=>
     `<tr><td style="font-weight:500">${x.sku}</td><td style="text-align:right;color:var(--text3)">${x.de!=null?fBRL(x.de):'—'}</td><td style="text-align:right;color:${cor}">${fBRL(x.cpv)}</td></tr>`).join('');
   const bloco=(titulo,arr,cor,nota)=>!arr.length?'':`
@@ -3222,6 +3231,7 @@ function renderPreviewCPV(){
       <div>
         <div style="font-weight:600;margin-bottom:4px">Confira antes de aplicar</div>
         <div style="font-size:12px;color:var(--text2)">Nada foi gravado ainda. Ao aplicar, ${vaiGravar} custo(s) passam a valer a partir de <b>${hoje}</b>; vendas anteriores continuam com o custo antigo.</div>
+        ${retro?`<div style="font-size:12px;color:var(--amber,#d97706);margin-top:6px">⚠ Vigência <b>retroativa</b>: a margem de vendas já fechadas desde ${hoje} vai mudar.</div>`:''}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cpv-preview').style.display='none';_cpvDiff=null">Cancelar</button>
@@ -3242,7 +3252,11 @@ async function aplicarCPV(){
   const prog=document.getElementById('cpv-prog'),txt=document.getElementById('cpv-prog-txt'),bar=document.getElementById('cpv-prog-bar');
   document.getElementById('cpv-preview').style.display='none';
   prog.style.display='';bar.style.width='5%';txt.textContent='Gravando...';
-  const hoje=new Date().toISOString().slice(0,10);
+  // A vigencia e escolhida no campo, com hoje como padrao. Retroagir faz o custo
+  // valer para vendas ja fechadas — e por isso que o campo e explicito e a previa
+  // mostra a data antes de aplicar, em vez de assumir sempre hoje.
+  const campoVig=document.getElementById('cpv-vigencia');
+  const hoje=(campoVig&&campoVig.value)||new Date().toISOString().slice(0,10);
   const erros=[];
   try{
     // 1) SKU novo entra no grupo canonico
