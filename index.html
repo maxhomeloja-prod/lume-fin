@@ -531,6 +531,7 @@ tr:hover td{background:var(--surface2);}
           <div class="nav-dd-sep"></div>
           <button class="nav-dd-item" onclick="irPara('terceiros')">👥 Terceiros / Facções</button>
           <button class="nav-dd-item" onclick="irPara('precos-faccao')">💲 Preços de Facção</button>
+          <button class="nav-dd-item" onclick="irPara('custos-cpv')">🏷️ Custos (CPV)</button>
         </div>
       </div>
 
@@ -683,6 +684,54 @@ tr:hover td{background:var(--surface2);}
     </div>
 
     <!-- PREÇOS FACÇÃO -->
+    <div id="page-custos-cpv" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Custos (CPV)</div><div class="page-sub">Custo do produto vendido por SKU canônico, com vigência</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaCPV()">⬇ Planilha Modelo</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-cpv').click()">📂 Upload</button>
+          <input type="file" id="upload-cpv" accept=".csv,.txt" style="display:none" onchange="uploadCPVArquivo(this)">
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;padding:14px 20px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin:0;min-width:220px">
+            <label class="form-label">Empresa</label>
+            <select class="form-control" id="cpv-empresa" onchange="loadCustosCPV()"></select>
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:160px">
+            <label class="form-label">SKU</label>
+            <input class="form-control" type="text" id="cpv-filtro" placeholder="Filtrar por SKU..." oninput="renderCustosCPV()">
+          </div>
+          <div class="form-group" style="margin:0;min-width:150px">
+            <label class="form-label">Mostrar</label>
+            <select class="form-control" id="cpv-mostrar" onchange="renderCustosCPV()">
+              <option value="todos">Todos</option>
+              <option value="com">Só com CPV</option>
+              <option value="sem">Só sem CPV</option>
+            </select>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cpv-filtro').value='';document.getElementById('cpv-mostrar').value='todos';renderCustosCPV()">✕ Limpar</button>
+        </div>
+      </div>
+
+      <div id="cpv-resumo" style="margin-bottom:16px"></div>
+
+      <div id="cpv-preview" style="display:none;margin-bottom:16px"></div>
+
+      <div id="cpv-prog" style="display:none;margin-bottom:16px" class="card">
+        <div style="padding:14px 20px">
+          <div id="cpv-prog-txt" style="font-size:13px;margin-bottom:8px">Processando...</div>
+          <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div id="cpv-prog-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card"><div id="cpv-lista"></div></div>
+    </div>
+
     <div id="page-precos-faccao" class="page">
       <div class="page-header">
         <div><div class="page-title">Preços de Facção</div><div class="page-sub">Valor por SKU para pagamento de facção</div></div>
@@ -2325,7 +2374,7 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE
+    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -2953,6 +3002,272 @@ async function uploadPrecos(input){
   }
   txt.textContent=`✅ ${ok} preços importados`;
   setTimeout(()=>{prog.style.display='none';loadPrecosFaccao();},3000);
+}
+
+// ── CUSTOS (CPV) ───────────────────────────────────────────────
+// O CPV e por SKU CANONICO e tem VIGENCIA. Na tela e um valor unico; no banco
+// cada alteracao cria uma linha nova com a data de hoje, e a anterior continua
+// valendo para tras. Assim atualizar um custo nao mexe em fechamento passado —
+// foi o que o usuario pediu em 06/10/2026: "valor unico porem quando for
+// atualizado nao muda o historico, so muda do momento da alteracao para frente".
+//
+// O grupo canonico e correlacao_sku.sku_canonico. Medido: produtos tem 1 linha
+// na Maxhome e 0 nas outras (abandonada), enquanto 79% dos vendas.sku casam com
+// sku_canonico. SKU que vem na planilha e nao esta no grupo entra como linha
+// propria de correlacao_sku (sku_canonico = sku_venda, multiplicador 1).
+let _cpvCanon=[], _cpvAtual={}, _cpvHist={}, _cpvDiff=null;
+
+function cpvEmpresaSel(){
+  const sel=document.getElementById('cpv-empresa');
+  if(sel&&!sel.children.length){
+    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  }
+  return sel?sel.value:(EMPRESAS[0]?.id||null);
+}
+
+async function loadCustosCPV(){
+  if(!EMPRESAS.length){semEmpresaMsg('cpv-lista');return;}
+  const emp=cpvEmpresaSel();
+  if(!emp)return;
+  document.getElementById('cpv-preview').style.display='none';
+  _cpvDiff=null;
+  try{
+    // grupo canonico
+    const cor=await sbGet('correlacao_sku',`?empresa_id=eq.${emp}&select=sku_canonico&limit=20000`);
+    _cpvCanon=[...new Set((cor||[]).map(x=>String(x.sku_canonico||'').trim()).filter(Boolean))].sort();
+    // todo o historico de custo, para saber o vigente e quantas versoes existem
+    const cus=await sbGet('custos_sku',`?empresa_id=eq.${emp}&select=sku,cpv,vigencia_inicio&order=sku,vigencia_inicio.desc&limit=50000`);
+    _cpvAtual={};_cpvHist={};
+    const hoje=new Date().toISOString().slice(0,10);
+    (cus||[]).forEach(c=>{
+      const k=String(c.sku);
+      _cpvHist[k]=(_cpvHist[k]||0)+1;
+      // a lista vem ordenada por vigencia desc: o primeiro que nao e futuro e o vigente
+      if(_cpvAtual[k]===undefined && String(c.vigencia_inicio)<=hoje)
+        _cpvAtual[k]={cpv:parseFloat(c.cpv),vig:c.vigencia_inicio};
+    });
+    // SKU com custo mas fora do grupo canonico tambem aparece na lista
+    Object.keys(_cpvAtual).forEach(k=>{if(!_cpvCanon.includes(k))_cpvCanon.push(k);});
+    _cpvCanon.sort();
+    renderCustosCPV();
+    carregarCoberturaCPV(emp);
+  }catch(e){
+    document.getElementById('cpv-lista').innerHTML=
+      `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+// Quantos SKUs vendidos ainda nao tem custo. Vem do RPC de margem para nao
+// varrer a tabela de vendas no navegador.
+async function carregarCoberturaCPV(emp){
+  const el=document.getElementById('cpv-resumo');
+  const comCPV=Object.keys(_cpvAtual).length;
+  let extra='';
+  try{
+    const hoje=new Date();
+    const de=new Date(hoje.getFullYear(),hoje.getMonth()-2,1).toISOString().slice(0,10);
+    const r=await sbRpc('vendas_kpis_margem',{p_empresa_ids:[emp],p_de:de,p_ate:hoje.toISOString().slice(0,10)});
+    const d=Array.isArray(r)?r[0]:r;
+    if(d){
+      extra=`<div style="flex:1;min-width:190px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">SKUs vendidos sem CPV</div>
+        <div style="font-size:22px;font-weight:600;color:${(d.skus_sem_cpv>0)?'var(--amber,#d97706)':'var(--green)'}">${d.skus_sem_cpv||0}</div>
+        <div style="font-size:11px;color:var(--text3)">nos últimos 3 meses · ${(d.linhas_sem_cpv||0).toLocaleString('pt-BR')} linhas fora da margem</div></div>`;
+    }
+  }catch(e){ extra=`<div style="flex:1;min-width:190px;font-size:12px;color:var(--text3)">Cobertura indisponível: rode o SQL 12 primeiro.</div>`; }
+  el.innerHTML=`<div class="card" style="padding:14px 20px"><div style="display:flex;gap:24px;flex-wrap:wrap">
+    <div style="flex:1;min-width:150px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">SKUs canônicos</div>
+      <div style="font-size:22px;font-weight:600">${_cpvCanon.length}</div></div>
+    <div style="flex:1;min-width:150px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Com CPV</div>
+      <div style="font-size:22px;font-weight:600;color:var(--green)">${comCPV}</div>
+      <div style="font-size:11px;color:var(--text3)">${_cpvCanon.length?Math.round(comCPV/_cpvCanon.length*100):0}% do grupo</div></div>
+    ${extra}</div></div>`;
+}
+
+function renderCustosCPV(){
+  const f=(document.getElementById('cpv-filtro').value||'').trim().toUpperCase();
+  const modo=document.getElementById('cpv-mostrar').value;
+  let lista=_cpvCanon.filter(sku=>{
+    if(f&&!sku.toUpperCase().includes(f))return false;
+    const tem=_cpvAtual[sku]!==undefined;
+    if(modo==='com'&&!tem)return false;
+    if(modo==='sem'&&tem)return false;
+    return true;
+  });
+  const el=document.getElementById('cpv-lista');
+  if(!_cpvCanon.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Nenhum SKU canônico nesta empresa</div><div class="empty-sub">Suba uma planilha de CPV — os SKUs novos entram no grupo canônico.</div></div>';
+    return;
+  }
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Nenhum SKU com esse filtro</div></div>';return;}
+  const MAX=600;
+  const corte=lista.length>MAX;
+  if(corte)lista=lista.slice(0,MAX);
+  el.innerHTML='<table><thead><tr><th>SKU canônico</th><th style="text-align:right">CPV atual</th><th>Vigente desde</th><th style="text-align:center">Versões</th></tr></thead><tbody>'
+    +lista.map(sku=>{
+      const c=_cpvAtual[sku];
+      return `<tr><td style="font-weight:500">${sku}</td>
+        <td style="text-align:right;${c?'color:var(--green)':'color:var(--text3)'}">${c?fBRL(c.cpv):'—'}</td>
+        <td style="color:var(--text2);font-size:12px">${c?c.vig.split('-').reverse().join('/'):'—'}</td>
+        <td style="text-align:center;color:var(--text3);font-size:12px">${_cpvHist[sku]||0}</td></tr>`;
+    }).join('')+'</tbody></table>'
+    +(corte?`<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Mostrando ${MAX} de ${_cpvCanon.length}. Use o filtro para ver o resto.</div>`:'');
+}
+
+// ── planilha modelo: os canonicos DA EMPRESA, com o CPV atual preenchido ──
+// Separador ";" e decimal "," porque e o que o Excel em portugues espera. O BOM
+// no inicio faz o Excel reconhecer acentos. O parser aceita as duas formas.
+function downloadPlanilhaCPV(){
+  if(!_cpvCanon.length){alert('Carregue a aba primeiro — a planilha sai com os SKUs canônicos da empresa.');return;}
+  const emp=cpvEmpresaSel();
+  const nome=(EMPRESAS.find(e=>e.id===emp)?.nome||'empresa').replace(/[^\w]+/g,'_').toLowerCase();
+  const linhas=['sku;cpv'];
+  _cpvCanon.forEach(sku=>{
+    const c=_cpvAtual[sku];
+    linhas.push(`${sku};${c?String(c.cpv).replace('.',','):''}`);
+  });
+  const blob=new Blob(['﻿'+linhas.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=`lume_cpv_${nome}.csv`;a.click();URL.revokeObjectURL(url);
+}
+
+// parser que respeita campo entre aspas com separador dentro — o upload de
+// precos_faccao usa split(',') direto e quebra nesses casos.
+function cpvParseCSV(texto){
+  const t=texto.replace(/^﻿/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const sep=(t.split('\n')[0].match(/;/g)||[]).length>=(t.split('\n')[0].match(/,/g)||[]).length?';':',';
+  const linhas=[];let campo='',atual=[],aspas=false;
+  for(let i=0;i<t.length;i++){
+    const ch=t[i];
+    if(aspas){
+      if(ch==='"'&&t[i+1]==='"'){campo+='"';i++;}
+      else if(ch==='"')aspas=false;
+      else campo+=ch;
+    }else if(ch==='"')aspas=true;
+    else if(ch===sep){atual.push(campo);campo='';}
+    else if(ch==='\n'){atual.push(campo);linhas.push(atual);atual=[];campo='';}
+    else campo+=ch;
+  }
+  if(campo!==''||atual.length){atual.push(campo);linhas.push(atual);}
+  return linhas.filter(l=>l.some(c=>String(c).trim()!==''));
+}
+
+function cpvNumero(txt){
+  let v=String(txt||'').trim().replace(/\s|R\$/g,'');
+  if(!v)return null;
+  // "1.234,56" -> ponto e milhar;  "1234.56" -> ponto e decimal
+  if(v.includes(',')) v=v.replace(/\./g,'').replace(',','.');
+  const n=parseFloat(v);
+  return isFinite(n)?n:NaN;
+}
+
+async function uploadCPVArquivo(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  if(!_cpvCanon.length&&!Object.keys(_cpvAtual).length)await loadCustosCPV();
+  let linhas;
+  try{ linhas=cpvParseCSV(await file.text()); }
+  catch(e){ alert('Não foi possível ler o arquivo: '+e.message); return; }
+  if(linhas.length<2){alert('A planilha não tem linhas de dados.');return;}
+  // acha as colunas pelo cabecalho, em vez de assumir a ordem
+  const cab=linhas[0].map(c=>String(c).trim().toLowerCase());
+  let iSku=cab.findIndex(c=>c==='sku'||c.includes('sku'));
+  let iCpv=cab.findIndex(c=>c==='cpv'||c.includes('cpv')||c.includes('custo'));
+  if(iSku<0||iCpv<0){alert('A planilha precisa de uma coluna "sku" e uma coluna "cpv". Baixe a planilha modelo.');return;}
+  const novos=[],alterados=[],iguais=[],invalidos=[];
+  const vistos=new Set();
+  for(let i=1;i<linhas.length;i++){
+    const sku=String(linhas[i][iSku]||'').trim().toUpperCase();
+    const bruto=linhas[i][iCpv];
+    if(!sku)continue;
+    if(vistos.has(sku)){invalidos.push({sku,motivo:'SKU repetido na planilha',valor:bruto});continue;}
+    vistos.add(sku);
+    if(String(bruto||'').trim()===''){continue;}   // em branco = não mexer
+    const n=cpvNumero(bruto);
+    if(n===null||isNaN(n)){invalidos.push({sku,motivo:'CPV não é número',valor:bruto});continue;}
+    if(n<0){invalidos.push({sku,motivo:'CPV negativo',valor:bruto});continue;}
+    const novoNoGrupo=!_cpvCanon.includes(sku);
+    const at=_cpvAtual[sku];
+    if(at&&Math.abs(at.cpv-n)<0.00005)iguais.push({sku,cpv:n});
+    else if(novoNoGrupo)novos.push({sku,cpv:n,de:at?at.cpv:null});
+    else alterados.push({sku,cpv:n,de:at?at.cpv:null});
+  }
+  _cpvDiff={novos,alterados,iguais,invalidos};
+  renderPreviewCPV();
+}
+
+function renderPreviewCPV(){
+  const d=_cpvDiff;if(!d)return;
+  const box=document.getElementById('cpv-preview');
+  const hoje=new Date().toISOString().slice(0,10).split('-').reverse().join('/');
+  const amostra=(arr,cor)=>arr.slice(0,8).map(x=>
+    `<tr><td style="font-weight:500">${x.sku}</td><td style="text-align:right;color:var(--text3)">${x.de!=null?fBRL(x.de):'—'}</td><td style="text-align:right;color:${cor}">${fBRL(x.cpv)}</td></tr>`).join('');
+  const bloco=(titulo,arr,cor,nota)=>!arr.length?'':`
+    <div style="margin-top:14px"><div style="font-size:12px;font-weight:600;margin-bottom:6px">${titulo} <span style="color:var(--text3);font-weight:400">(${arr.length})</span></div>
+    ${nota?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">${nota}</div>`:''}
+    <table><thead><tr><th>SKU</th><th style="text-align:right">De</th><th style="text-align:right">Para</th></tr></thead><tbody>${amostra(arr,cor)}</tbody></table>
+    ${arr.length>8?`<div style="font-size:11px;color:var(--text3);padding:6px 4px">+ ${arr.length-8} não mostrados</div>`:''}</div>`;
+  const vaiGravar=d.novos.length+d.alterados.length;
+  box.style.display='';
+  box.innerHTML=`<div class="card" style="padding:16px 20px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-weight:600;margin-bottom:4px">Confira antes de aplicar</div>
+        <div style="font-size:12px;color:var(--text2)">Nada foi gravado ainda. Ao aplicar, ${vaiGravar} custo(s) passam a valer a partir de <b>${hoje}</b>; vendas anteriores continuam com o custo antigo.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('cpv-preview').style.display='none';_cpvDiff=null">Cancelar</button>
+        <button class="btn btn-primary btn-sm" ${vaiGravar?'':'disabled'} onclick="aplicarCPV()">Aplicar ${vaiGravar} alteração(ões)</button>
+      </div>
+    </div>
+    ${bloco('SKU novo — entra no grupo canônico',d.novos,'var(--green)','Estes SKUs não estão em correlacao_sku. Além do custo, será criada a linha de canônico (sku_canonico = sku_venda, multiplicador 1).')}
+    ${bloco('Custo alterado',d.alterados,'var(--accent)','O valor anterior continua valendo para vendas até ontem.')}
+    ${d.iguais.length?`<div style="margin-top:14px;font-size:12px;color:var(--text3)">${d.iguais.length} SKU(s) com o mesmo valor — serão ignorados.</div>`:''}
+    ${d.invalidos.length?`<div style="margin-top:14px"><div style="font-size:12px;font-weight:600;color:var(--red,#dc2626);margin-bottom:6px">Recusados (${d.invalidos.length})</div>
+      <table><thead><tr><th>SKU</th><th>Valor</th><th>Motivo</th></tr></thead><tbody>${d.invalidos.slice(0,10).map(x=>`<tr><td>${x.sku}</td><td style="color:var(--text3)">${x.valor}</td><td style="color:var(--red,#dc2626);font-size:12px">${x.motivo}</td></tr>`).join('')}</tbody></table></div>`:''}
+  </div>`;
+}
+
+async function aplicarCPV(){
+  const d=_cpvDiff;if(!d)return;
+  const emp=cpvEmpresaSel();if(!emp){alert('Selecione a empresa.');return;}
+  const prog=document.getElementById('cpv-prog'),txt=document.getElementById('cpv-prog-txt'),bar=document.getElementById('cpv-prog-bar');
+  document.getElementById('cpv-preview').style.display='none';
+  prog.style.display='';bar.style.width='5%';txt.textContent='Gravando...';
+  const hoje=new Date().toISOString().slice(0,10);
+  const erros=[];
+  try{
+    // 1) SKU novo entra no grupo canonico
+    if(d.novos.length){
+      txt.textContent=`Adicionando ${d.novos.length} SKU(s) ao grupo canônico...`;
+      const corpo=d.novos.map(x=>({empresa_id:emp,sku_canonico:x.sku,sku_venda:x.sku,multiplicador:1}));
+      for(let i=0;i<corpo.length;i+=200){
+        try{ await sbPost('correlacao_sku',corpo.slice(i,i+200)); }
+        catch(e){ erros.push('grupo canônico: '+e.message); }
+      }
+      bar.style.width='35%';
+    }
+    // 2) os custos, com vigencia de hoje. merge-duplicates para reenviar a
+    //    planilha no mesmo dia corrigir em vez de falhar na constraint unica.
+    const custos=[...d.novos,...d.alterados].map(x=>({empresa_id:emp,sku:x.sku,cpv:x.cpv,vigencia_inicio:hoje}));
+    txt.textContent=`Gravando ${custos.length} custo(s)...`;
+    for(let i=0;i<custos.length;i+=200){
+      const fatia=custos.slice(i,i+200);
+      const r=await fetch(`${SB_URL}/rest/v1/custos_sku?on_conflict=empresa_id,sku,vigencia_inicio`,{
+        method:'POST',
+        headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',
+                 Prefer:'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify(fatia)});
+      if(!r.ok){ erros.push('custos: '+(await r.text()).substring(0,160)); }
+      bar.style.width=(35+Math.round((i+fatia.length)/custos.length*60))+'%';
+    }
+    bar.style.width='100%';
+    txt.innerHTML=erros.length
+      ? `⚠️ Concluído com ${erros.length} erro(s):<br><span style="font-size:11px;color:var(--text3)">${erros.slice(0,3).join('<br>')}</span>`
+      : `✅ ${custos.length} custo(s) gravados, vigentes desde ${hoje.split('-').reverse().join('/')}`;
+  }catch(e){
+    txt.textContent='❌ '+e.message;
+  }
+  _cpvDiff=null;
+  setTimeout(()=>{prog.style.display='none';loadCustosCPV();},erros.length?6000:2500);
 }
 
 // ── OPs ────────────────────────────────────────────────────────
