@@ -899,6 +899,16 @@ tr:hover td{background:var(--surface2);}
         <div class="kpi"><div class="kpi-label">Unidades</div><div class="kpi-value" id="ven-uni">—</div></div>
         <div class="kpi"><div class="kpi-label">Ticket Médio</div><div class="kpi-value" id="ven-tkt">—</div></div>
       </div>
+      <!-- Margem de contribuicao. Linha propria para nao quebrar o grid de 5.
+           Cobre SO as linhas que tem liquido E CPV cadastrado; o subtitulo diz
+           quanto da base entrou, porque margem calculada sobre 4% da base
+           enganaria mais que informar nada. -->
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">CPV</div><div class="kpi-value" id="ven-cpv">—</div><div class="kpi-sub" id="ven-cpv-sub">—</div></div>
+        <div class="kpi"><div class="kpi-label">Margem de Contribuição</div><div class="kpi-value" id="ven-mc">—</div><div class="kpi-sub" id="ven-mc-sub">—</div></div>
+        <div class="kpi"><div class="kpi-label">MCB</div><div class="kpi-value" id="ven-mcb">—</div><div class="kpi-sub">sobre a receita de varejo</div></div>
+        <div class="kpi"><div class="kpi-label">MCL</div><div class="kpi-value" id="ven-mcl">—</div><div class="kpi-sub">sobre a receita líquida</div></div>
+      </div>
       <div class="card"><div class="tbl-wrap" id="ven-table"></div></div>
       <div id="ven-paginacao" style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px;color:var(--text2);font-size:13px"></div>
     </div>
@@ -6321,6 +6331,67 @@ function celulaLiquido(v,bruto){
        + (taxa!==null ? '<div style="font-size:10px;color:var(--text2)">−'+taxa.toFixed(1)+'%</div>' : '');
 }
 
+// ── CPV nas linhas de venda ────────────────────────────────────────────
+// O custo tem VIGENCIA: a linha resolve para o custo que valia na data do
+// pedido, nao para o ultimo cadastrado. Por isso o cache guarda todas as
+// versoes por SKU, em ordem decrescente de vigencia.
+//
+// Resolver no navegador em vez de no SQL e deliberado: a tabela traz 100 linhas
+// por pagina e a empresa tem algumas centenas de SKUs, entao uma consulta por
+// pagina resolve tudo. Os CARDS, que somam o periodo inteiro, usam o RPC —
+// somar no front daria o total de uma pagina.
+let _cpvVendas={};
+
+async function carregarCPVParaVendas(empIds){
+  _cpvVendas={};
+  if(!empIds||!empIds.length)return;
+  try{
+    const r=await sbGet('custos_sku',`?empresa_id=in.(${empIds.join(',')})`
+      +`&select=empresa_id,sku,cpv,vigencia_inicio&order=vigencia_inicio.desc&limit=50000`);
+    (r||[]).forEach(c=>{
+      const e=String(c.empresa_id),k=String(c.sku);
+      (_cpvVendas[e]=_cpvVendas[e]||{});
+      (_cpvVendas[e][k]=_cpvVendas[e][k]||[]).push({vig:String(c.vigencia_inicio),cpv:parseFloat(c.cpv)});
+    });
+  }catch(e){ /* sem a tabela ainda: as colunas ficam vazias, nao quebram */ }
+}
+
+// custo da LINHA = custo unitario vigente x quantidade.
+// quantidade esta em unidades canonicas (uma linha de KIT_10 tem quantidade 10),
+// entao nao ha ajuste de kit a fazer.
+function cpvDaLinha(v){
+  const porEmp=_cpvVendas[String(v.empresa_id)];
+  if(!porEmp)return null;
+  const vers=porEmp[String(v.sku)];
+  if(!vers||!vers.length)return null;
+  const d=String(v.data_pedido||'').slice(0,10);
+  const vig=vers.find(x=>x.vig<=d);
+  if(!vig)return null;                       // custo cadastrado DEPOIS desta venda
+  const qt=parseFloat(v.quantidade)||1;
+  return vig.cpv*qt;
+}
+
+// MCB = (liquido - cpv) / varejo    ·    MCL = (liquido - cpv) / liquido
+// Falta liquido OU falta CPV -> celula vazia, nunca zero: zero seria lido como
+// "margem zero" quando o que existe e ausencia de dado.
+function celulasMargem(v,totalExibir){
+  const cpv=cpvDaLinha(v);
+  const liq=(v.receita_liquida===null||v.receita_liquida===undefined)?null:parseFloat(v.receita_liquida);
+  const vazio='<td style="text-align:right;color:var(--text3)">—</td>';
+  if(cpv===null)return vazio+vazio+vazio;
+  const cCpv='<td style="text-align:right;color:var(--text2)">'+fBRL(cpv)+'</td>';
+  if(liq===null)return cCpv
+    +'<td style="text-align:right;color:var(--text3)" title="Aguardando o valor líquido do marketplace">—</td>'
+    +'<td style="text-align:right;color:var(--text3)" title="Aguardando o valor líquido do marketplace">—</td>';
+  const mc=liq-cpv;
+  const varejo=parseFloat(totalExibir)||0;
+  const cor=m=>m<-0.005?'var(--red,#dc2626)':(m>0.005?'var(--green)':'var(--text2)');
+  const pct=(num,den)=>den>0?((num/den*100).toFixed(1)+'%'):'—';
+  return cCpv
+    +'<td style="text-align:right;font-weight:500;color:'+cor(mc)+'">'+pct(mc,varejo)+'</td>'
+    +'<td style="text-align:right;font-weight:500;color:'+cor(mc)+'">'+pct(mc,liq)+'</td>';
+}
+
 async function loadVendas(resetarPagina=true){
   if(!EMPRESAS.length){semEmpresaMsg('ven-table');return;}
   document.getElementById('ven-table')?.innerHTML && (document.getElementById('ven-table').innerHTML='<div class="loading"><div class="spinner"></div> Carregando vendas...</div>');
@@ -6396,6 +6467,49 @@ async function loadVendas(resetarPagina=true){
       if(elS){ elS.textContent='erro ao calcular'; elS.title=String(e&&e.message||e); }
     });
 
+    // Margem de contribuicao: RPC proprio, agregado no banco pelo mesmo motivo
+    // do card de liquido. Soma so as linhas que tem liquido E CPV.
+    sbRpc('vendas_kpis_margem',{
+      p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate,
+      p_canal:canal||null,p_canais:canaisSel||null,p_sku:sku||null,p_cliente:clienteFiltro||null
+    }).then(res=>{
+      const q=Array.isArray(res)?res[0]:res;
+      const eC=document.getElementById('ven-cpv'),eCs=document.getElementById('ven-cpv-sub');
+      const eM=document.getElementById('ven-mc'),eMs=document.getElementById('ven-mc-sub');
+      const eB=document.getElementById('ven-mcb'),eL=document.getElementById('ven-mcl');
+      if(!eC)return;
+      const nMg=parseInt(q&&q.linhas_na_margem)||0;
+      if(!q||!nMg){
+        eC.textContent='—';eM.textContent='—';eB.textContent='—';eL.textContent='—';
+        const semCpv=parseInt(q&&q.skus_sem_cpv)||0;
+        if(eCs)eCs.textContent=semCpv?semCpv+' SKU(s) sem CPV cadastrado':'nenhuma linha com CPV e líquido';
+        if(eMs)eMs.textContent='cadastre o CPV em Cadastros → Custos';
+        return;
+      }
+      const mc=parseFloat(q.margem_contrib)||0;
+      const semCpv=parseInt(q.linhas_sem_cpv)||0, semLiq=parseInt(q.linhas_sem_liquido)||0;
+      const base=nMg+semCpv+semLiq;
+      eC.textContent=fBRL(q.cpv_total);
+      eM.textContent=fBRL(mc);
+      eM.className='kpi-value '+(mc<0?'red':(mc>0?'green':''));
+      eB.textContent=(q.mcb_pct===null?'—':parseFloat(q.mcb_pct).toFixed(1)+'%');
+      eL.textContent=(q.mcl_pct===null?'—':parseFloat(q.mcl_pct).toFixed(1)+'%');
+      const cob=base?(nMg/base*100):0;
+      const falta=[];
+      if(semCpv)falta.push(semCpv.toLocaleString('pt-BR')+' sem CPV');
+      if(semLiq)falta.push(semLiq.toLocaleString('pt-BR')+' sem líquido');
+      if(eCs){
+        eCs.textContent=cob>=99.5?'todas as linhas do período':cob.toFixed(1)+'% das linhas';
+        eCs.title=falta.length?'Fora do cálculo: '+falta.join(' · ')
+          +(parseInt(q.skus_sem_cpv)?' · '+q.skus_sem_cpv+' SKU(s) a cadastrar':'')
+          :'todas as linhas do período têm CPV e líquido';
+      }
+      if(eMs)eMs.textContent='receita líquida '+fBRL(q.receita_liquida)+' − CPV';
+    }).catch(e=>{
+      const eCs=document.getElementById('ven-cpv-sub');
+      if(eCs){eCs.textContent='rode o SQL 12 primeiro';eCs.title=String(e&&e.message||e);}
+    });
+
     // Canais distintos do período (para popular o filtro), via RPC — não depende da página atual
     sbRpc('vendas_canais_distintos',{p_empresa_ids:_empIdsVen,p_de:de,p_ate:ate}).then(canais=>{
       _venCanaisDisponiveis=canais.map(c=>c.marketplace).filter(Boolean);
@@ -6412,9 +6526,13 @@ async function loadVendas(resetarPagina=true){
     const qBase='?empresa_id=in.('+_empIdsVen.join(',')+')'+qFiltros+'&order=data_pedido.desc';
     const{rows:_vendas,total}=await sbGetPaginado('vendas',qBase,_venPaginaAtual*VEN_PAGE_SIZE,VEN_PAGE_SIZE);
 
+    await carregarCPVParaVendas(_empIdsVen);
     const hdr='<table><thead><tr><th>Nº Pedido</th><th>Data</th><th>Canal</th><th>SKU</th><th>Cliente</th>'
       +'<th style="text-align:right">Qtd</th><th style="text-align:right">Total</th>'
       +'<th style="text-align:right">Líquido</th>'
+      +'<th style="text-align:right">CPV</th>'
+      +'<th style="text-align:right" title="(Receita líquida − CPV) ÷ Receita de varejo">MCB</th>'
+      +'<th style="text-align:right" title="(Receita líquida − CPV) ÷ Receita líquida">MCL</th>'
       +'<th></th></tr></thead><tbody>';
     const trows=_vendas.map(v=>{
       const totalExibir=v.valor_total||v.valor_bruto||v.valor_unitario*v.quantidade;  /* idem: mercadoria primeiro */
@@ -6430,6 +6548,7 @@ async function loadVendas(resetarPagina=true){
         +'<td style="text-align:right">'+fN(v.quantidade)+'</td>'
         +'<td style="text-align:right;color:var(--green);font-weight:500">'+fBRL(totalExibir)+'</td>'
         +'<td style="text-align:right">'+celulaLiquido(v,totalExibir)+'</td>'
+        +celulasMargem(v,totalExibir)
         +'<td style="display:flex;gap:4px">'+btnImprimir+'<button class="btn btn-danger btn-sm" onclick="excluirVenda(\''+v.id+'\')">✕</button></td>'
         +'</tr>';
     }).join('');
