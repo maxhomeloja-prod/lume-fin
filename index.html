@@ -203,6 +203,11 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-
 .seg-base .seg-btn+.seg-btn{border-left:1px solid var(--border)}
 .seg-base .seg-btn:hover{color:var(--text2)}
 .seg-base .seg-btn.active{background:var(--accent);color:#fff}
+/* abas do portal da faccao */
+.fac-tab{appearance:none;border:0;background:transparent;color:var(--text3);font:inherit;font-size:13px;
+  font-weight:600;padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.fac-tab:hover{color:var(--text2)}
+.fac-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .btn-amber{background:var(--amber-bg);color:var(--amber);border-color:transparent;}
 
 /* ── BADGES ── */
@@ -412,7 +417,54 @@ tr:hover td{background:var(--surface2);}
       <button class="btn btn-ghost btn-sm" onclick="logoutFaccao()">Sair</button>
     </div>
   </div>
-  <div style="padding:20px;flex:1">
+  <div style="padding:0 20px;display:flex;gap:2px;border-bottom:1px solid var(--border);background:var(--surface)">
+    <button class="fac-tab active" data-fac="entregar"   onclick="irFaccao('entregar')">Entregar</button>
+    <button class="fac-tab"        data-fac="entregas"   onclick="irFaccao('entregas')">Minhas entregas</button>
+    <button class="fac-tab"        data-fac="pagamentos" onclick="irFaccao('pagamentos')">A receber</button>
+  </div>
+
+  <!-- MINHAS ENTREGAS (somente leitura) -->
+  <div id="fac-sec-entregas" style="display:none;padding:20px;flex:1">
+    <div class="card" style="margin-bottom:16px;padding:14px 20px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0"><label class="form-label">De</label>
+          <input class="form-control" type="date" id="fac-ent-de" onchange="carregarEntregasFaccao()"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Até</label>
+          <input class="form-control" type="date" id="fac-ent-ate" onchange="carregarEntregasFaccao()"></div>
+        <div class="form-group" style="margin:0;flex:1;min-width:150px"><label class="form-label">SKU</label>
+          <input class="form-control" type="text" id="fac-ent-sku" placeholder="Filtrar..." oninput="renderEntregasFaccao()"></div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fac-ent-de').value='';document.getElementById('fac-ent-ate').value='';document.getElementById('fac-ent-sku').value='';carregarEntregasFaccao()">✕ Limpar</button>
+      </div>
+    </div>
+    <div id="fac-ent-kpis" style="margin-bottom:16px"></div>
+    <div class="card"><div id="fac-ent-lista"></div></div>
+  </div>
+
+  <!-- A RECEBER (somente leitura) -->
+  <div id="fac-sec-pagamentos" style="display:none;padding:20px;flex:1">
+    <div class="card" style="margin-bottom:16px;padding:14px 20px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0"><label class="form-label">Vencimento de</label>
+          <input class="form-control" type="date" id="fac-pag-de" onchange="carregarPagamentosFaccao()"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Até</label>
+          <input class="form-control" type="date" id="fac-pag-ate" onchange="carregarPagamentosFaccao()"></div>
+        <div class="form-group" style="margin:0;min-width:150px"><label class="form-label">Situação</label>
+          <select class="form-control" id="fac-pag-status" onchange="carregarPagamentosFaccao()">
+            <option value="">Todas</option>
+            <option value="EM_ABERTO">Em aberto</option>
+            <option value="PAGO_RECEBIDO">Pago</option>
+          </select></div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fac-pag-de').value='';document.getElementById('fac-pag-ate').value='';document.getElementById('fac-pag-status').value='';carregarPagamentosFaccao()">✕ Limpar</button>
+      </div>
+    </div>
+    <div id="fac-pag-kpis" style="margin-bottom:16px"></div>
+    <div class="card"><div id="fac-pag-lista"></div></div>
+    <div style="font-size:11px;color:var(--text3);padding:10px 2px">
+      Esta tela é somente leitura. A baixa de pagamento é feita pela Maxhome.
+    </div>
+  </div>
+
+  <div id="fac-sec-entregar" style="padding:20px;flex:1">
     <!-- Busca SKU -->
     <div class="card mb16">
       <div class="card-title">Registrar Entrega</div>
@@ -3950,44 +4002,12 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
 }
 
 async function loadPagamentosOP(){
-  // Modo facção: mostrar próprios lançamentos
-  if(FACCAO_LOGADO){
-    const el=document.getElementById('pagamentos-op-lista');
-    if(!el)return;
-    el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
-    try{
-      const fpDe=document.getElementById('fpag-de')?.value;
-      const fpAte=document.getElementById('fpag-ate')?.value;
-      const fpStatus=document.getElementById('fpag-status')?.value;
-      let qFac='?fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome)+'&tipo_lancamento=eq.PAGAR&order=data_vencimento.desc&limit=200';
-      if(fpDe)qFac+='&data_vencimento=gte.'+fpDe;
-      if(fpAte)qFac+='&data_vencimento=lte.'+fpAte;
-      if(fpStatus)qFac+='&situacao=eq.'+fpStatus;
-      const lans=await sbGet('lancamentos_externos',qFac);
-      if(!lans.length){
-        el.innerHTML='<div class="empty"><div class="empty-icon">💰</div><div class="empty-title">Nenhum pagamento encontrado</div></div>';
-        return;
-      }
-      const total=lans.reduce((s,l)=>s+l.valor,0);
-      const pago=lans.filter(l=>l.situacao==='PAGO_RECEBIDO').reduce((s,l)=>s+l.valor,0);
-      const aberto=lans.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+l.valor,0);
-      el.innerHTML=
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">'+
-        '<div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value">'+fBRL(total)+'</div></div>'+
-        '<div class="kpi"><div class="kpi-label">Pago</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'+
-        '<div class="kpi"><div class="kpi-label">Em Aberto</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'+
-        '</div>'+
-        '<table><thead><tr><th>Data Entrega</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th></tr></thead><tbody>'+
-        lans.map(l=>'<tr>'+
-          '<td>'+fDate(l.data||l.criado_em?.split('T')[0])+'</td>'+
-          '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'+
-          '<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'+
-          '<td><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'+(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'+
-          '</tr>').join('')+
-        '</tbody></table>';
-    }catch(e){el.innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
-    return;
-  }
+  // Esta e a tela do DONO. O portal da faccao tem a propria aba "A receber"
+  // (carregarPagamentosFaccao), que renderiza dentro de #faccao-view.
+  // Havia aqui um ramo "if(FACCAO_LOGADO)" que escrevia em #pagamentos-op-lista --
+  // elemento que vive dentro de #app, e #app fica display:none para faccao. Era
+  // codigo inalcancavel, e duas implementacoes da mesma coisa foi exatamente o que
+  // manteve o defeito de migracao vivo em duas copias ate 07/10/2026.
   // Modo empresa: mostrar todos os lançamentos de facção
   if(!EMPRESAS.length){semEmpresaMsg('pagamentos-op-lista');return;}
   try{
@@ -7614,12 +7634,163 @@ async function loginFaccao(){
     await iniciarFaccaoView();
   }catch(e){err.textContent=e.message;}
 }
+// ══ PORTAL DA FACCAO — ABAS DE LEITURA ═══════════════════════════════════
+//
+// A facção loga com token proprio do Supabase, entao QUEM DECIDE o que ela le e a
+// RLS, nunca esta tela: o token funciona direto contra a API REST, e o que o front
+// esconde o devtools busca. "Somente leitura" aqui e conforto visual; a trava real
+// sao as politicas (07/10/2026):
+//   · entregas_op          -> "terceiro ve entrega", SELECT por terceiro_id
+//   · lancamentos_externos -> "terceiro ve lancamento", SELECT por fornecedor
+// Por isso estas funcoes nao filtram "por seguranca" -- filtram por ergonomia, e o
+// servidor ja devolveria so o que e dela de qualquer jeito.
+//
+// Nao ha nenhum caminho de escrita aqui: nem botao, nem sbPost, nem sbPatch.
+let _facEntregas=[];
+
+function irFaccao(sec){
+  ['entregar','entregas','pagamentos'].forEach(x=>{
+    const el=document.getElementById('fac-sec-'+x);
+    if(el)el.style.display=(x===sec)?'':'none';
+  });
+  document.querySelectorAll('.fac-tab').forEach(b=>b.classList.toggle('active',b.dataset.fac===sec));
+  if(sec==='entregas')carregarEntregasFaccao();
+  if(sec==='pagamentos')carregarPagamentosFaccao();
+}
+
+// ── MINHAS ENTREGAS ──────────────────────────────────────────────────────
+async function carregarEntregasFaccao(){
+  if(!FACCAO_LOGADO)return;
+  const el=document.getElementById('fac-ent-lista');
+  if(!el)return;
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  const de=document.getElementById('fac-ent-de')?.value;
+  const ate=document.getElementById('fac-ent-ate')?.value;
+  let q='?terceiro_id=eq.'+FACCAO_LOGADO.id
+       +'&select=id,data_entrega,sku,quantidade,valor_total,op_id,observacao,comprovante_html,criado_em'
+       +'&order=data_entrega.desc,criado_em.desc&limit=1000';
+  if(de) q+='&data_entrega=gte.'+de;
+  if(ate)q+='&data_entrega=lte.'+ate;
+  try{
+    _facEntregas=await sbGet('entregas_op',q);
+  }catch(e){
+    // sem a politica "terceiro ve entrega" a RLS devolve vazio ou erro; dizer qual e
+    el.innerHTML='<div style="padding:14px;font-size:13px;color:var(--amber)">'
+      +'Não foi possível ler suas entregas. Se isso persistir, avise a Maxhome: '
+      +'falta a permissão de leitura de entregas para facção.</div>';
+    document.getElementById('fac-ent-kpis').innerHTML='';
+    return;
+  }
+  // numero da OP, para a facção reconhecer o pedido
+  const opIds=[...new Set(_facEntregas.map(e=>e.op_id).filter(Boolean))];
+  let opMap={};
+  if(opIds.length){
+    try{
+      const ops=await sbGet('ordens_producao','?id=in.('+opIds.join(',')+')&select=id,numero,sku');
+      (ops||[]).forEach(o=>{opMap[o.id]=o;});
+    }catch(e){}
+  }
+  _facEntregas.forEach(e=>{e._op=opMap[e.op_id]||null;});
+  renderEntregasFaccao();
+}
+
+function renderEntregasFaccao(){
+  const el=document.getElementById('fac-ent-lista');
+  const kp=document.getElementById('fac-ent-kpis');
+  if(!el)return;
+  const f=(document.getElementById('fac-ent-sku')?.value||'').trim().toUpperCase();
+  const lista=_facEntregas.filter(e=>!f
+    ||String(e.sku||'').toUpperCase().includes(f)
+    ||String(e._op&&e._op.numero||'').toUpperCase().includes(f));
+
+  const pecas=lista.reduce((s,e)=>s+(parseFloat(e.quantidade)||0),0);
+  const valor=lista.reduce((s,e)=>s+(parseFloat(e.valor_total)||0),0);
+  if(kp)kp.innerHTML=
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">'
+    +'<div class="kpi"><div class="kpi-label">Peças entregues</div><div class="kpi-value blue">'+fN(pecas)+'</div></div>'
+    +'<div class="kpi"><div class="kpi-label">Valor entregue</div><div class="kpi-value green">'+fBRL(valor)+'</div></div>'
+    +'<div class="kpi"><div class="kpi-label">Entregas</div><div class="kpi-value">'+fN(lista.length)+'</div></div>'
+    +'</div>';
+
+  if(!lista.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">📦</div>'
+      +'<div class="empty-title">Nenhuma entrega no período</div></div>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>Data</th><th>OP</th><th>SKU</th>'
+    +'<th style="text-align:right">Qtd</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>'
+    +lista.map(e=>'<tr>'
+      +'<td>'+fDate(e.data_entrega)+'</td>'
+      +'<td style="color:var(--text2)">'+((e._op&&e._op.numero)||'—')+'</td>'
+      +'<td style="font-weight:500">'+(e.sku||'—')+'</td>'
+      +'<td style="text-align:right">'+fN(e.quantidade)+'</td>'
+      +'<td style="text-align:right;color:var(--green)">'+fBRL(e.valor_total)+'</td>'
+      +'<td style="text-align:right">'
+        +(e.comprovante_html
+          ?'<button class="btn btn-secondary btn-sm" onclick="verComprovante(\''+e.id+'\',\''
+             +String(FACCAO_LOGADO.nome||'').replace(/'/g,"\\'")+'\',\''+e.data_entrega+'\')">Comprovante</button>'
+          :'<span style="font-size:11px;color:var(--text3)">sem comprovante</span>')
+      +'</td>'
+    +'</tr>').join('')+'</tbody></table>';
+}
+
+// ── A RECEBER ────────────────────────────────────────────────────────────
+// Escopado no servidor por "terceiro ve lancamento": fornecedor IN (nomes dos
+// terceiros deste usuario). O filtro daqui e o mesmo, por clareza da tela.
+async function carregarPagamentosFaccao(){
+  if(!FACCAO_LOGADO)return;
+  const el=document.getElementById('fac-pag-lista');
+  const kp=document.getElementById('fac-pag-kpis');
+  if(!el)return;
+  el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+  const de=document.getElementById('fac-pag-de')?.value;
+  const ate=document.getElementById('fac-pag-ate')?.value;
+  const st=document.getElementById('fac-pag-status')?.value;
+  let q='?fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome||'')
+       +'&tipo_lancamento=eq.PAGAR'
+       +'&select=id,data,data_vencimento,descricao,valor,situacao'
+       +'&order=data_vencimento.desc&limit=500';
+  if(de) q+='&data_vencimento=gte.'+de;
+  if(ate)q+='&data_vencimento=lte.'+ate;
+  if(st) q+='&situacao=eq.'+st;
+  let lans=[];
+  try{ lans=await sbGet('lancamentos_externos',q); }
+  catch(e){
+    el.innerHTML='<div style="padding:14px;font-size:13px;color:var(--amber)">Não foi possível carregar: '+(e.message||e)+'</div>';
+    if(kp)kp.innerHTML='';
+    return;
+  }
+  const aberto=lans.filter(l=>l.situacao==='EM_ABERTO').reduce((s,l)=>s+(parseFloat(l.valor)||0),0);
+  const pago  =lans.filter(l=>l.situacao==='PAGO_RECEBIDO').reduce((s,l)=>s+(parseFloat(l.valor)||0),0);
+  if(kp)kp.innerHTML=
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">'
+    +'<div class="kpi"><div class="kpi-label">A receber</div><div class="kpi-value amber">'+fBRL(aberto)+'</div></div>'
+    +'<div class="kpi"><div class="kpi-label">Já recebido</div><div class="kpi-value green">'+fBRL(pago)+'</div></div>'
+    +'<div class="kpi"><div class="kpi-label">Total</div><div class="kpi-value">'+fBRL(aberto+pago)+'</div></div>'
+    +'</div>';
+  if(!lans.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">💰</div>'
+      +'<div class="empty-title">Nenhum lançamento no período</div></div>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>Vencimento</th><th>Descrição</th>'
+    +'<th style="text-align:right">Valor</th><th style="text-align:center">Situação</th></tr></thead><tbody>'
+    +lans.map(l=>'<tr>'
+      +'<td>'+fDate(l.data_vencimento||l.data)+'</td>'
+      +'<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'
+      +'<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'
+      +'<td style="text-align:center"><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'
+        +(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'
+    +'</tr>').join('')+'</tbody></table>';
+}
+
 async function iniciarFaccaoView(){
   if(!FACCAO_LOGADO)return;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='none';
   const fv=document.getElementById('faccao-view');
   if(fv)fv.style.display='flex';
+  irFaccao('entregar');
   await carregarOPsFaccao();
 }
 function logoutFaccao(){
