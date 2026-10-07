@@ -539,6 +539,8 @@ tr:hover td{background:var(--surface2);}
           <button class="nav-dd-item" onclick="irPara('terceiros')">👥 Terceiros / Facções</button>
           <button class="nav-dd-item" onclick="irPara('precos-faccao')">💲 Preços de Facção</button>
           <button class="nav-dd-item" onclick="irPara('custos-cpv')">🏷️ Custos (CPV)</button>
+          <button class="nav-dd-item" onclick="irPara('canais')">🛒 Canais e Tabelas de Preço</button>
+          <button class="nav-dd-item" onclick="irPara('clientes')">🧾 Clientes</button>
         </div>
       </div>
 
@@ -747,6 +749,66 @@ tr:hover td{background:var(--surface2);}
       </div>
 
       <div class="card"><div id="cpv-lista"></div></div>
+    </div>
+
+    <!-- CANAIS E TABELAS DE PRECO -->
+    <div id="page-canais" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Canais e Tabelas de Preço</div>
+             <div class="page-sub">O canal da venda manual sai desta lista, e o preço sai da tabela dele</div></div>
+        <div class="form-group" style="margin:0;min-width:220px">
+          <label class="form-label">Empresa</label>
+          <select class="form-control" id="can-empresa" onchange="loadCanais()"></select>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="card-title" style="margin:0">Canais</div>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalCanal()">+ Novo canal</button>
+        </div>
+        <div id="can-lista"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <div class="card-title" style="margin:0">Tabelas de preço</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="form-control" id="tab-sel" style="min-width:200px;height:32px;font-size:12px" onchange="renderTabelaItens()"></select>
+            <button class="btn btn-primary btn-sm" onclick="abrirModalTabela()">+ Nova tabela</button>
+            <button class="btn btn-secondary btn-sm" onclick="downloadPlanilhaTabela()">⬇ Planilha</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('upload-tabela').click()">📂 Upload</button>
+            <input type="file" id="upload-tabela" accept=".csv,.txt" style="display:none" onchange="uploadTabelaArquivo(this)">
+          </div>
+        </div>
+        <div id="tab-prog" style="display:none;margin-bottom:12px">
+          <div id="tab-prog-txt" style="font-size:13px;margin-bottom:8px">Processando...</div>
+          <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div id="tab-prog-bar" style="height:100%;width:0%;background:var(--accent);transition:width .2s"></div>
+          </div>
+        </div>
+        <div id="tab-preview" style="display:none;margin-bottom:12px"></div>
+        <div id="tab-itens"></div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="page-clientes" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Clientes</div>
+             <div class="page-sub">O cliente da venda manual sai desta lista. Tabela de preço só quando ela sobrepõe a do canal</div></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div class="form-group" style="margin:0;min-width:220px">
+            <label class="form-label">Empresa</label>
+            <select class="form-control" id="cli-empresa" onchange="loadClientes()"></select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="abrirModalCliente()">+ Novo cliente</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px;padding:14px 20px">
+        <input class="form-control" type="text" id="cli-filtro" placeholder="Filtrar por nome..." oninput="renderClientes()">
+      </div>
+      <div class="card"><div id="cli-lista"></div></div>
     </div>
 
     <div id="page-precos-faccao" class="page">
@@ -1545,10 +1607,11 @@ tr:hover td{background:var(--surface2);}
   <div class="modal modal-lg"><div class="modal-title">Nova Venda</div><div class="modal-sub">Lançamento manual</div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Data</label><input class="form-control" type="date" id="venda-data"></div>
-      <div class="form-group"><label class="form-label">Canal</label><input class="form-control" type="text" id="venda-canal" placeholder="Shopee, Loja, etc."></div>
+      <div class="form-group"><label class="form-label">Canal</label><select class="form-control" id="venda-canal" onchange="onVendaCanalCliente()"></select></div>
     </div>
     <div class="form-group" id="venda-empresa-wrap" style="display:none"><label class="form-label">Empresa</label><select class="form-control" id="venda-empresa" onchange="onVendaEmpresaChange()"></select><div style="font-size:11px;color:var(--text3);margin-top:3px">A lista de SKUs canônicos é a desta empresa.</div></div>
-    <div class="form-group"><label class="form-label">Cliente (opcional)</label><input class="form-control" type="text" id="venda-cliente" list="venda-cli-list" oninput="sugerirPrecoUltimaVenda()"><datalist id="venda-cli-list"></datalist></div>
+    <div class="form-group"><label class="form-label">Cliente (opcional)</label><select class="form-control" id="venda-cliente" onchange="onVendaCanalCliente()"></select></div>
+    <div id="venda-tabela-info" style="font-size:11px;color:var(--text3);margin:-6px 0 10px;min-height:14px"></div>
 
     <div style="border-top:1px solid var(--border);margin:14px 0 10px;padding-top:10px">
       <div class="card-title" style="margin:0 0 8px">Itens da venda</div>
@@ -1556,16 +1619,18 @@ tr:hover td{background:var(--surface2);}
       <div class="form-row">
         <div class="form-group" style="flex:2"><label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>SKU canônico</span><a href="javascript:void(0)" onclick="abrirNovoCanonico()" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;text-transform:none;letter-spacing:0">+ Novo SKU</a></label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" autocomplete="off" placeholder="digite para filtrar a lista…" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
         <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="venda-qtd" value="1" oninput="calcVenda()"></div>
-        <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="_vendaPrecoTocado=true;calcVenda()"><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-preco-hint"></div></div>
+        <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" readonly tabindex="-1" style="background:var(--surface2);cursor:not-allowed" title="O preço vem da tabela do canal e não é editável"><div style="font-size:11px;color:var(--text3);margin-top:3px">da tabela de preço · não editável</div></div>
       </div>
       <div id="venda-novo-canon" style="display:none;border:1px solid var(--amber);border-radius:var(--radius);padding:10px 12px;margin:4px 0 10px;background:var(--surface2)">
         <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">
-          <strong>Novo SKU canônico</strong> — entra no grupo canônico desta empresa, auto-mapeado (multiplicador 1).
-          Ele nasce <strong>sem CPV</strong>: MCB e MCL ficam vazios nessa linha até você cadastrar o custo em
-          Cadastros › Custos (CPV).
+          <strong>Novo SKU</strong> — entra no grupo canônico desta empresa (auto-mapeado, multiplicador 1)
+          <strong>e na tabela de preço deste canal</strong>. O preço é obrigatório: sem ele o SKU não é vendável,
+          porque o formulário não deixa digitar valor. Ele nasce <strong>sem CPV</strong>, então MCB e MCL ficam
+          vazios nessa linha até você cadastrar o custo em Cadastros › Custos (CPV).
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input class="form-control" type="text" id="novo-canon-sku" placeholder="código do SKU" style="flex:1" autocomplete="off" oninput="onNovoCanonInput()">
+          <input class="form-control" type="number" id="novo-canon-preco" placeholder="preço" step="0.01" style="width:120px" autocomplete="off" oninput="onNovoCanonInput()">
           <button class="btn btn-primary btn-sm" id="novo-canon-btn" onclick="criarNovoCanonico()" disabled>Criar</button>
           <button class="btn btn-secondary btn-sm" onclick="fecharNovoCanonico()">Cancelar</button>
         </div>
@@ -1579,6 +1644,55 @@ tr:hover td{background:var(--surface2);}
 
     <div style="text-align:right;font-family:'Barlow Condensed',sans-serif;font-size:22px;color:var(--green);font-weight:600;margin-top:10px" id="venda-total">Total: R$ 0,00</div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-venda')">Cancelar</button><button class="btn btn-primary" onclick="finalizarVendaManual()">Finalizar Venda</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-canal">
+  <div class="modal"><div class="modal-title" id="canal-modal-titulo">Novo canal</div>
+    <div class="modal-sub">O nome vai literalmente para o campo de canal da venda</div>
+    <div class="form-group"><label class="form-label">Nome do canal</label>
+      <input class="form-control" type="text" id="canal-nome" autocomplete="off" placeholder="ex: Venda Direta, Loja, Atacado SP"></div>
+    <div class="form-group"><label class="form-label">Tabela de preço base</label>
+      <select class="form-control" id="canal-tabela"></select>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">Um cliente com tabela própria sobrepõe esta.</div></div>
+    <div class="form-group"><label class="form-label">Situação</label>
+      <select class="form-control" id="canal-ativo"><option value="1">Ativo</option><option value="0">Inativo</option></select></div>
+    <div style="font-size:11px;margin-top:4px;min-height:14px" id="canal-hint"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-canal')">Cancelar</button>
+      <button class="btn btn-primary" id="canal-salvar" onclick="salvarCanal()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-tabela">
+  <div class="modal"><div class="modal-title" id="tabela-modal-titulo">Nova tabela de preço</div>
+    <div class="modal-sub">Preço de venda por SKU canônico</div>
+    <div class="form-group"><label class="form-label">Nome</label>
+      <input class="form-control" type="text" id="tabela-nome" autocomplete="off" placeholder="ex: Atacado 2026, Varejo Loja"></div>
+    <div class="form-group"><label class="form-label">Observação</label>
+      <input class="form-control" type="text" id="tabela-obs" autocomplete="off"></div>
+    <div style="font-size:11px;margin-top:4px;min-height:14px" id="tabela-hint"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-tabela')">Cancelar</button>
+      <button class="btn btn-primary" id="tabela-salvar" onclick="salvarTabela()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-cliente">
+  <div class="modal"><div class="modal-title" id="cliente-modal-titulo">Novo cliente</div>
+    <div class="modal-sub">Tabela de preço só quando ela sobrepõe a do canal</div>
+    <div class="form-group"><label class="form-label">Nome</label>
+      <input class="form-control" type="text" id="cliente-nome-campo" autocomplete="off"></div>
+    <div class="form-group"><label class="form-label">Tabela de preço própria</label>
+      <select class="form-control" id="cliente-tabela"></select>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">Deixe em "usa a do canal" para o caso normal.</div></div>
+    <div style="font-size:11px;margin-top:4px;min-height:14px" id="cliente-hint"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="fecharModal('modal-cliente')">Cancelar</button>
+      <button class="btn btn-primary" id="cliente-salvar" onclick="salvarCliente()">Salvar</button>
+    </div>
   </div>
 </div>
 
@@ -2415,7 +2529,8 @@ function irPara(pagina){
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
     'perfil':loadPerfil,'plano':()=>{},
-    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV
+    'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV,
+    'canais':loadCanais,'clientes':loadClientes
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -3977,37 +4092,431 @@ async function carregarProdutosClientes(){
     sbGet('clientes',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[]),
     sbGet('categorias_produto',`?empresa_id=in.(${_empIdsPC})&order=nome`).catch(()=>[])
   ]);
-  // O datalist de SKU da venda manual NAO e alimentado aqui: ele vem do grupo
-  // canonico da empresa (carregarCanonicosVenda). Antes vinha de `produtos`, que tem
-  // 1 linha na Maxhome e 0 nas outras 13 -- e esta funcao e chamada tambem fora do
-  // modal (importacao, BOM), onde sobrescreveria a lista de canonicos.
-  const dlC=document.getElementById('venda-cli-list');if(dlC)dlC.innerHTML=_clientes.map(c=>`<option value="${c.nome}">`).join('');
+  // Nem o SKU nem o cliente da venda manual sao alimentados aqui: desde 07/10 os
+  // dois sao <select>, carregados por carregarCadastrosVenda a partir de
+  // canais_venda, clientes e da tabela de preco resolvida.
 }
 
 async function excluirVenda(id){if(!confirm('Excluir?'))return;await sbDelete('vendas',`id=eq.${id}`);loadVendas();}
-// ══ SKU DA VENDA MANUAL — SO CANONICO ════════════════════════════════════
+// ══ CANAIS, TABELAS DE PRECO E CLIENTES ══════════════════════════════════
 //
-// A lista sai de correlacao_sku.sku_canonico DA EMPRESA, a mesma fonte da aba de
-// CPV e da planilha modelo. Texto livre nao serve: um SKU que nao e canonico nunca
-// casa com custos_sku, entao a linha nasce sem CPV e fica fora do MCB/MCL para
-// sempre -- e e exatamente a venda direta que hoje tem liquido = varejo e deveria
-// ser a margem mais limpa do painel.
+// Desenho decidido com o usuario em 07/10/2026:
+//   · canal aponta para UMA tabela base;
+//   · cliente pode ter tabela propria, que SOBREPOE a do canal;
+//   · nao existe campo de desconto -- desconto e tabela propria seriam a mesma
+//     informacao em dois lugares, e duas fontes para o mesmo numero divergem;
+//   · o preco na venda e TRAVADO: sai da tabela resolvida e nao se edita.
 //
-// A lista antiga vinha da tabela `produtos`, que foi medida em 06/10/2026: 1 linha
-// na Maxhome e 0 nas outras 13 empresas. Ou seja, o datalist chegava vazio e o
-// campo era texto livre na pratica, com o aviso "+ Novo produto sera criado" que
-// nenhum codigo cumpria -- nada criava produto.
+// A regra de sobreposicao vive na RPC tabela_preco_resolvida, nao aqui. O front
+// chama a RPC em vez de reimplementar o COALESCE -- foi a logica de migracao
+// duplicada em duas funcoes que manteve o defeito de 07/10 vivo em dois lugares.
 //
-// Por que input+datalist e nao <select>: sao de 52 a 356 canonicos por empresa, e
-// um <select> nativo desse tamanho nao se busca. O datalist da busca por digitacao
-// e a validacao abaixo e DURA -- o botao de adicionar fica travado e
-// adicionarItemVenda recusa -- entao nao ha como gravar um SKU fora da lista.
+// canais_venda.nome vai LITERALMENTE para vendas.marketplace, e o UNIQUE
+// (empresa_id, nome) e a trava contra o que foi medido em 06/10/2026: quatro
+// grafias do mesmo canal, com R$ 6.118,42 presos numa delas por erro de digitacao.
+let _canais=[], _tabelas=[], _tabItens=[], _clientesFull=[];
+let _canalEditando=null, _tabelaEditando=null, _clienteEditando=null;
+
+function canEmpresaSel(){
+  const el=document.getElementById('can-empresa');
+  return (el&&el.value)||(EMPRESAS[0]&&EMPRESAS[0].id)||null;
+}
+function cliEmpresaSel(){
+  const el=document.getElementById('cli-empresa');
+  return (el&&el.value)||(EMPRESAS[0]&&EMPRESAS[0].id)||null;
+}
+function popularSelectEmpresa(id,aoMudar){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(!el.children.length){
+    el.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    if(EMPRESA_ID&&EMPRESAS.some(e=>e.id===EMPRESA_ID))el.value=EMPRESA_ID;
+  }
+}
+
+// ── ABA CANAIS E TABELAS ────────────────────────────────────────────────
+async function loadCanais(){
+  if(!EMPRESAS.length){semEmpresaMsg('can-lista');return;}
+  popularSelectEmpresa('can-empresa');
+  const emp=canEmpresaSel();
+  try{
+    [_canais,_tabelas]=await Promise.all([
+      sbGet('canais_venda',`?empresa_id=eq.${emp}&order=nome`),
+      sbGet('tabelas_preco',`?empresa_id=eq.${emp}&order=nome`)
+    ]);
+  }catch(e){
+    document.getElementById('can-lista').innerHTML='<div style="padding:14px;font-size:13px;color:var(--amber)">'
+      +'As tabelas de canais e preços ainda não existem no banco. Rode 14-canais-tabelas-preco.sql.</div>';
+    document.getElementById('tab-itens').innerHTML='';
+    return;
+  }
+  renderCanais();
+  const sel=document.getElementById('tab-sel');
+  if(sel){
+    const antes=sel.value;
+    sel.innerHTML=_tabelas.length
+      ? _tabelas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('')
+      : '<option value="">(nenhuma tabela)</option>';
+    if(antes&&_tabelas.some(t=>t.id===antes))sel.value=antes;
+  }
+  await renderTabelaItens();
+}
+
+function nomeTabela(id){
+  const t=_tabelas.find(x=>x.id===id);
+  return t?t.nome:null;
+}
+
+function renderCanais(){
+  const el=document.getElementById('can-lista');
+  if(!el)return;
+  if(!_canais.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🛒</div>'
+      +'<div class="empty-title">Nenhum canal cadastrado</div>'
+      +'<div class="empty-sub">Sem canal, a venda manual não tem o que selecionar. '
+      +'O passo 6 do SQL traz os canais que você já usa.</div></div>';
+    return;
+  }
+  el.innerHTML='<table><thead><tr><th>Canal</th><th>Tabela base</th>'
+    +'<th style="text-align:center">Itens</th><th style="text-align:center">Situação</th><th></th></tr></thead><tbody>'
+    +_canais.map(c=>{
+      const tn=nomeTabela(c.tabela_preco_id);
+      return '<tr>'
+        +'<td style="font-weight:500">'+c.nome+'</td>'
+        +'<td style="color:'+(tn?'var(--text2)':'var(--amber)')+'">'
+          +(tn||'⚠ sem tabela — não dá para vender neste canal')+'</td>'
+        +'<td style="text-align:center;color:var(--text3)">'+(c.tabela_preco_id?('—'):'')+'</td>'
+        +'<td style="text-align:center">'+(c.ativo
+            ?'<span style="color:var(--green)">ativo</span>'
+            :'<span style="color:var(--text3)">inativo</span>')+'</td>'
+        +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="abrirModalCanal(\''+c.id+'\')">Editar</button></td>'
+      +'</tr>';
+    }).join('')+'</tbody></table>';
+}
+
+async function renderTabelaItens(){
+  const el=document.getElementById('tab-itens');
+  if(!el)return;
+  const tid=document.getElementById('tab-sel')?.value;
+  if(!tid){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🏷️</div>'
+      +'<div class="empty-title">Nenhuma tabela de preço</div>'
+      +'<div class="empty-sub">Crie uma tabela e suba a planilha com o preço de cada SKU canônico.</div></div>';
+    _tabItens=[];
+    return;
+  }
+  try{
+    _tabItens=await sbGet('tabela_preco_itens',`?tabela_id=eq.${tid}&order=sku&limit=20000`);
+  }catch(e){ _tabItens=[]; }
+  const usadaPor=_canais.filter(c=>c.tabela_preco_id===tid).map(c=>c.nome);
+  const cab='<div style="font-size:12px;color:var(--text3);padding:0 0 10px">'
+    +_tabItens.length+' SKU(s) nesta tabela'
+    +(usadaPor.length?' · canal: '+usadaPor.join(', '):' · nenhum canal usa esta tabela ainda')
+    +'</div>';
+  if(!_tabItens.length){
+    el.innerHTML=cab+'<div class="empty"><div class="empty-icon">📄</div>'
+      +'<div class="empty-title">Tabela vazia</div>'
+      +'<div class="empty-sub">Baixe a planilha: ela já vem com os SKUs canônicos da empresa.</div></div>';
+    return;
+  }
+  el.innerHTML=cab+'<table><thead><tr><th>SKU canônico</th><th style="text-align:right">Preço</th></tr></thead><tbody>'
+    +_tabItens.slice(0,600).map(i=>'<tr>'
+      +'<td style="font-weight:500">'+i.sku+'</td>'
+      +'<td style="text-align:right;color:var(--green)">'+fBRL(parseFloat(i.preco))+'</td>'
+    +'</tr>').join('')+'</tbody></table>'
+    +(_tabItens.length>600?'<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Mostrando 600 de '+_tabItens.length+'.</div>':'');
+}
+
+function abrirModalCanal(id){
+  _canalEditando=id||null;
+  const c=id?_canais.find(x=>x.id===id):null;
+  document.getElementById('canal-modal-titulo').textContent=c?'Editar canal':'Novo canal';
+  document.getElementById('canal-nome').value=c?c.nome:'';
+  document.getElementById('canal-ativo').value=c?(c.ativo?'1':'0'):'1';
+  const sel=document.getElementById('canal-tabela');
+  sel.innerHTML='<option value="">(sem tabela)</option>'
+    +_tabelas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
+  sel.value=(c&&c.tabela_preco_id)||'';
+  document.getElementById('canal-hint').textContent='';
+  abrirModal('modal-canal');
+}
+
+async function salvarCanal(){
+  const emp=canEmpresaSel();
+  const nome=document.getElementById('canal-nome').value.trim().replace(/\s+/g,' ');
+  const tid=document.getElementById('canal-tabela').value||null;
+  const ativo=document.getElementById('canal-ativo').value==='1';
+  const hint=document.getElementById('canal-hint');
+  const btn=document.getElementById('canal-salvar');
+  if(!nome){hint.textContent='✗ informe o nome';hint.style.color='var(--red,#dc2626)';return;}
+  // o nome vai para vendas.marketplace, que e texto usado como chave pelo indice
+  // unico e pelos syncs: ; e aspas nao tem o que fazer ali.
+  if(/[;"]/.test(nome)){hint.textContent='✗ sem ; nem aspas no nome do canal';hint.style.color='var(--red,#dc2626)';return;}
+  // Armadilha do desenho: ehVendaDireta decide pelo NOME do canal. Um canal manual
+  // chamado "Shopee Manual" cai como marketplace, nao recebe liquido no ato e fica
+  // esperando o job de liquido -- que nunca vai achar o pedido, porque ele nao
+  // existe na plataforma. Aviso em vez de bloquear: o nome pode ser intencional.
+  if(!ehVendaDireta(nome)){
+    if(!confirm('O nome "'+nome+'" contém o nome de um marketplace.\n\n'
+      +'Vendas manuais neste canal NÃO vão receber receita líquida na hora: o sistema '
+      +'vai tratá-las como venda de marketplace e esperar o valor da plataforma, que '
+      +'nunca vem para um pedido lançado à mão. Resultado: MCB e MCL ficam vazios nessas linhas.\n\n'
+      +'Salvar assim mesmo?'))return;
+  }
+  btn.disabled=true;btn.textContent='Salvando...';
+  try{
+    if(_canalEditando)await sbPatch('canais_venda','id=eq.'+_canalEditando,{nome,tabela_preco_id:tid,ativo});
+    else await sbPost('canais_venda',{empresa_id:emp,nome,tabela_preco_id:tid,ativo});
+    fecharModal('modal-canal');
+    await loadCanais();
+  }catch(e){
+    const m=String(e.message||e);
+    hint.textContent=/duplicate|unique|23505/i.test(m)
+      ? '✗ já existe um canal com este nome nesta empresa'
+      : '✗ '+m;
+    hint.style.color='var(--red,#dc2626)';
+  }finally{btn.disabled=false;btn.textContent='Salvar';}
+}
+
+function abrirModalTabela(){
+  _tabelaEditando=null;
+  document.getElementById('tabela-modal-titulo').textContent='Nova tabela de preço';
+  document.getElementById('tabela-nome').value='';
+  document.getElementById('tabela-obs').value='';
+  document.getElementById('tabela-hint').textContent='';
+  abrirModal('modal-tabela');
+}
+
+async function salvarTabela(){
+  const emp=canEmpresaSel();
+  const nome=document.getElementById('tabela-nome').value.trim().replace(/\s+/g,' ');
+  const obs=document.getElementById('tabela-obs').value.trim();
+  const hint=document.getElementById('tabela-hint');
+  const btn=document.getElementById('tabela-salvar');
+  if(!nome){hint.textContent='✗ informe o nome';hint.style.color='var(--red,#dc2626)';return;}
+  btn.disabled=true;btn.textContent='Salvando...';
+  try{
+    const r=await sbPost('tabelas_preco',{empresa_id:emp,nome,observacao:obs||null});
+    fecharModal('modal-tabela');
+    await loadCanais();
+    const nova=(Array.isArray(r)&&r[0]&&r[0].id)||null;
+    const sel=document.getElementById('tab-sel');
+    if(nova&&sel){sel.value=nova;await renderTabelaItens();}
+  }catch(e){
+    const m=String(e.message||e);
+    hint.textContent=/duplicate|unique|23505/i.test(m)?'✗ já existe uma tabela com este nome':'✗ '+m;
+    hint.style.color='var(--red,#dc2626)';
+  }finally{btn.disabled=false;btn.textContent='Salvar';}
+}
+
+// ── planilha da tabela: canonicos da empresa com o preco atual preenchido ──
+// Mesmo formato da planilha de CPV: ";" e decimal "," porque e o que o Excel em
+// portugues espera, e BOM para os acentos.
+async function downloadPlanilhaTabela(){
+  const tid=document.getElementById('tab-sel')?.value;
+  if(!tid)return alert('Crie e selecione uma tabela primeiro.');
+  const emp=canEmpresaSel();
+  const canon=await canonicosDaEmpresa(emp);
+  if(!canon.length)return alert('Esta empresa não tem SKU canônico. Cadastre em Cadastros › Correlação de SKUs.');
+  const atual={};_tabItens.forEach(i=>{atual[String(i.sku).toUpperCase()]=parseFloat(i.preco);});
+  const linhas=['sku;preco'];
+  canon.forEach(sku=>{
+    const p=atual[String(sku).toUpperCase()];
+    linhas.push(sku+';'+(p!==undefined?String(p.toFixed(2)).replace('.',','):''));
+  });
+  const nome=(nomeTabela(tid)||'tabela').replace(/[^\w]+/g,'_').toLowerCase();
+  const blob=new Blob(['﻿'+linhas.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download='lume_tabela_'+nome+'.csv';a.click();URL.revokeObjectURL(url);
+}
+
+let _tabDiff=null;
+async function uploadTabelaArquivo(input){
+  const file=input.files[0];if(!file)return;input.value='';
+  const tid=document.getElementById('tab-sel')?.value;
+  if(!tid)return alert('Selecione a tabela de destino.');
+  const emp=canEmpresaSel();
+  const prog=document.getElementById('tab-prog'),txt=document.getElementById('tab-prog-txt'),bar=document.getElementById('tab-prog-bar');
+  prog.style.display='';bar.style.width='10%';txt.textContent='Lendo arquivo...';
+  const linhas=cpvParseCSV(await file.text());          // mesmo parser da planilha de CPV
+  const cab=(linhas[0]||[]).map(c=>String(c).trim().toLowerCase());
+  const iSku=cab.findIndex(c=>c==='sku'||c.includes('sku'));
+  const iPreco=cab.findIndex(c=>c==='preco'||c.includes('preç')||c.includes('preco'));
+  if(iSku<0||iPreco<0){prog.style.display='none';return alert('A planilha precisa de uma coluna "sku" e uma "preco". Baixe a planilha modelo.');}
+  const canon=new Set((await canonicosDaEmpresa(emp)).map(x=>x.toUpperCase()));
+  const atual={};_tabItens.forEach(i=>{atual[String(i.sku).toUpperCase()]=parseFloat(i.preco);});
+  const novos=[],alterados=[],iguais=[],invalidos=[],vistos=new Set();
+  for(let i=1;i<linhas.length;i++){
+    const sku=String(linhas[i][iSku]||'').trim().toUpperCase();
+    if(!sku)continue;
+    const bruto=linhas[i][iPreco];
+    if(vistos.has(sku)){invalidos.push({sku,motivo:'SKU repetido na planilha',valor:bruto});continue;}
+    vistos.add(sku);
+    const n=cpvNumero(bruto);
+    if(n===null||isNaN(n)){invalidos.push({sku,motivo:'preço não é número',valor:bruto});continue;}
+    // preco tem CHECK (preco > 0): zero nao e preco, e um SKU sem preco nao e vendavel
+    if(!(n>0)){invalidos.push({sku,motivo:'preço tem de ser maior que zero',valor:bruto});continue;}
+    if(!canon.has(sku)){invalidos.push({sku,motivo:'não está no grupo canônico desta empresa',valor:bruto});continue;}
+    const at=atual[sku];
+    if(at!==undefined&&Math.abs(at-n)<0.00005)iguais.push({sku,preco:n});
+    else if(at===undefined)novos.push({sku,preco:n});
+    else alterados.push({sku,preco:n,de:at});
+  }
+  _tabDiff={tid,novos,alterados,iguais,invalidos};
+  prog.style.display='none';
+  renderPreviewTabela();
+}
+
+function renderPreviewTabela(){
+  const d=_tabDiff;if(!d)return;
+  const el=document.getElementById('tab-preview');
+  const bloco=(titulo,arr,cor,nota)=>{
+    if(!arr.length)return '';
+    const amostra=arr.slice(0,8).map(x=>x.sku
+      +(x.de!==undefined?(' · '+fBRL(x.de)+' → '+fBRL(x.preco)):(x.preco!==undefined?(' · '+fBRL(x.preco)):''))
+      +(x.motivo?(' · '+x.motivo):'')).join('<br>');
+    return '<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:'+cor+'">'
+      +titulo+' ('+arr.length+')</div>'
+      +(nota?'<div style="font-size:11px;color:var(--text3);margin:2px 0 4px">'+nota+'</div>':'')
+      +'<div style="font-size:11px;color:var(--text2);line-height:1.6">'+amostra
+      +(arr.length>8?'<br>… e mais '+(arr.length-8):'')+'</div></div>';
+  };
+  const vale=d.novos.length+d.alterados.length;
+  el.style.display='';
+  el.innerHTML='<div class="card" style="padding:14px 18px;border:1px solid var(--accent)">'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:10px">Prévia — tabela "'+(nomeTabela(d.tid)||'')+'"</div>'
+    +bloco('Preço novo',d.novos,'var(--green)')
+    +bloco('Preço alterado',d.alterados,'var(--amber)')
+    +bloco('Sem mudança',d.iguais,'var(--text3)')
+    +bloco('Recusados',d.invalidos,'var(--red,#dc2626)','Estes não entram. SKU fora do grupo canônico não é aceito aqui: preço e custo falam do mesmo código.')
+    +'<div style="display:flex;gap:8px;margin-top:10px">'
+    +'<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'tab-preview\').style.display=\'none\'">Cancelar</button>'
+    +(vale?'<button class="btn btn-primary btn-sm" onclick="aplicarTabela()">Aplicar '+vale+' preço(s)</button>'
+          :'<span style="font-size:12px;color:var(--text3);align-self:center">Nada a aplicar.</span>')
+    +'</div></div>';
+}
+
+async function aplicarTabela(){
+  const d=_tabDiff;if(!d)return;
+  const prog=document.getElementById('tab-prog'),txt=document.getElementById('tab-prog-txt'),bar=document.getElementById('tab-prog-bar');
+  document.getElementById('tab-preview').style.display='none';
+  prog.style.display='';bar.style.width='10%';txt.textContent='Gravando...';
+  const corpo=[...d.novos,...d.alterados].map(x=>({tabela_id:d.tid,sku:x.sku,preco:x.preco}));
+  let erro=null;
+  try{
+    for(let i=0;i<corpo.length;i+=200){
+      const r=await fetch(`${SB_URL}/rest/v1/tabela_preco_itens?on_conflict=tabela_id,sku`,{
+        method:'POST',
+        headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json',
+                 Prefer:'resolution=merge-duplicates,return=minimal'},
+        body:JSON.stringify(corpo.slice(i,i+200))});
+      if(!r.ok)throw new Error((await r.text()).slice(0,200));
+      bar.style.width=Math.round(10+(i+200)/Math.max(corpo.length,1)*85)+'%';
+    }
+  }catch(e){erro=String(e.message||e);}
+  bar.style.width='100%';
+  txt.textContent=erro?('❌ '+erro):('✅ '+corpo.length+' preço(s) gravados');
+  _tabDiff=null;
+  await renderTabelaItens();
+  setTimeout(()=>{prog.style.display='none';},2500);
+}
+
+// ── ABA CLIENTES ────────────────────────────────────────────────────────
+// A tabela clientes ja existia, mas o app nunca escreveu nela: so lia o campo
+// nome para alimentar um datalist. Esta aba e a primeira tela dela.
+async function loadClientes(){
+  if(!EMPRESAS.length){semEmpresaMsg('cli-lista');return;}
+  popularSelectEmpresa('cli-empresa');
+  const emp=cliEmpresaSel();
+  try{
+    [_clientesFull,_tabelas]=await Promise.all([
+      sbGet('clientes',`?empresa_id=eq.${emp}&order=nome&limit=20000`),
+      sbGet('tabelas_preco',`?empresa_id=eq.${emp}&order=nome`).catch(()=>[])
+    ]);
+  }catch(e){
+    document.getElementById('cli-lista').innerHTML='<div style="padding:14px;font-size:13px;color:var(--amber)">Erro ao carregar clientes: '+(e.message||e)+'</div>';
+    return;
+  }
+  renderClientes();
+}
+
+function renderClientes(){
+  const el=document.getElementById('cli-lista');
+  if(!el)return;
+  const f=(document.getElementById('cli-filtro')?.value||'').trim().toLowerCase();
+  const lista=_clientesFull.filter(c=>!f||String(c.nome||'').toLowerCase().includes(f));
+  if(!_clientesFull.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🧾</div>'
+      +'<div class="empty-title">Nenhum cliente cadastrado</div>'
+      +'<div class="empty-sub">A venda manual seleciona o cliente desta lista.</div></div>';
+    return;
+  }
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">Nenhum cliente com esse filtro</div></div>';return;}
+  el.innerHTML='<table><thead><tr><th>Cliente</th><th>Tabela de preço</th><th></th></tr></thead><tbody>'
+    +lista.slice(0,600).map(c=>{
+      const tn=nomeTabela(c.tabela_preco_id);
+      return '<tr><td style="font-weight:500">'+(c.nome||'—')+'</td>'
+        +'<td style="color:'+(tn?'var(--accent)':'var(--text3)')+'">'+(tn?(tn+' (sobrepõe o canal)'):'usa a do canal')+'</td>'
+        +'<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="abrirModalCliente(\''+c.id+'\')">Editar</button></td></tr>';
+    }).join('')+'</tbody></table>'
+    +(lista.length>600?'<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Mostrando 600 de '+lista.length+'. Use o filtro.</div>':'');
+}
+
+function abrirModalCliente(id){
+  _clienteEditando=id||null;
+  const c=id?_clientesFull.find(x=>x.id===id):null;
+  document.getElementById('cliente-modal-titulo').textContent=c?'Editar cliente':'Novo cliente';
+  document.getElementById('cliente-nome-campo').value=c?(c.nome||''):'';
+  const sel=document.getElementById('cliente-tabela');
+  sel.innerHTML='<option value="">usa a do canal</option>'
+    +_tabelas.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
+  sel.value=(c&&c.tabela_preco_id)||'';
+  document.getElementById('cliente-hint').textContent='';
+  abrirModal('modal-cliente');
+}
+
+async function salvarCliente(){
+  const emp=cliEmpresaSel();
+  const nome=document.getElementById('cliente-nome-campo').value.trim().replace(/\s+/g,' ');
+  const tid=document.getElementById('cliente-tabela').value||null;
+  const hint=document.getElementById('cliente-hint');
+  const btn=document.getElementById('cliente-salvar');
+  if(!nome){hint.textContent='✗ informe o nome';hint.style.color='var(--red,#dc2626)';return;}
+  btn.disabled=true;btn.textContent='Salvando...';
+  try{
+    if(_clienteEditando)await sbPatch('clientes','id=eq.'+_clienteEditando,{nome,tabela_preco_id:tid});
+    else await sbPost('clientes',{empresa_id:emp,nome,tabela_preco_id:tid});
+    fecharModal('modal-cliente');
+    await loadClientes();
+  }catch(e){hint.textContent='✗ '+(e.message||e);hint.style.color='var(--red,#dc2626)';}
+  finally{btn.disabled=false;btn.textContent='Salvar';}
+}
+
+// ══ VENDA MANUAL — TUDO SAI DE CADASTRO, NADA DE TEXTO LIVRE ═════════════
 //
-// A empresa passou para o TOPO do modal porque a lista depende dela. Antes a
-// empresa era escolhida no fim, em finalizarVendaManual: dava para montar o
-// carrinho com SKUs de uma empresa e salvar em outra.
-let _vendaCanon=[];            // canonicos da empresa selecionada no modal
-let _vendaPrecoTocado=false;   // usuario digitou o preco? entao nao sobrescreve
+// Desenho de 07/10/2026. A venda manual tinha quatro campos livres: canal, cliente,
+// SKU e preco. Cada um era uma fonte de divergencia:
+//   · canal  -> medido em 06/10: QUATRO grafias do mesmo canal, R$ 6.118,42 presos
+//               numa delas por erro de digitacao ("Vena Direta");
+//   · SKU    -> SKU fora do grupo canonico nunca casa com custos_sku, entao a linha
+//               nascia sem CPV e ficava fora do MCB/MCL para sempre;
+//   · preco  -> digitado a mao em cada venda, sem referencia.
+//
+// Agora: canal e cliente sao selecao; o SKU sai da TABELA DE PRECO resolvida; e o
+// preco e automatico e TRAVADO (decisao do usuario: "travado, sem excecao").
+//
+// A tabela e resolvida pela RPC tabela_preco_resolvida, nao por um COALESCE aqui:
+// cliente sobrepoe canal, e a regra vive num lugar so.
+//
+// CONSEQUENCIA do preco travado, e e por isso que o cadastro rapido mudou: um SKU
+// sem preco na tabela nao e vendavel. Ontem o cadastro rapido nao pedia o CPV, e
+// estava certo -- sem CPV a linha so fica sem margem no relatorio. Hoje ele pede o
+// PRECO, porque sem preco o formulario nao tem o que preencher.
+//
+// Fechar negocio fora de tabela exige editar a tabela antes. E o que a decisao
+// significa na pratica; a saida sao dois cliques em Cadastros > Canais e Tabelas.
+let _vendaPrecos={};            // {SKU: preco} da tabela resolvida
+let _vendaTabela=null;          // {tabela_id, tabela_nome, origem}
 let _vendaEmpresaAnterior=null;
 
 function empresaDaVenda(){
@@ -4016,7 +4525,7 @@ function empresaDaVenda(){
   return EMPRESAS.length===1?EMPRESAS[0].id:null;
 }
 
-// busca pura, sem tocar no DOM -- a importacao de planilha tambem usa
+// busca pura, sem tocar no DOM -- a importacao de planilha e as abas novas usam
 async function canonicosDaEmpresa(emp){
   if(!emp)return [];
   try{
@@ -4024,17 +4533,98 @@ async function canonicosDaEmpresa(emp){
     return [...new Set((cor||[]).map(x=>String(x.sku_canonico||'').trim()).filter(Boolean))].sort();
   }catch(e){return [];}
 }
-async function carregarCanonicosVenda(emp){
-  _vendaCanon=await canonicosDaEmpresa(emp);
+
+function clienteIdSel(){
+  const el=document.getElementById('venda-cliente');
+  return (el&&el.value)||null;
+}
+function clienteNomeSel(){
+  const el=document.getElementById('venda-cliente');
+  if(!el||!el.value)return '';
+  const o=el.options[el.selectedIndex];
+  return o?String(o.textContent||'').trim():'';
+}
+function canalIdSel(){
+  const el=document.getElementById('venda-canal');
+  return (el&&el.value)||null;
+}
+function canalNomeSel(){
+  const el=document.getElementById('venda-canal');
+  if(!el||!el.value)return '';
+  const o=el.options[el.selectedIndex];
+  return o?String(o.textContent||'').trim():'';
+}
+
+// ── carrega canais e clientes da empresa escolhida no modal ──
+async function carregarCadastrosVenda(emp){
+  const selCa=document.getElementById('venda-canal');
+  const selCl=document.getElementById('venda-cliente');
+  if(selCa)selCa.innerHTML='<option value="">—</option>';
+  if(selCl)selCl.innerHTML='<option value="">(sem cliente)</option>';
+  if(!emp)return;
+  let canais=[],clientes=[];
+  try{
+    [canais,clientes]=await Promise.all([
+      sbGet('canais_venda',`?empresa_id=eq.${emp}&ativo=is.true&order=nome`),
+      sbGet('clientes',`?empresa_id=eq.${emp}&order=nome&limit=20000`)
+    ]);
+  }catch(e){
+    const h=document.getElementById('venda-tabela-info');
+    if(h){h.innerHTML='⚠ As tabelas de canais e preços ainda não existem no banco. Rode 14-canais-tabelas-preco.sql.';
+          h.style.color='var(--amber)';}
+    return;
+  }
+  if(selCa)selCa.innerHTML='<option value="">— selecione o canal —</option>'
+    +canais.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+  if(selCl)selCl.innerHTML='<option value="">(sem cliente)</option>'
+    +clientes.map(c=>`<option value="${c.id}">${c.nome||''}</option>`).join('');
+  await onVendaCanalCliente();
+}
+
+// ── resolve a tabela e carrega os precos; chamado ao trocar canal ou cliente ──
+async function onVendaCanalCliente(){
+  _vendaPrecos={}; _vendaTabela=null;
+  const info=document.getElementById('venda-tabela-info');
   const dl=document.getElementById('venda-sku-list');
-  if(dl)dl.innerHTML=_vendaCanon.map(x=>`<option value="${x}">`).join('');
+  if(dl)dl.innerHTML='';
+  document.getElementById('venda-sku').value='';
+  document.getElementById('venda-preco').value='';
+  const canal=canalIdSel();
+  if(!canal){
+    if(info){info.textContent='Selecione o canal para liberar os SKUs e o preço.';info.style.color='var(--text3)';}
+    onVendaSkuInput();
+    return;
+  }
+  try{
+    const r=await sbRpc('tabela_preco_resolvida',{p_canal_id:canal,p_cliente_id:clienteIdSel()});
+    const o=(Array.isArray(r)?r[0]:r)||null;
+    if(!o||!o.tabela_id){
+      if(info){info.innerHTML='⚠ Este canal não tem tabela de preço'
+        +(clienteIdSel()?' e o cliente também não':'')
+        +'. Cadastre em Cadastros › Canais e Tabelas de Preço.';info.style.color='var(--amber)';}
+      onVendaSkuInput();
+      return;
+    }
+    _vendaTabela=o;
+    const itens=await sbGet('tabela_preco_itens',`?tabela_id=eq.${o.tabela_id}&select=sku,preco&limit=20000`);
+    (itens||[]).forEach(i=>{_vendaPrecos[String(i.sku)]=parseFloat(i.preco);});
+    const n=Object.keys(_vendaPrecos).length;
+    if(dl)dl.innerHTML=Object.keys(_vendaPrecos).sort().map(x=>`<option value="${x}">`).join('');
+    if(info){
+      info.innerHTML='Tabela <strong>'+o.tabela_nome+'</strong> ('
+        +(o.origem==='cliente'?'do cliente, sobrepõe o canal':'do canal')+') · '+n+' SKU(s)';
+      info.style.color=o.origem==='cliente'?'var(--accent)':'var(--text3)';
+    }
+  }catch(e){
+    if(info){info.textContent='⚠ '+(e.message||e);info.style.color='var(--amber)';}
+  }
   onVendaSkuInput();
 }
 
 async function onVendaEmpresaChange(){
   const nova=empresaDaVenda();
   if(_vendaCarrinho.length&&nova!==_vendaEmpresaAnterior){
-    if(!confirm('Trocar de empresa limpa os itens já adicionados — os SKUs canônicos são de cada empresa. Continuar?')){
+    if(!confirm('Trocar de empresa limpa os itens já adicionados — canais, clientes e tabelas são de cada empresa. Continuar?')){
       const sel=document.getElementById('venda-empresa');
       if(sel&&_vendaEmpresaAnterior)sel.value=_vendaEmpresaAnterior;
       return;
@@ -4042,22 +4632,17 @@ async function onVendaEmpresaChange(){
     _vendaCarrinho=[];renderVendaCarrinho();
   }
   _vendaEmpresaAnterior=nova;
-  fecharNovoCanonico();   // o painel era da empresa antiga
-  document.getElementById('venda-sku').value='';
-  document.getElementById('venda-preco').value='';
-  _vendaPrecoTocado=false;
-  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
-  await carregarCanonicosVenda(nova);
+  fecharNovoCanonico();
+  await carregarCadastrosVenda(nova);
 }
 
 async function abrirModalVendaManual(){
-  await carregarProdutosClientes();
   document.getElementById('venda-data').value=new Date().toISOString().split('T')[0];
-  ['venda-sku','venda-canal','venda-cliente'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('venda-qtd').value='1';document.getElementById('venda-preco').value='';
+  document.getElementById('venda-sku').value='';
+  document.getElementById('venda-qtd').value='1';
+  document.getElementById('venda-preco').value='';
   document.getElementById('venda-total-item').textContent='';
-  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
-  _vendaCarrinho=[];_vendaPrecoTocado=false;
+  _vendaCarrinho=[];
   fecharNovoCanonico();
   const wrap=document.getElementById('venda-empresa-wrap');
   const sel=document.getElementById('venda-empresa');
@@ -4069,61 +4654,50 @@ async function abrirModalVendaManual(){
   _vendaEmpresaAnterior=empresaDaVenda();
   renderVendaCarrinho();
   abrirModal('modal-venda');
-  await carregarCanonicosVenda(_vendaEmpresaAnterior);
+  await carregarCadastrosVenda(_vendaEmpresaAnterior);
 }
 
-// ══ CADASTRO RAPIDO DE SKU CANONICO, DENTRO DO MODAL ═════════════════════
-//
-// Travar o campo no grupo canonico sem dar uma saida criava um beco: vender uma
-// coisa nova obrigava a abandonar o lancamento no meio, porque os tres caminhos de
-// cadastro ficam fora do modal e nenhum deles e "na hora" -- a aba de Correlacao
-// associa um sku_venda que JA apareceu numa venda, e os outros dois sao planilha.
-//
-// Isto NAO e a volta do texto livre: o SKU criado aqui ganha linha propria em
-// correlacao_sku (sku_canonico = sku_venda, multiplicador 1), que e a forma de um
-// canonico sem apelido -- exatamente o que aplicarCPV ja faz para SKU novo de
-// planilha. Antes, o SKU digitado ia para vendas.sku sem nenhuma linha de
-// correlacao e ficava orfao para sempre.
-//
-// Por decisao do usuario (06/10/2026) o CPV NAO e pedido aqui; o custo entra depois
-// pela aba de CPV, por planilha. A consequencia e real e esta escrita na tela: o SKU
-// nasce sem custo, logo a linha de venda fica sem MCB e sem MCL ate o CPV existir.
-//
-// toUpperCase() e obrigatorio: e a mesma normalizacao do upload de CPV
-// (trim().toUpperCase()). Sem ela, um SKU criado em minuscula aqui nunca casaria
-// com a linha da planilha de custo.
+// ── cadastro rapido de SKU: entra no grupo canonico E na tabela, com preco ──
+// Sem o preco o SKU nasceria invendavel, porque o formulario nao deixa digitar
+// valor. E por isso que aqui o campo obrigatorio e o preco, e nao o CPV.
 function abrirNovoCanonico(){
   const emp=empresaDaVenda();
   if(!emp){alert('Selecione a empresa da venda antes de criar um SKU.');return;}
+  if(!_vendaTabela){alert('Selecione um canal com tabela de preço antes de criar um SKU.');return;}
   const p=document.getElementById('venda-novo-canon');
   if(p)p.style.display='';
   const i=document.getElementById('novo-canon-sku');
-  if(i){
-    i.value=String(document.getElementById('venda-sku').value||'').trim().toUpperCase();
-    i.focus();
-  }
+  if(i){i.value=String(document.getElementById('venda-sku').value||'').trim().toUpperCase();i.focus();}
+  const pr=document.getElementById('novo-canon-preco');
+  if(pr)pr.value='';
   onNovoCanonInput();
 }
 function fecharNovoCanonico(){
   const p=document.getElementById('venda-novo-canon');if(p)p.style.display='none';
   const h=document.getElementById('novo-canon-hint');if(h)h.textContent='';
   const i=document.getElementById('novo-canon-sku');if(i)i.value='';
+  const pr=document.getElementById('novo-canon-preco');if(pr)pr.value='';
 }
 function onNovoCanonInput(){
   const el=document.getElementById('novo-canon-sku');
+  const pr=document.getElementById('novo-canon-preco');
   const h=document.getElementById('novo-canon-hint');
   const b=document.getElementById('novo-canon-btn');
   const sku=String(el?el.value:'').trim().toUpperCase();
+  const preco=cpvNumero(pr?pr.value:'');
   let erro='';
   if(sku){
     if(sku.length<2)erro='código curto demais';
-    // ; , " e quebra de linha sao os separadores da planilha de CPV: um SKU com eles
-    // quebraria o proprio arquivo que serve para cadastrar o custo dele.
-    else if(/[;,"\n]/.test(sku))erro='sem ; , nem aspas — quebram a planilha de CPV';
-    else if(_vendaCanon.some(x=>x.toUpperCase()===sku))erro='já existe no grupo canônico desta empresa';
+    // ; , e aspas sao os separadores da planilha de preco e da de CPV
+    else if(/[;,"\n]/.test(sku))erro='sem ; , nem aspas — quebram as planilhas';
+    else if(_vendaPrecos[sku]!==undefined)erro='já está nesta tabela de preço';
+  }
+  if(!erro&&sku){
+    if(preco===null||isNaN(preco))erro='informe o preço';
+    else if(!(preco>0))erro='o preço tem de ser maior que zero';
   }
   if(h){
-    h.textContent=erro?('✗ '+erro):(sku?('será criado como '+sku):'');
+    h.textContent=erro?('✗ '+erro):(sku?('será criado como '+sku+' a '+fBRL(preco)):'');
     h.style.color=erro?'var(--red,#dc2626)':'var(--text3)';
   }
   if(b)b.disabled=!!erro||!sku;
@@ -4133,119 +4707,74 @@ async function criarNovoCanonico(){
   const b=document.getElementById('novo-canon-btn');
   const h=document.getElementById('novo-canon-hint');
   const sku=String(document.getElementById('novo-canon-sku').value||'').trim().toUpperCase();
-  if(!emp||!sku)return;
+  const preco=cpvNumero(document.getElementById('novo-canon-preco').value);
+  if(!emp||!sku||!_vendaTabela||!(preco>0))return;
   if(b){b.disabled=true;b.textContent='Criando...';}
   try{
-    // Este codigo ja e sku_venda de OUTRO canonico? Criar um auto-mapeamento deixaria
-    // duas linhas com o mesmo sku_venda e a resolucao do canonico ficaria ambigua.
+    // ja e sku_venda de OUTRO canonico? auto-mapear criaria dois sku_venda iguais
+    // e a resolucao do canonico ficaria ambigua.
     const ja=await sbGet('correlacao_sku',
       `?empresa_id=eq.${emp}&sku_venda=eq.${encodeURIComponent(sku)}&select=sku_canonico`);
-    if(ja&&ja.length){
-      if(h){h.textContent='✗ este código já aponta para o canônico "'+ja[0].sku_canonico+'" — use esse na lista';
+    if(ja&&ja.length&&String(ja[0].sku_canonico).toUpperCase()!==sku){
+      if(h){h.textContent='✗ este código já aponta para o canônico "'+ja[0].sku_canonico+'" — use esse';
             h.style.color='var(--red,#dc2626)';}
       return;
     }
-    await sbPost('correlacao_sku',{empresa_id:emp,sku_canonico:sku,sku_venda:sku,multiplicador:1});
-    await carregarCanonicosVenda(emp);   // relê do banco; nao confia no otimismo local
-    if(!_vendaCanon.some(x=>x.toUpperCase()===sku)){
-      if(h){h.textContent='✗ gravou mas não voltou na lista — recarregue a página antes de seguir';
-            h.style.color='var(--red,#dc2626)';}
+    if(!ja||!ja.length){
+      await sbPost('correlacao_sku',{empresa_id:emp,sku_canonico:sku,sku_venda:sku,multiplicador:1});
+    }
+    await sbPost('tabela_preco_itens',{tabela_id:_vendaTabela.tabela_id,sku,preco});
+    await onVendaCanalCliente();          // rele a tabela do banco
+    if(_vendaPrecos[sku]===undefined){
+      if(h){h.textContent='✗ gravou mas não voltou na tabela — recarregue a página';h.style.color='var(--red,#dc2626)';}
       return;
     }
     document.getElementById('venda-sku').value=sku;
-    _vendaPrecoTocado=false;
-    onVendaSkuInput();                   // revalida e tenta sugerir preco
+    onVendaSkuInput();
     fecharNovoCanonico();
-    // depois de onVendaSkuInput, senao o '✓ SKU canônico' sobrescreveria este aviso
     const hs=document.getElementById('venda-sku-hint');
-    if(hs){hs.textContent='✓ '+sku+' criado — ainda sem CPV, MCB/MCL ficam vazios nesta linha';
+    if(hs){hs.textContent='✓ '+sku+' criado a '+fBRL(preco)+' — sem CPV ainda, MCB/MCL ficam vazios nesta linha';
            hs.style.color='var(--amber)';}
   }catch(e){
-    if(h){h.textContent='✗ '+(e.message||'erro ao criar');h.style.color='var(--red,#dc2626)';}
+    if(h){h.textContent='✗ '+(e.message||e);h.style.color='var(--red,#dc2626)';}
   }finally{
     if(b){b.disabled=false;b.textContent='Criar';}
   }
 }
 
-function skuEhCanonico(sku){
-  if(!sku)return false;
-  const u=sku.trim().toUpperCase();
-  return _vendaCanon.some(x=>x.toUpperCase()===u);
-}
-// grafia EXATA do canonico, nao a digitada: e ela que casa com custos_sku
-function grafiaCanonica(sku){
+// grafia EXATA como esta na tabela: e ela que casa com custos_sku
+function skuDaTabela(sku){
   const u=String(sku||'').trim().toUpperCase();
-  return _vendaCanon.find(x=>x.toUpperCase()===u)||null;
+  if(!u)return null;
+  return Object.keys(_vendaPrecos).find(x=>x.toUpperCase()===u)||null;
 }
 
 function onVendaSkuInput(){
   const el=document.getElementById('venda-sku');
   if(!el)return;
-  const sku=el.value.trim();
   const hint=document.getElementById('venda-sku-hint');
   const btn=document.getElementById('venda-add-btn');
-  const ok=skuEhCanonico(sku);
+  const elP=document.getElementById('venda-preco');
+  const canon=skuDaTabela(el.value);
+  const n=Object.keys(_vendaPrecos).length;
   if(hint){
-    if(!_vendaCanon.length){
-      hint.textContent='⚠ Esta empresa não tem SKU canônico — cadastre em Cadastros › Correlação de SKUs';
+    if(!_vendaTabela){
+      hint.textContent='Selecione o canal primeiro';hint.style.color='var(--text3)';
+    }else if(!n){
+      hint.textContent='⚠ A tabela "'+_vendaTabela.tabela_nome+'" está vazia — suba a planilha de preços';
       hint.style.color='var(--amber)';
-    }else if(!sku){
-      hint.textContent=_vendaCanon.length+' SKUs canônicos disponíveis';
-      hint.style.color='var(--text3)';
-    }else if(ok){
-      hint.textContent='✓ SKU canônico';
-      hint.style.color='var(--green)';
+    }else if(!el.value.trim()){
+      hint.textContent=n+' SKU(s) nesta tabela';hint.style.color='var(--text3)';
+    }else if(canon){
+      hint.textContent='✓ na tabela';hint.style.color='var(--green)';
     }else{
-      hint.textContent='✗ Fora da lista de canônicos desta empresa';
-      hint.style.color='var(--red,#dc2626)';
+      hint.textContent='✗ fora da tabela de preço deste canal';hint.style.color='var(--red,#dc2626)';
     }
   }
-  if(btn)btn.disabled=!ok;
-  if(ok)sugerirPrecoUltimaVenda();
-  else{const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';}
-}
-
-// ── PRECO SUGERIDO: ultima venda do MESMO SKU para o MESMO cliente ───────
-// Isto NAO existia: o campo nascia vazio e era digitado a mao em toda venda.
-// Ordem de preferencia, e o rotulo diz qual foi usada:
-//   1. mesmo cliente + mesmo SKU  -> verde
-//   2. mesmo SKU, qualquer cliente -> ambar (e um ponto de partida, nao o preco dele)
-//   3. nada -> campo fica vazio
-// Nunca sobrescreve preco que o usuario digitou (_vendaPrecoTocado).
-let _vendaPrecoBusca=0;
-async function sugerirPrecoUltimaVenda(){
-  const emp=empresaDaVenda();
-  const elP=document.getElementById('venda-preco');
-  const hint=document.getElementById('venda-preco-hint');
-  const sku=grafiaCanonica(document.getElementById('venda-sku')?.value);
-  if(!emp||!sku){if(hint)hint.textContent='';return;}
-  if(_vendaPrecoTocado&&elP.value){if(hint)hint.textContent='';return;}
-  const cli=document.getElementById('venda-cliente').value.trim();
-  const marca=++_vendaPrecoBusca;          // descarta resposta que chega fora de ordem
-  const base=`?empresa_id=eq.${emp}&sku=eq.${encodeURIComponent(sku)}&valor_unitario=gt.0`
-    +`&select=valor_unitario,data_pedido&order=data_pedido.desc,criado_em.desc&limit=1`;
-  try{
-    let r=[],doCliente=false;
-    if(cli){
-      r=await sbGet('vendas',base+`&cliente_nome=eq.${encodeURIComponent(cli)}`);
-      doCliente=!!(r&&r.length);
-    }
-    if(!r||!r.length)r=await sbGet('vendas',base);
-    if(marca!==_vendaPrecoBusca)return;
-    if(!r||!r.length){
-      if(hint){hint.textContent='sem venda anterior deste SKU';hint.style.color='var(--text3)';}
-      return;
-    }
-    const p=parseFloat(r[0].valor_unitario)||0;
-    if(!(p>0)){if(hint)hint.textContent='';return;}
-    if(!_vendaPrecoTocado||!elP.value){elP.value=p.toFixed(2);calcVenda();}
-    if(hint){
-      const d=String(r[0].data_pedido||'').slice(0,10).split('-').reverse().join('/');
-      hint.textContent=doCliente?('último preço deste cliente — '+d)
-                                :('último preço praticado (outro cliente) — '+d);
-      hint.style.color=doCliente?'var(--green)':'var(--amber)';
-    }
-  }catch(e){if(hint)hint.textContent='';}
+  // preco TRAVADO: sempre o da tabela, nunca digitado
+  if(elP)elP.value=canon?_vendaPrecos[canon].toFixed(2):'';
+  if(btn)btn.disabled=!canon;
+  calcVenda();
 }
 
 let _vendaCarrinho=[];
@@ -4258,19 +4787,19 @@ function calcVenda(){
 }
 
 function adicionarItemVenda(){
-  const canon=grafiaCanonica(document.getElementById('venda-sku').value);
+  const canon=skuDaTabela(document.getElementById('venda-sku').value);
   const qtd=parseInt(document.getElementById('venda-qtd').value);
-  const preco=parseFloat(document.getElementById('venda-preco').value);
-  // trava dura: sem isto um SKU fora do grupo canonico entraria e a linha nunca
-  // teria CPV, logo nunca teria MCB nem MCL.
-  if(!canon){alert('Escolha um SKU da lista de canônicos desta empresa.');return;}
-  if(!qtd||!preco){alert('Preencha quantidade e preço do item');return;}
+  // trava dura: o SKU tem de estar na tabela resolvida, e o preco vem DELA --
+  // nao do campo, que e so exibicao. Ler do campo abriria a porta que
+  // "travado, sem excecao" fechou.
+  if(!canon){alert('Escolha um SKU da tabela de preço deste canal.');return;}
+  if(!qtd||qtd<1){alert('Informe a quantidade');return;}
+  const preco=_vendaPrecos[canon];
+  if(!(preco>0)){alert('Este SKU está sem preço na tabela.');return;}
   _vendaCarrinho.push({sku:canon,quantidade:qtd,valor_unitario:preco});
   document.getElementById('venda-sku').value='';
   document.getElementById('venda-qtd').value='1';
   document.getElementById('venda-preco').value='';
-  const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
-  _vendaPrecoTocado=false;
   document.getElementById('venda-total-item').textContent='';
   onVendaSkuInput();
   renderVendaCarrinho();
@@ -4392,9 +4921,13 @@ async function reimprimirPedido(orderId){
 
 async function finalizarVendaManual(){
   if(!_vendaCarrinho.length)return alert('Adicione pelo menos um item à venda');
-  const canal=normalizarCanal(document.getElementById('venda-canal').value.trim());
+  // canal e cliente vem de cadastro, nao de texto: canais_venda.nome e o que vai
+  // para vendas.marketplace, e o UNIQUE daquela tabela e a trava contra as quatro
+  // grafias do mesmo canal medidas em 06/10/2026.
+  const canal=canalNomeSel();
   const dataVenda=document.getElementById('venda-data').value;
-  const clienteNome=document.getElementById('venda-cliente').value.trim();
+  const clienteNome=clienteNomeSel();
+  if(!canal){alert('Selecione o canal da venda.');return;}
   // empresa escolhida no TOPO do modal: e a mesma que filtrou a lista de canonicos.
   // Pedir aqui, no fim, permitia montar o carrinho com SKUs de uma empresa e gravar
   // em outra -- e os SKUs ficariam sem canonico correspondente na empresa de destino.
