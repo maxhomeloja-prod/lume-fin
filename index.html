@@ -9415,6 +9415,56 @@ async function verificarNovoCanonico(sel){
   sel.value=skuFormatado;
 }
 
+// ══ MIGRACAO DE VENDAS AO ASSOCIAR UM SKU A UM CANONICO ══════════════════
+//
+// O trabalho acontece na RPC migrar_sku_para_canonico (13-migrar-sku-para-canonico.sql).
+// Isto aqui e so a casca. NAO existe caminho alternativo em JavaScript de proposito:
+// foi a existencia de DUAS copias do laco (associarSKU e uploadCorrelacao) que
+// manteve o mesmo defeito vivo em dois lugares ate 07/10/2026.
+//
+// Por que saiu do front, em uma frase cada:
+//   · origem = destino apagava TODA linha do SKU (a busca do alvo achava a propria
+//     linha, somava nela mesma e dava DELETE);
+//   · a colisao era adivinhada por uma chave mais estreita que a constraint real,
+//     entao linhas que podiam conviver eram consolidadas e uma morria;
+//   · somar no alvo e apagar a origem nao eram atomicos, e sbDelete devolve
+//     booleano sem levantar erro -- delete que falhasse contava faturamento em dobro;
+//   · o liquido da linha absorvida se perdia, derrubando MCB/MCL pela metade.
+// Dentro da funcao do banco o corpo inteiro e uma transacao: ou tudo, ou nada.
+// Verificado em Postgres 16 real em 07/10/2026, inclusive o caso de erro no meio
+// do laco: a consolidacao que ja tinha dado certo voltou atras junto.
+//
+// A RPC tambem grava o vinculo em correlacao_sku, no mesmo COMMIT. Por isso quem
+// chama NAO escreve mais nessa tabela.
+async function migrarVendasParaCanonico(empresaId,skuVenda,skuCan,multiplicador){
+  try{
+    const r=await sbRpc('migrar_sku_para_canonico',{
+      p_empresa_id:empresaId,
+      p_sku_venda:skuVenda,
+      p_sku_canonico:skuCan,
+      p_multiplicador:parseInt(multiplicador)||1,
+      p_executar:true
+    });
+    const o=(Array.isArray(r)?r[0]:r)||{};
+    return {ok:true,
+            mesmo_sku:!!o.mesmo_sku,
+            linhas:o.linhas||0,
+            renomeadas:o.renomeadas||0,
+            consolidadas:o.consolidadas||0,
+            liquido_zerado:o.liquido_zerado||0,
+            liquido_recalculado:o.liquido_recalculado||0,
+            avisos:o.avisos||[]};
+  }catch(e){
+    const m=String(e.message||e);
+    // PGRST202 = a funcao nao existe no banco. Dizer isso e melhor que "erro".
+    if(m.includes('migrar_sku_para_canonico')&&/not find|PGRST202|schema cache/i.test(m)){
+      throw new Error('A função migrar_sku_para_canonico não está no banco. '
+        +'Rode 13-migrar-sku-para-canonico.sql antes de usar esta tela.');
+    }
+    throw e;
+  }
+}
+
 async function associarSKU(skuVenda,empresaIdVenda,btnEl){
   if(btnEl){btnEl.disabled=true;btnEl.textContent='Salvando...';}
   const chaveB64=btoa(skuVenda+'||'+empresaIdVenda).replace(/[^a-zA-Z0-9]/g,'');
@@ -9428,29 +9478,18 @@ async function associarSKU(skuVenda,empresaIdVenda,btnEl){
   const multEl=document.getElementById(multKey);
   const multiplicador=multEl?parseInt(multEl.value)||1:1;
   try{
-    const existente=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdVenda+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
-    if(existente.length>0){
-      await sbPatch('correlacao_sku','id=eq.'+existente[0].id,{sku_canonico:skuCan,multiplicador});
-    } else {
-      await sbPost('correlacao_sku',{empresa_id:empresaIdVenda,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});
-    }
-    const vendasAfetadas=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario,valor_total,valor_bruto');
-    for(const v of vendasAfetadas){
-      const qtdNova=v.quantidade*multiplicador;
-      const precoUnitNovo=v.valor_unitario/multiplicador;
-      // Verificar se já existe venda com o SKU canônico no mesmo pedido (conflito de constraint)
-      const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdVenda+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade,valor_total,valor_bruto');
-      if(jaExiste.length>0){
-        // Consolidar no registro existente: quantidade E valores (senão o faturamento da linha removida se perde)
-        await sbPatch('vendas','id=eq.'+jaExiste[0].id,{
-          quantidade:(parseFloat(jaExiste[0].quantidade)||0)+qtdNova,
-          valor_total:(parseFloat(jaExiste[0].valor_total)||0)+(parseFloat(v.valor_total)||0),
-          valor_bruto:(parseFloat(jaExiste[0].valor_bruto)||0)+(parseFloat(v.valor_bruto)||0)
-        });
-        await sbDelete('vendas','id=eq.'+v.id);
-      } else {
-        await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoUnitNovo});
-      }
+    // O vinculo e a migracao vao juntos, no mesmo COMMIT da RPC. Nada de gravar
+    // correlacao_sku aqui: se a migracao falhasse, o vinculo ficaria sem as vendas.
+    const mig=await migrarVendasParaCanonico(empresaIdVenda,skuVenda,skuCan,multiplicador);
+    if(mig.mesmo_sku){
+      alert('Vínculo de mesmo nome gravado. Nenhuma venda foi movida — elas já carregam este código.');
+    }else{
+      const p=[];
+      if(mig.renomeadas)p.push(mig.renomeadas+' linha(s) passaram para o código canônico');
+      if(mig.consolidadas)p.push(mig.consolidadas+' consolidada(s) por colisão de pedido');
+      if(mig.liquido_zerado)p.push(mig.liquido_zerado+' voltaram para a fila do líquido');
+      if(mig.liquido_recalculado)p.push(mig.liquido_recalculado+' de venda direta tiveram o líquido refeito');
+      if(p.length)alert('Vínculo gravado.\n\n'+p.join('\n'));
     }
     loadCorrelacao();
   }catch(e){
@@ -9540,44 +9579,44 @@ async function uploadCorrelacao(input){
     return;
   }
 
-  let ok=0,erros=0;
+  let ok=0,erros=0,autos=0,renomeadas=0,consolidadas=0,liquidoZerado=0,liquidoRefeito=0,falhasMigracao=[];
   for(let i=0;i<linhas.length;i++){
     const row=linhas[i];
     const skuVenda=String(row[0]||'').trim();
     const skuCan=String(row[1]||'').trim().toUpperCase();
-    const multiplicador=parseInt(row[2])||1;
     const empresaIdUp=String(row[3]||'').trim()||document.getElementById('corr-upload-empresa')?.value;
     if(!skuVenda||!skuCan||skuCan==='NOVO'||!empresaIdUp)continue;
+    // auto-mapeamento tem multiplicador 1 por definicao. A planilha exportada traz
+    // essas linhas (a aba de CPV cria canonico proprio para SKU novo), e e por elas
+    // que o defeito de 07/10 entrava: ver migrarVendasParaCanonico.
+    const multiplicador=parseInt(row[2])||1;
     try{
-      const ex=await sbGet('correlacao_sku','?empresa_id=eq.'+empresaIdUp+'&sku_venda=eq.'+encodeURIComponent(skuVenda));
-      if(ex.length>0){await sbPatch('correlacao_sku','id=eq.'+ex[0].id,{sku_canonico:skuCan,multiplicador});}
-      else{await sbPost('correlacao_sku',{empresa_id:empresaIdUp,sku_venda:skuVenda,sku_canonico:skuCan,multiplicador});}
-      const vendasUp=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuVenda)+'&select=id,pedido_id,marketplace,quantidade,valor_unitario,valor_total,valor_bruto');
-      for(const v of vendasUp){
-        const qtdNova=v.quantidade*multiplicador;
-        const precoNovo=v.valor_unitario/multiplicador;
-        const jaExiste=await sbGet('vendas','?empresa_id=eq.'+empresaIdUp+'&sku=eq.'+encodeURIComponent(skuCan)+'&pedido_id=eq.'+encodeURIComponent(v.pedido_id)+'&marketplace=eq.'+encodeURIComponent(v.marketplace)+'&select=id,quantidade,valor_total,valor_bruto');
-        if(jaExiste.length>0){
-          // Consolidar quantidade E valores — a linha removida não pode levar o faturamento junto
-          await sbPatch('vendas','id=eq.'+jaExiste[0].id,{
-            quantidade:(parseFloat(jaExiste[0].quantidade)||0)+qtdNova,
-            valor_total:(parseFloat(jaExiste[0].valor_total)||0)+(parseFloat(v.valor_total)||0),
-            valor_bruto:(parseFloat(jaExiste[0].valor_bruto)||0)+(parseFloat(v.valor_bruto)||0)
-          });
-          await sbDelete('vendas','id=eq.'+v.id);
-        } else {
-          await sbPatch('vendas','id=eq.'+v.id,{sku:skuCan,sku_original:skuVenda,quantidade:qtdNova,valor_unitario:precoNovo});
-        }
-      }
+      // a RPC grava o vinculo E migra as vendas no mesmo COMMIT, e ela mesma forca
+      // multiplicador 1 quando origem e destino sao o mesmo SKU
+      const mig=await migrarVendasParaCanonico(empresaIdUp,skuVenda,skuCan,multiplicador);
+      if(mig.mesmo_sku)autos++;
+      renomeadas+=mig.renomeadas; consolidadas+=mig.consolidadas;
+      liquidoZerado+=mig.liquido_zerado; liquidoRefeito+=mig.liquido_recalculado;
       ok++;
     }catch(e){
       erros++;
+      falhasMigracao.push('linha '+(i+1)+' ('+skuVenda+'): '+e.message);
       console.error('[uploadCorrelacao] erro linha '+(i+1)+':', skuVenda, e.message);
     }
     bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
     txt.textContent='Processando '+(i+1)+'/'+linhas.length+' — '+ok+' ok'+(erros?', '+erros+' erros':'');
   }
-  txt.textContent='✅ '+ok+' correlações processadas'+(erros?', '+erros+' erros. Veja o console para detalhes.':'');
+  txt.textContent='✅ '+ok+' correlações processadas'
+    +(autos?' · '+autos+' de mesmo nome (vínculo gravado, nenhuma venda movida)':'')
+    +(renomeadas?' · '+renomeadas+' linha(s) renomeadas':'')
+    +(consolidadas?' · '+consolidadas+' consolidada(s)':'')
+    +(liquidoZerado?' · '+liquidoZerado+' voltaram para a fila do líquido':'')
+    +(liquidoRefeito?' · '+liquidoRefeito+' de venda direta com líquido refeito':'')
+    +(erros?' · ⚠ '+erros+' linha(s) falharam':'');
+  // cada falha abortou SO a sua propria transacao: a linha nao foi migrada pela
+  // metade, e as outras correlacoes seguiram.
+  if(falhasMigracao.length)alert('Linhas que falharam (cada uma voltou atrás por inteiro, nada ficou pela metade):\n\n'
+    +falhasMigracao.slice(0,10).join('\n')+(falhasMigracao.length>10?'\n…':''));
   setTimeout(()=>{
     prog.style.display='none';
     loadCorrelacao();
