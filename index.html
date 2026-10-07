@@ -1554,9 +1554,22 @@ tr:hover td{background:var(--surface2);}
       <div class="card-title" style="margin:0 0 8px">Itens da venda</div>
       <div id="venda-itens-lista" style="margin-bottom:10px"></div>
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label class="form-label">SKU canônico</label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" autocomplete="off" placeholder="digite para filtrar a lista…" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
+        <div class="form-group" style="flex:2"><label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>SKU canônico</span><a href="javascript:void(0)" onclick="abrirNovoCanonico()" style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:600;text-transform:none;letter-spacing:0">+ Novo SKU</a></label><input class="form-control" type="text" id="venda-sku" list="venda-sku-list" autocomplete="off" placeholder="digite para filtrar a lista…" oninput="onVendaSkuInput()"><datalist id="venda-sku-list"></datalist><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-sku-hint"></div></div>
         <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" id="venda-qtd" value="1" oninput="calcVenda()"></div>
         <div class="form-group"><label class="form-label">Preço Unit. (R$)</label><input class="form-control" type="number" id="venda-preco" step="0.01" oninput="_vendaPrecoTocado=true;calcVenda()"><div style="font-size:11px;color:var(--text3);margin-top:3px" id="venda-preco-hint"></div></div>
+      </div>
+      <div id="venda-novo-canon" style="display:none;border:1px solid var(--amber);border-radius:var(--radius);padding:10px 12px;margin:4px 0 10px;background:var(--surface2)">
+        <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+          <strong>Novo SKU canônico</strong> — entra no grupo canônico desta empresa, auto-mapeado (multiplicador 1).
+          Ele nasce <strong>sem CPV</strong>: MCB e MCL ficam vazios nessa linha até você cadastrar o custo em
+          Cadastros › Custos (CPV).
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="form-control" type="text" id="novo-canon-sku" placeholder="código do SKU" style="flex:1" autocomplete="off" oninput="onNovoCanonInput()">
+          <button class="btn btn-primary btn-sm" id="novo-canon-btn" onclick="criarNovoCanonico()" disabled>Criar</button>
+          <button class="btn btn-secondary btn-sm" onclick="fecharNovoCanonico()">Cancelar</button>
+        </div>
+        <div style="font-size:11px;margin-top:5px;min-height:14px" id="novo-canon-hint"></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <button class="btn btn-secondary btn-sm" id="venda-add-btn" onclick="adicionarItemVenda()" disabled>+ Adicionar item</button>
@@ -4029,6 +4042,7 @@ async function onVendaEmpresaChange(){
     _vendaCarrinho=[];renderVendaCarrinho();
   }
   _vendaEmpresaAnterior=nova;
+  fecharNovoCanonico();   // o painel era da empresa antiga
   document.getElementById('venda-sku').value='';
   document.getElementById('venda-preco').value='';
   _vendaPrecoTocado=false;
@@ -4044,6 +4058,7 @@ async function abrirModalVendaManual(){
   document.getElementById('venda-total-item').textContent='';
   const hp=document.getElementById('venda-preco-hint');if(hp)hp.textContent='';
   _vendaCarrinho=[];_vendaPrecoTocado=false;
+  fecharNovoCanonico();
   const wrap=document.getElementById('venda-empresa-wrap');
   const sel=document.getElementById('venda-empresa');
   if(sel){
@@ -4055,6 +4070,101 @@ async function abrirModalVendaManual(){
   renderVendaCarrinho();
   abrirModal('modal-venda');
   await carregarCanonicosVenda(_vendaEmpresaAnterior);
+}
+
+// ══ CADASTRO RAPIDO DE SKU CANONICO, DENTRO DO MODAL ═════════════════════
+//
+// Travar o campo no grupo canonico sem dar uma saida criava um beco: vender uma
+// coisa nova obrigava a abandonar o lancamento no meio, porque os tres caminhos de
+// cadastro ficam fora do modal e nenhum deles e "na hora" -- a aba de Correlacao
+// associa um sku_venda que JA apareceu numa venda, e os outros dois sao planilha.
+//
+// Isto NAO e a volta do texto livre: o SKU criado aqui ganha linha propria em
+// correlacao_sku (sku_canonico = sku_venda, multiplicador 1), que e a forma de um
+// canonico sem apelido -- exatamente o que aplicarCPV ja faz para SKU novo de
+// planilha. Antes, o SKU digitado ia para vendas.sku sem nenhuma linha de
+// correlacao e ficava orfao para sempre.
+//
+// Por decisao do usuario (06/10/2026) o CPV NAO e pedido aqui; o custo entra depois
+// pela aba de CPV, por planilha. A consequencia e real e esta escrita na tela: o SKU
+// nasce sem custo, logo a linha de venda fica sem MCB e sem MCL ate o CPV existir.
+//
+// toUpperCase() e obrigatorio: e a mesma normalizacao do upload de CPV
+// (trim().toUpperCase()). Sem ela, um SKU criado em minuscula aqui nunca casaria
+// com a linha da planilha de custo.
+function abrirNovoCanonico(){
+  const emp=empresaDaVenda();
+  if(!emp){alert('Selecione a empresa da venda antes de criar um SKU.');return;}
+  const p=document.getElementById('venda-novo-canon');
+  if(p)p.style.display='';
+  const i=document.getElementById('novo-canon-sku');
+  if(i){
+    i.value=String(document.getElementById('venda-sku').value||'').trim().toUpperCase();
+    i.focus();
+  }
+  onNovoCanonInput();
+}
+function fecharNovoCanonico(){
+  const p=document.getElementById('venda-novo-canon');if(p)p.style.display='none';
+  const h=document.getElementById('novo-canon-hint');if(h)h.textContent='';
+  const i=document.getElementById('novo-canon-sku');if(i)i.value='';
+}
+function onNovoCanonInput(){
+  const el=document.getElementById('novo-canon-sku');
+  const h=document.getElementById('novo-canon-hint');
+  const b=document.getElementById('novo-canon-btn');
+  const sku=String(el?el.value:'').trim().toUpperCase();
+  let erro='';
+  if(sku){
+    if(sku.length<2)erro='código curto demais';
+    // ; , " e quebra de linha sao os separadores da planilha de CPV: um SKU com eles
+    // quebraria o proprio arquivo que serve para cadastrar o custo dele.
+    else if(/[;,"\n]/.test(sku))erro='sem ; , nem aspas — quebram a planilha de CPV';
+    else if(_vendaCanon.some(x=>x.toUpperCase()===sku))erro='já existe no grupo canônico desta empresa';
+  }
+  if(h){
+    h.textContent=erro?('✗ '+erro):(sku?('será criado como '+sku):'');
+    h.style.color=erro?'var(--red,#dc2626)':'var(--text3)';
+  }
+  if(b)b.disabled=!!erro||!sku;
+}
+async function criarNovoCanonico(){
+  const emp=empresaDaVenda();
+  const b=document.getElementById('novo-canon-btn');
+  const h=document.getElementById('novo-canon-hint');
+  const sku=String(document.getElementById('novo-canon-sku').value||'').trim().toUpperCase();
+  if(!emp||!sku)return;
+  if(b){b.disabled=true;b.textContent='Criando...';}
+  try{
+    // Este codigo ja e sku_venda de OUTRO canonico? Criar um auto-mapeamento deixaria
+    // duas linhas com o mesmo sku_venda e a resolucao do canonico ficaria ambigua.
+    const ja=await sbGet('correlacao_sku',
+      `?empresa_id=eq.${emp}&sku_venda=eq.${encodeURIComponent(sku)}&select=sku_canonico`);
+    if(ja&&ja.length){
+      if(h){h.textContent='✗ este código já aponta para o canônico "'+ja[0].sku_canonico+'" — use esse na lista';
+            h.style.color='var(--red,#dc2626)';}
+      return;
+    }
+    await sbPost('correlacao_sku',{empresa_id:emp,sku_canonico:sku,sku_venda:sku,multiplicador:1});
+    await carregarCanonicosVenda(emp);   // relê do banco; nao confia no otimismo local
+    if(!_vendaCanon.some(x=>x.toUpperCase()===sku)){
+      if(h){h.textContent='✗ gravou mas não voltou na lista — recarregue a página antes de seguir';
+            h.style.color='var(--red,#dc2626)';}
+      return;
+    }
+    document.getElementById('venda-sku').value=sku;
+    _vendaPrecoTocado=false;
+    onVendaSkuInput();                   // revalida e tenta sugerir preco
+    fecharNovoCanonico();
+    // depois de onVendaSkuInput, senao o '✓ SKU canônico' sobrescreveria este aviso
+    const hs=document.getElementById('venda-sku-hint');
+    if(hs){hs.textContent='✓ '+sku+' criado — ainda sem CPV, MCB/MCL ficam vazios nesta linha';
+           hs.style.color='var(--amber)';}
+  }catch(e){
+    if(h){h.textContent='✗ '+(e.message||'erro ao criar');h.style.color='var(--red,#dc2626)';}
+  }finally{
+    if(b){b.disabled=false;b.textContent='Criar';}
+  }
 }
 
 function skuEhCanonico(sku){
