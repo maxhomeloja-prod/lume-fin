@@ -2971,11 +2971,20 @@ async function loadDashboard(){
     const[kpisHoje,vendasHoje]=await Promise.all([
       sbRpc('vendas_kpis',{p_empresa_ids:empIdsArr,p_de:hoje2,p_ate:hoje2,p_canal:null,p_sku:null,p_cliente:null}),
       sbGet('vendas',`?empresa_id=in.(${empIds})&data_pedido=eq.${hoje2}`
-        +`&select=empresa_id,data_pedido,sku,quantidade,valor_unitario,valor_total,receita_liquida,marketplace,order_id,pedido_id`),
+        +`&select=empresa_id,data_pedido,sku,quantidade,valor_unitario,valor_total,receita_liquida,liquido_status,marketplace,order_id,pedido_id`),
       carregarCPVParaVendas(empIdsArr)   // preenche _cpvVendas, usado por cpvDaLinha
     ]);
     _dashKpisHoje=kpisHoje[0]||{total_receita:0,total_pedidos:0,total_unidades:0};
-    _dashVendasHoje=vendasHoje||[];
+    // Venda cancelada fica fora da bruta E da liquida -- decisao do usuario em
+    // 08/10/2026. Os RPCs vendas_kpis, vendas_agregado_sku_dia e _hora passaram a
+    // filtrar no banco (15-excluir-cancelados.sql); aqui o filtro e no front
+    // porque estes quadros somam linha crua. Sem isto o dashboard divergiria das
+    // outras telas, que e exatamente o tipo de divergencia que a gente passou a
+    // tarde de hoje rastreando na Temu.
+    // O teste e COALESCE(status,'') <> 'cancelado', igual ao do banco: nao da para
+    // usar `liquido_status=not.eq.cancelado` no PostgREST porque linha com status
+    // NULL -- a maioria -- sairia junto.
+    _dashVendasHoje=(vendasHoje||[]).filter(v=>(v.liquido_status||'')!=='cancelado');
     sincronizarBotoesDashBase();
     renderDashVendasHoje();
     renderDashTopSkus();
