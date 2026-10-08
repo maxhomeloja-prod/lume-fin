@@ -1699,6 +1699,19 @@ tr:hover td{background:var(--surface2);}
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-comprovante">
+  <div class="modal modal-lg" style="max-width:720px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+      <div><div class="modal-title" style="margin:0" id="comp-titulo">Comprovante</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="imprimirComprovante()">🖨️ Imprimir</button>
+        <button class="btn btn-secondary btn-sm" onclick="fecharModal('modal-comprovante')">Fechar</button>
+      </div>
+    </div>
+    <iframe id="comp-frame" style="width:100%;height:68vh;border:1px solid var(--border);border-radius:var(--radius);background:#fff"></iframe>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-canal">
   <div class="modal"><div class="modal-title" id="canal-modal-titulo">Novo canal</div>
     <div class="modal-sub">O nome vai literalmente para o campo de canal da venda</div>
@@ -3945,15 +3958,41 @@ async function loadEntregas(){
   }catch(e){document.getElementById('entregas-lista').innerHTML='<div class="empty">Erro: '+e.message+'</div>';}
 }
 
+// ── COMPROVANTE: na propria pagina, sem popup ──────────────────────────
+// window.open depois de um await perde o gesto do clique e o navegador bloqueia
+// em silencio -- `win` vem nulo e o codigo antigo simplesmente nao fazia nada,
+// sem erro e sem aviso. O proprio sistema ja conhecia essa armadilha em outros
+// lugares ("Abrir janela ANTES das chamadas assincronas"), mas aqui nao.
+// Em iframe na pagina o problema deixa de existir, e funciona tambem no
+// navegador do celular e dentro de webview de WhatsApp, onde window.open
+// costuma nao fazer nada.
+function abrirComprovanteEmModal(html, titulo){
+  const f=document.getElementById('comp-frame');
+  const t=document.getElementById('comp-titulo');
+  if(t)t.textContent=titulo||'Comprovante';
+  if(f)f.srcdoc=html;
+  abrirModal('modal-comprovante');
+}
+function imprimirComprovante(){
+  const f=document.getElementById('comp-frame');
+  try{ f.contentWindow.focus(); f.contentWindow.print(); }
+  catch(e){ alert('Não foi possível imprimir por aqui. Use o botão de imprimir do próprio comprovante.'); }
+}
+
 async function verComprovante(entregaId, nomeTerc, dataEntrega){
   try{
+    // 1) o html que a lista ja trouxe, sem ida ao banco
+    const emMemoria=(typeof _facEntregas!=='undefined'&&_facEntregas)
+      ? _facEntregas.find(x=>String(x.id)===String(entregaId)) : null;
+    if(emMemoria&&emMemoria.comprovante_html){
+      abrirComprovanteEmModal(emMemoria.comprovante_html,'Comprovante — '+(dataEntrega||'').split('-').reverse().join('/'));
+      return;
+    }
     const [entrega]=await sbGet('entregas_op',`?id=eq.${entregaId}&select=comprovante_html,criado_em,empresa_id,terceiro_id,data_entrega`);
     if(!entrega)return alert('Entrega não encontrada');
 
-    // Tem HTML salvo — abrir o comprovante original diretamente
     if(entrega.comprovante_html){
-      const win=window.open('','_blank');
-      if(win){win.document.write(entrega.comprovante_html);win.document.close();}
+      abrirComprovanteEmModal(entrega.comprovante_html,'Comprovante — '+(dataEntrega||'').split('-').reverse().join('/'));
       return;
     }
 
@@ -3996,8 +4035,7 @@ async function verComprovante(entregaId, nomeTerc, dataEntrega){
 
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante — ${nomeTerc} — ${dataFmt}</title><style>body{font-family:Arial,sans-serif;max-width:600px;margin:20px auto;font-size:13px}h2{color:#1e9be8;margin-bottom:4px}.info{background:#f0f7ff;padding:12px;border-radius:6px;margin-bottom:16px}table{width:100%;border-collapse:collapse}th{background:#1e9be8;color:white;padding:7px 8px;text-align:left;font-size:12px}.total{background:#0d1b2a;color:white;font-weight:bold}.total td{padding:8px}@media print{button{display:none}}</style></head><body><h2>Maxhome Indústria e Comércio</h2><p style="color:#888;margin-top:0">Comprovante de Entrega</p><div class="info"><b>Facção:</b> ${nomeTerc}<br><b>Data da Entrega:</b> ${dataFmt}<br><b>Vencimento Pagamento:</b> ${vencFmt}<br>${obs?'<b>Observação:</b> '+obs+'<br>':''}</div><table><thead><tr><th>OP</th><th>SKU</th><th style="text-align:right">Qtd</th><th style="text-align:right">Preço</th><th style="text-align:right">Valor</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr class="total"><td colspan="2">TOTAL</td><td style="text-align:right">${totalQtd} peças</td><td></td><td style="text-align:right">${fBRL(totalValor)}</td></tr></tfoot></table>${blocoAssinatura}<br><button onclick="window.print()" style="background:#1e9be8;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button></body></html>`;
 
-    const win=window.open('','_blank');
-    if(win){win.document.write(html);win.document.close();}
+    abrirComprovanteEmModal(html,'Comprovante — '+nomeTerc+' — '+dataFmt);
   }catch(e){alert('Erro ao abrir comprovante: '+e.message);}
 }
 
@@ -7726,10 +7764,11 @@ function renderEntregasFaccao(){
       +'<td style="text-align:right">'+fN(e.quantidade)+'</td>'
       +'<td style="text-align:right;color:var(--green)">'+fBRL(e.valor_total)+'</td>'
       +'<td style="text-align:right">'
-        +(e.comprovante_html
-          ?'<button class="btn btn-secondary btn-sm" onclick="verComprovante(\''+e.id+'\',\''
-             +String(FACCAO_LOGADO.nome||'').replace(/'/g,"\\'")+'\',\''+e.data_entrega+'\')">Comprovante</button>'
-          :'<span style="font-size:11px;color:var(--text3)">sem comprovante</span>')
+        // sempre, mesmo sem comprovante_html: as entregas feitas antes do conserto
+        // de 08/10 ficaram com a coluna nula, e o fallback de verComprovante
+        // reconstroi o documento a partir dos dados da propria entrega.
+        +'<button class="btn btn-secondary btn-sm" onclick="verComprovante(\''+e.id+'\',\''
+           +String(FACCAO_LOGADO.nome||'').replace(/'/g,"\\'")+'\',\''+e.data_entrega+'\')">Comprovante</button>'
       +'</td>'
     +'</tr>').join('')+'</tbody></table>';
 }
@@ -9404,12 +9443,24 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
       });
     }
 
+    // Antes do laco: gerarHTMLComprovante le _faccaoCarrinho, que ainda esta cheio,
+    // e nao depende dos ids recem-inseridos.
+    const htmlComp=gerarHTMLComprovante(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
+
     for(const item of _faccaoCarrinho){
       const empIdItem=item.avulso?empresaPadrao:(item.op?.empresa_id||empresaPadrao);
       const entrega={
         empresa_id:empIdItem,
         op_id:item.avulso?null:item.op.id,
         terceiro_id:FACCAO_LOGADO.id,
+        // Gravado AQUI, no INSERT. Antes era um PATCH depois do insert, e a faccao
+        // nao tem politica de UPDATE em entregas_op -- so INSERT e SELECT. Sob RLS,
+        // um UPDATE que nao casa nenhuma linha devolve 200 com zero linhas afetadas,
+        // nao erro: o sbPatch via r.ok true e seguia. Resultado: toda entrega feita
+        // pela faccao ficava com comprovante_html NULO, em silencio, e a aba dela
+        // mostrava "sem comprovante". Medido em 08/10/2026 nas politicas de
+        // entregas_op: owner (ALL), terceiro insere (INSERT), terceiro ve (SELECT).
+        comprovante_html:htmlComp,
         sku:item.avulso?item.sku:item.op.sku,
         quantidade:item.qtd,
         valor_total:item.valor,
@@ -9431,15 +9482,7 @@ async function confirmarEntregaFaccao(assinaturaDataURL){
       }
     }
 
-    // Gerar HTML do comprovante e salvar no banco (comprovante_html)
-    const htmlComp=gerarHTMLComprovante(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
-
-    // Gravar comprovante_html em todos os registros de entrega criados
-    if(_idsEntregasCriadas.length){
-      for(const eid of _idsEntregasCriadas.filter(Boolean)){
-        await sbPatch('entregas_op','id=eq.'+eid,{comprovante_html:htmlComp});
-      }
-    }
+    // (o comprovante ja foi gravado no INSERT de cada entrega, acima)
 
     gerarPDFEntregaFaccao(dataEntrega, totalValor, totalQtd, obs, assinaturaDataURL);
 
