@@ -2410,7 +2410,11 @@ async function sbDelete(t,f){
 async function sbRpc(fn,args={}){
   startLoading();
   try{
-    const r=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:`Bearer ${SESSION?.access_token||SB_ANON}`,'Content-Type':'application/json'},body:JSON.stringify(args)});
+    // getAuthToken(), nao SESSION direto: no portal da faccao SESSION e nulo e o
+    // token vive em FACCAO_LOGADO.token. Com SESSION?.access_token||SB_ANON a
+    // chamada saia com a chave anonima, auth.uid() vinha nulo dentro da funcao,
+    // e o erro aparecia como falta de permissao em vez de falta de token.
+    const r=await fetch(`${SB_URL}/rest/v1/rpc/${fn}`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+getAuthToken(),'Content-Type':'application/json'},body:JSON.stringify(args)});
     if(!r.ok){const e=await r.json();throw new Error(e.message||r.status);}
     return r.json();
   }finally{stopLoading();}
@@ -4104,8 +4108,18 @@ async function loadPagamentosOP(){
 
 async function darBaixaFaccao(id){
   if(!confirm('Marcar como pago?'))return;
-  await sbPatch('lancamentos_externos',`id=eq.${id}`,{situacao:'PAGO_RECEBIDO'});
+  await sbPatch('lancamentos_externos',`id=eq.${id}`,baixaMaster());
   loadPagamentosOP();
+}
+
+// Corpo da baixa feita por VOCE. Existe para o rastro nao ficar meio preenchido:
+// se so a faccao gravasse baixa_por, linha sem rastro seria ambigua entre "baixada
+// pelo master" e "baixada antes de 09/10/2026". Com isso, nulo = so historico.
+function baixaMaster(){
+  return {situacao:'PAGO_RECEBIDO',
+          baixa_em:new Date().toISOString(),
+          baixa_por:'master',
+          baixa_user_id:SESSION?.user?.id||null};
 }
 
 // ── UPLOAD OPs ─────────────────────────────────────────────────
@@ -7106,7 +7120,7 @@ function imprimirLancamentos(){
   if(win){win.document.write(html);win.document.close();}
 }
 
-async function darBaixa(id){if(!confirm('Confirmar baixa?'))return;await sbPatch('lancamentos_externos',`id=eq.${id}`,{situacao:'PAGO_RECEBIDO'});loadLancamentos();}
+async function darBaixa(id){if(!confirm('Confirmar baixa?'))return;await sbPatch('lancamentos_externos',`id=eq.${id}`,baixaMaster());loadLancamentos();}
 async function excluirLancamento(id){if(!confirm('Excluir?'))return;await sbDelete('lancamentos_externos',`id=eq.${id}`);loadLancamentos();}
 function abrirModalLancamento(id){
   _lanEditId=id||null;const l=id?_lancamentos.find(x=>x.id===id):null;
@@ -7692,7 +7706,11 @@ async function loginFaccao(){
 // Por isso estas funcoes nao filtram "por seguranca" -- filtram por ergonomia, e o
 // servidor ja devolveria so o que e dela de qualquer jeito.
 //
-// Nao ha nenhum caminho de escrita aqui: nem botao, nem sbPost, nem sbPatch.
+// ESCRITA (09/10/2026): ha exatamente UMA, e nao e um PATCH -- e a RPC
+// faccao_dar_baixa, que marca PAGO_RECEBIDO num lancamento EM_ABERTO dela e grava
+// o rastro. Continua sem politica de UPDATE na tabela, de proposito: politica de
+// UPDATE nao limita COLUNA, e permitiria mandar valor junto com situacao.
+// Fora dessa RPC, estas abas seguem sem sbPost/sbPatch/sbDelete.
 let _facEntregas=[];
 
 function irFaccao(sec){
@@ -7796,7 +7814,7 @@ async function carregarPagamentosFaccao(){
   const st=document.getElementById('fac-pag-status')?.value;
   let q='?fornecedor=eq.'+encodeURIComponent(FACCAO_LOGADO.nome||'')
        +'&tipo_lancamento=eq.PAGAR'
-       +'&select=id,data,data_vencimento,descricao,valor,situacao'
+       +'&select=id,data,data_vencimento,descricao,valor,situacao,baixa_em,baixa_por'
        +'&order=data_vencimento.desc&limit=500';
   if(de) q+='&data_vencimento=gte.'+de;
   if(ate)q+='&data_vencimento=lte.'+ate;
@@ -7822,14 +7840,52 @@ async function carregarPagamentosFaccao(){
     return;
   }
   el.innerHTML='<table><thead><tr><th>Vencimento</th><th>Descrição</th>'
-    +'<th style="text-align:right">Valor</th><th style="text-align:center">Situação</th></tr></thead><tbody>'
+    +'<th style="text-align:right">Valor</th><th style="text-align:center">Situação</th>'
+    +'<th style="text-align:center">Baixa</th></tr></thead><tbody>'
     +lans.map(l=>'<tr>'
       +'<td>'+fDate(l.data_vencimento||l.data)+'</td>'
       +'<td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(l.descricao||'—')+'</td>'
       +'<td style="text-align:right;color:var(--green)">'+fBRL(l.valor)+'</td>'
       +'<td style="text-align:center"><span class="badge '+(l.situacao==='EM_ABERTO'?'badge-amber':'badge-green')+'">'
         +(l.situacao==='EM_ABERTO'?'EM ABERTO':'PAGO')+'</span></td>'
+      +'<td style="text-align:center">'
+        +(l.situacao==='EM_ABERTO'
+          ? '<button class="btn btn-primary btn-sm" onclick="faccaoMarcarRecebido(\''+l.id+'\',this)">Recebi</button>'
+          : '<span style="font-size:11px;color:var(--text3)">'
+            +(l.baixa_em?fDate(String(l.baixa_em).split('T')[0]):'—')+'</span>')
+      +'</td>'
     +'</tr>').join('')+'</tbody></table>';
+}
+
+// ── BAIXA PELA FACCAO ────────────────────────────────────────────────────
+// Passa pela RPC faccao_dar_baixa, nunca por PATCH. Nao e preciosismo: um PATCH
+// exigiria politica de UPDATE na tabela, e politica de UPDATE nao limita COLUNA
+// — a faccao poderia mandar situacao e valor no mesmo corpo e reescrever o que
+// tem a receber. A funcao escreve so situacao + rastro. Ver 16-faccao-dar-baixa.sql.
+// NAO chamar de darBaixaFaccao: esse nome ja e o botao "✓ Pagar" do MASTER na
+// aba Pagamentos Facção (linha ~4109). Duas declaracoes homonimas no mesmo
+// escopo e a ultima vence — o botao do master passaria a chamar esta RPC e
+// morreria com "este lancamento nao e seu".
+async function faccaoMarcarRecebido(id,btn){
+  if(!confirm('Confirmar que você RECEBEU este valor?\n\nIsso tira o lançamento da lista de pagamentos em aberto e registra seu nome e a data. Não dá para desfazer daqui.'))return;
+  const txt=btn?btn.textContent:null;
+  if(btn){btn.disabled=true;btn.textContent='...';}
+  try{
+    const r=await sbRpc('faccao_dar_baixa',{p_lancamento_id:id});
+    const o=(Array.isArray(r)?r[0]:r)||null;
+    // A funcao devolve ok=false com motivo em vez de erro HTTP, entao nao basta
+    // o await ter passado: sem olhar o ok, "este lancamento nao e seu" viraria
+    // uma baixa silenciosa na tela e nenhuma no banco.
+    if(!o||!o.ok){
+      alert('Não foi possível dar baixa: '+((o&&o.mensagem)||'resposta inesperada'));
+      if(btn){btn.disabled=false;btn.textContent=txt||'Recebi';}
+      return;
+    }
+    await carregarPagamentosFaccao();
+  }catch(e){
+    alert('Erro: '+(e.message||e));
+    if(btn){btn.disabled=false;btn.textContent=txt||'Recebi';}
+  }
 }
 
 async function iniciarFaccaoView(){
