@@ -2596,7 +2596,7 @@ function irPara(pagina){
     'pagamentos-op':loadPagamentosOP,'vendas':loadVendas,'bom':loadBOM,
     'abc':loadABC,'categorizacao':loadCategorizacao,'balancete':loadBalancete,
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
-    'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':loadPrecosFaccao,
+    'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':()=>loadPrecosFaccao(true),
     'perfil':loadPerfil,'plano':()=>{},
     'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV,
     'canais':loadCanais,'clientes':loadClientes
@@ -3313,15 +3313,89 @@ async function excluirTerceiro(id){
 }
 
 // ── PREÇOS FACÇÃO ──────────────────────────────────────────────
-async function loadPrecosFaccao(){
+// _precosFaccaoFull e o cache da aba. loadPrecosFaccao(true) refaz a busca no
+// servidor; sem argumento so re-filtra e re-renderiza o que ja esta em memoria.
+// Isso importa porque o campo de SKU chama esta funcao no "oninput", ou seja a
+// cada tecla: antes cada tecla refazia a busca das 1.843 linhas.
+const PRECOS_TETO_RENDER=300;
+async function loadPrecosFaccao(forcar){
+  const el=document.getElementById('precos-lista');
+  if(!el)return;
+  const empIds=(EMPRESAS||[]).map(e=>e.id).join(',');
+
+  // A aba nao pode depender de a aba Terceiros ter sido aberta antes — era por
+  // isso que a coluna Facção vinha inteira como "—". Aqui sem ativo=eq.true, de
+  // proposito: preco de faccao desativada tem de continuar mostrando o nome.
+  if(!_terceiros.length&&empIds){
+    try{_terceiros=await sbGet('terceiros',`?empresa_id=in.(${empIds})&order=nome`);}catch(e){_terceiros=[];}
+  }
   const tercNomeMap={};_terceiros.forEach(t=>{tercNomeMap[t.id]=t.nome;});
-  try{
-    _precosFaccaoFull=await sbGet('precos_faccao',`?order=sku`);
-    _precosOp={};_precosFaccaoFull.forEach(p=>{_precosOp[p.sku.toUpperCase()]=p.preco;});
-    const el=document.getElementById('precos-lista');
-    if(!_precosFaccaoFull.length){el.innerHTML='<div class="empty"><div class="empty-icon">💲</div><div class="empty-title">Nenhum preço cadastrado</div></div>';return;}
-    el.innerHTML='<table><thead><tr><th>SKU</th><th>Terceiro</th><th>Descrição</th><th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'+_precosFaccaoFull.map(p=>`<tr><td style="font-weight:500">${p.sku}</td><td style="color:var(--text3);font-size:12px">${tercNomeMap[p.terceiro_id]||'—'}</td><td style="color:var(--text2)">${p.descricao||'—'}</td><td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td><td style="display:flex;gap:6px;padding:8px 6px"><button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button><button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')+'</tbody></table>';
-  }catch(e){}
+
+  // O select de facção nunca era preenchido: o HTML trazia so <option>Todas</option>
+  // e nenhuma linha de codigo escrevia as outras. Preserva a escolha ao re-render.
+  const selT=document.getElementById('fpreco-terc');
+  if(selT){
+    const v=selT.value;
+    selT.innerHTML='<option value="">Todas</option>'
+      +_terceiros.map(t=>`<option value="${t.id}">${t.nome}</option>`).join('');
+    selT.value=v;
+  }
+
+  if(forcar||!_precosFaccaoFull.length){
+    el.innerHTML='<div class="loading"><div class="spinner"></div> Carregando...</div>';
+    try{
+      _precosFaccaoFull=await sbGet('precos_faccao',
+        `?empresa_id=in.(${empIds})&select=id,sku,preco,descricao,terceiro_id,ativo`
+        +`&order=sku&limit=20000`);
+    }catch(e){
+      // Antes era catch(e){} vazio: falha deixava a aba em branco sem dizer nada.
+      el.innerHTML='<div style="padding:14px;font-size:13px;color:var(--amber)">'
+        +'Não foi possível carregar os preços: '+(e.message||e)+'</div>';
+      return;
+    }
+    _precosOp={};_precosFaccaoFull.forEach(p=>{_precosOp[String(p.sku).toUpperCase()]=p.preco;});
+  }
+
+  // Os dois filtros existiam no HTML e chamavam esta funcao, mas a funcao nunca
+  // lia nenhum dos dois. Era literalmente um recarregar sem filtrar.
+  const fSku=(document.getElementById('fpreco-sku')?.value||'').trim().toUpperCase();
+  const fTerc=document.getElementById('fpreco-terc')?.value||'';
+  let lista=_precosFaccaoFull;
+  if(fTerc)lista=lista.filter(p=>p.terceiro_id===fTerc);
+  if(fSku)lista=lista.filter(p=>String(p.sku||'').toUpperCase().includes(fSku)
+                              ||String(p.descricao||'').toUpperCase().includes(fSku));
+
+  if(!_precosFaccaoFull.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">💲</div>'
+      +'<div class="empty-title">Nenhum preço cadastrado</div></div>';
+    return;
+  }
+  if(!lista.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🔎</div>'
+      +'<div class="empty-title">Nenhum preço com esse filtro</div>'
+      +`<div style="font-size:12px;color:var(--text3);margin-top:4px">${_precosFaccaoFull.length} cadastrados no total</div></div>`;
+    return;
+  }
+
+  const mostrar=lista.slice(0,PRECOS_TETO_RENDER);
+  const aviso=lista.length>mostrar.length
+    ? `<div style="padding:8px 12px;font-size:12px;color:var(--amber);border-bottom:1px solid var(--border)">`
+      +`Mostrando ${mostrar.length} de ${lista.length} — refine o filtro para ver o resto.</div>`
+    : `<div style="padding:8px 12px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border)">`
+      +`${lista.length} de ${_precosFaccaoFull.length} preços</div>`;
+  el.innerHTML=aviso
+    +'<table><thead><tr><th>SKU</th><th>Facção</th><th>Descrição</th>'
+    +'<th style="text-align:right">Preço Unit.</th><th></th></tr></thead><tbody>'
+    +mostrar.map(p=>`<tr${p.ativo===false?' style="opacity:.55"':''}>`
+      +`<td style="font-weight:500">${p.sku}</td>`
+      +`<td style="color:var(--text3);font-size:12px">${tercNomeMap[p.terceiro_id]||'— sem facção'}`
+      +`${p.ativo===false?' · inativo':''}</td>`
+      +`<td style="color:var(--text2)">${p.descricao||'—'}</td>`
+      +`<td style="text-align:right;color:var(--green)">${fBRL(p.preco)}</td>`
+      +`<td style="display:flex;gap:6px;padding:8px 6px">`
+      +`<button class="btn btn-ghost btn-sm" onclick="abrirModalPreco('${p.id}')">✎</button>`
+      +`<button class="btn btn-danger btn-sm" onclick="excluirPreco('${p.id}')">✕</button></td></tr>`).join('')
+    +'</tbody></table>';
 }
 function abrirModalPreco(id){
   document.getElementById('preco-id').value=id||'';
@@ -3334,6 +3408,15 @@ function abrirModalPreco(id){
   document.getElementById('preco-desc').value=p?.descricao||'';
   abrirModal('modal-preco');
 }
+// empresa_id da linha de preco: a da propria faccao, que e quem tem empresa. Sem
+// faccao escolhida, cai na empresa ativa. Isso NAO era enviado antes: a coluna
+// aceita nulo e nao tem default, entao a linha nascia com empresa_id nulo — o que
+// a politica de RLS do dono nao aceita (empresa_id IN (empresas do dono)), e o
+// insert voltava erro. Por isso "+ Novo SKU" e o upload desta aba nao gravavam.
+function empresaDoPreco(terceiroId){
+  const t=terceiroId?(_terceiros||[]).find(x=>x.id===terceiroId):null;
+  return (t&&t.empresa_id)||EMPRESA_ID||((EMPRESAS||[])[0]||{}).id||null;
+}
 async function salvarPreco(){
   const id=document.getElementById('preco-id').value;
   const terceiroIdSel=document.getElementById('preco-terceiro').value||null;
@@ -3341,37 +3424,69 @@ async function salvarPreco(){
   const preco=parseFloat(document.getElementById('preco-val').value);
   const desc=document.getElementById('preco-desc').value.trim();
   if(!sku||!preco)return alert('Informe SKU e preço');
+  const empId=empresaDoPreco(terceiroIdSel);
+  if(!empId)return alert('Não foi possível identificar a empresa deste preço.');
   try{
-    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null});
-    else await sbPost('precos_faccao',{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null,ativo:true});
+    if(id)await sbPatch('precos_faccao',`id=eq.${id}`,{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null,empresa_id:empId});
+    else await sbPost('precos_faccao',{terceiro_id:terceiroIdSel,sku,preco,descricao:desc||null,ativo:true,empresa_id:empId});
     fecharModal('modal-preco');
-    loadPrecosFaccao();
+    loadPrecosFaccao(true);
   }catch(e){alert('Erro: '+e.message);}
 }
-async function excluirPreco(id){if(!confirm('Excluir?'))return;await sbDelete('precos_faccao',`id=eq.${id}`);loadPrecosFaccao();}
+async function excluirPreco(id){if(!confirm('Excluir?'))return;await sbDelete('precos_faccao',`id=eq.${id}`);loadPrecosFaccao(true);}
 function downloadPlanilhaPrecos(){
-  const csv='sku,descricao,preco\nLENÇOL_CASAL_3P_BEGE,Lençol Casal 3 Peças Bege,8.50\nCORTINA_MICRO_90X205_2PARTES_BRANCO,Cortina Micro 2 Partes Branco,12.00';
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  // ';' + BOM + decimal com virgula: mesma convencao do export de CPV, e o que o
+  // Excel pt-BR abre em colunas sem pedir nada. Nao tem coluna de faccao de
+  // proposito — a faccao vem do filtro da tela, uma planilha por faccao.
+  const csv='sku;descricao;preco\r\nM1_130_BRANCO_01_VB;Cortina M1 130 Branco;4,79\r\nM1_230_PRATA_01_VB;Cortina M1 230 Prata;5,53';
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='lume_precos_faccao.csv';a.click();URL.revokeObjectURL(url);
 }
+// O upload exige uma FACÇÃO escolhida no filtro. Nao e burocracia: o mesmo SKU
+// tem preco diferente por faccao (99 SKUs divergem hoje, ate R$ 6,31 de diferenca
+// por peca), entao importar preco "sem faccao" produz linha que nao serve para
+// pagar ninguem. Antes isso era possivel, e sem empresa_id tambem — as duas coisas
+// que faziam o insert falhar ou nascer orfao.
 async function uploadPrecos(input){
   const file=input.files[0];if(!file)return;input.value='';
+  const tercId=document.getElementById('fpreco-terc')?.value||'';
+  if(!tercId){
+    alert('Escolha a facção no filtro "Facção" antes de importar.\n\nO preço é por facção: o mesmo SKU custa valores diferentes em cada uma, então uma planilha sem facção não dá para usar no pagamento.');
+    return;
+  }
+  const tercNome=((_terceiros||[]).find(t=>t.id===tercId)||{}).nome||'';
+  const empId=empresaDoPreco(tercId);
   const prog=document.getElementById('prog-precos');
   const txt=document.getElementById('prog-precos-txt');
   const bar=document.getElementById('prog-precos-bar');
   prog.style.display='';bar.style.width='5%';
-  const text=await file.text();
-  const linhas=text.trim().split('\n').slice(1).filter(l=>l.trim());
-  let ok=0;
+  txt.textContent='Lendo arquivo...';
+  // cpvParseCSV: respeita aspas e detecta ';' ou ',' — o split(',') daqui quebrava
+  // em descricao com virgula, jogando o preco para a coluna errada.
+  const linhas=cpvParseCSV(await file.text()).slice(1).filter(l=>l.length&&String(l[0]||'').trim());
+  // (terceiro, sku) ja existente vira UPDATE. Sem isso, reimportar a mesma planilha
+  // criava linha duplicada — nao ha unique no banco para impedir (0 duplicados hoje).
+  const atuais={};
+  (_precosFaccaoFull||[]).forEach(p=>{if(p.terceiro_id===tercId)atuais[String(p.sku).toUpperCase()]=p.id;});
+  let novos=0,atualizados=0,ignorados=0;
   for(let i=0;i<linhas.length;i++){
-    const[sku,desc,preco]=linhas[i].split(',').map(c=>c.trim().replace(/"/g,''));
-    if(!sku||!preco)continue;
-    try{await sbPost('precos_faccao',{sku:sku.toUpperCase(),descricao:desc||null,preco:parseFloat(preco.replace(',','.')),ativo:true});ok++;}catch(e){}
+    const sku=String(linhas[i][0]||'').trim().toUpperCase();
+    const desc=String(linhas[i][1]||'').trim();
+    const precoTxt=String(linhas[i][2]||'').trim().replace(/\./g,'').replace(',','.');
+    const preco=parseFloat(precoTxt);
+    if(!sku||!(preco>0)){ignorados++;}
+    else{
+      try{
+        if(atuais[sku]){await sbPatch('precos_faccao',`id=eq.${atuais[sku]}`,{preco,descricao:desc||null});atualizados++;}
+        else{await sbPost('precos_faccao',{sku,descricao:desc||null,preco,ativo:true,terceiro_id:tercId,empresa_id:empId});novos++;}
+      }catch(e){ignorados++;}
+    }
     bar.style.width=Math.round((i+1)/linhas.length*100)+'%';
     txt.textContent=`Processando ${i+1}/${linhas.length}...`;
   }
-  txt.textContent=`✅ ${ok} preços importados`;
-  setTimeout(()=>{prog.style.display='none';loadPrecosFaccao();},3000);
+  txt.textContent=`✅ ${tercNome}: ${novos} novos, ${atualizados} atualizados`
+    +(ignorados?`, ${ignorados} ignorados (sem SKU ou sem preço válido)`:'');
+  setTimeout(()=>{prog.style.display='none';loadPrecosFaccao(true);},4000);
 }
 
 // ── CUSTOS (CPV) ───────────────────────────────────────────────
