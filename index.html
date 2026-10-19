@@ -574,7 +574,7 @@ tr:hover td{background:var(--surface2);}
     <nav class="topbar-nav">
 
       <!-- Dashboard -->
-      <button class="nav-group-btn" onclick="irPara('dashboard')">
+      <button class="nav-group-btn" id="nav-dashboard" onclick="irPara('dashboard')">
         🏠 Dashboard
       </button>
 
@@ -1551,9 +1551,120 @@ tr:hover td{background:var(--surface2);}
 
     <!-- PLANO -->
     <div id="page-plano" class="page">
-      <div class="page-header"><div><div class="page-title">Plano & Pagamento</div><div class="page-sub">Gerencie sua assinatura</div></div></div>
+      <div class="page-header"><div><div class="page-title">Plano &amp; Pagamento</div><div class="page-sub">Sua assinatura, o que cada módulo inclui e o pagamento</div></div></div>
+
+      <!-- Faixa de situacao: preenchida por loadPlano() -->
+      <div id="plano-aviso" style="display:none;margin-bottom:16px"></div>
+
+      <!-- Situacao atual -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Situação da sua conta</div>
+        <div class="kpi-grid" style="margin-top:4px">
+          <div class="kpi"><div class="kpi-label">Situação</div><div class="kpi-value" id="plano-status" style="font-size:20px">—</div><div class="kpi-sub" id="plano-status-sub">—</div></div>
+          <div class="kpi"><div class="kpi-label">Módulo contratado</div><div class="kpi-value blue" id="plano-modulo" style="font-size:20px">—</div><div class="kpi-sub" id="plano-modulo-sub">—</div></div>
+          <div class="kpi"><div class="kpi-label">Acesso liberado até</div><div class="kpi-value" id="plano-ate" style="font-size:20px">—</div><div class="kpi-sub" id="plano-ate-sub">—</div></div>
+          <div class="kpi"><div class="kpi-label">Assinatura</div><div class="kpi-value" id="plano-assin" style="font-size:20px">—</div><div class="kpi-sub" id="plano-assin-sub">—</div></div>
+        </div>
+      </div>
+
+      <!-- O que cada modulo inclui -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">O que cada módulo inclui</div>
+        <div class="grid-2" style="margin-top:6px;align-items:start">
+
+          <!-- MODULO I -->
+          <div style="border:1px solid var(--border);border-radius:10px;padding:18px" id="box-mod1">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div style="font-size:16px;font-weight:700">Módulo I — Operação &amp; Vendas</div>
+              <div style="text-align:right"><div style="font-size:20px;font-weight:700;color:var(--accent)">R$ 99,90</div><div style="font-size:11px;color:var(--text3)">por mês, no plano de 12 meses</div></div>
+            </div>
+            <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">Toda a fábrica e todo o comercial. É o módulo para quem quer controlar produção, facção, vendas e margem, e mantém a contabilidade financeira fora do sistema.</div>
+
+            <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--green);letter-spacing:.5px">INCLUI</div>
+            <ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.85">
+              <li><strong>Ordens de Produção</strong> — abertura, acompanhamento e fechamento</li>
+              <li><strong>Entregas</strong> — recebimento por OP, com preço tabelado automático</li>
+              <li><strong>Pagamentos de Facção</strong> — notinhas por entrega e baixa</li>
+              <li><strong>Portal da Facção</strong> — acesso próprio para cada facção, sem custo por usuário</li>
+              <li><strong>Cadastro de Facções</strong> e <strong>Tabela de Preços</strong> por SKU</li>
+              <li><strong>Registro de Vendas</strong> — importação automática dos marketplaces</li>
+              <li><strong>Conexões de Marketplace</strong> — Shopee, Mercado Livre, Temu, TikTok, Shein</li>
+              <li><strong>Correlação de SKU</strong> — de cada anúncio para o SKU canônico</li>
+              <li><strong>Custos &amp; CPV</strong> por SKU, com vigência e histórico preservado</li>
+              <li><strong>Margem de contribuição</strong> — MCB e MCL por SKU, canal e período</li>
+              <li><strong>Estrutura de Produto (BOM)</strong> e <strong>Estoque Modelo</strong></li>
+              <li><strong>Curva ABC</strong> e <strong>Calculadora de Preços</strong></li>
+              <li><strong>Clientes</strong>, <strong>Canais de Venda</strong> e <strong>Empresas</strong></li>
+            </ul>
+
+            <div style="margin-top:18px;font-size:11px;font-weight:700;color:var(--red);letter-spacing:.5px">NÃO INCLUI</div>
+            <ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.85;color:var(--text2)">
+              <li><strong>Categorização</strong> de extrato bancário</li>
+              <li><strong>Balancete</strong></li>
+              <li><strong>Lançamentos</strong> a pagar e a receber — <em>com uma exceção:</em> os lançamentos de facção continuam visíveis, porque fazem parte da operação de produção</li>
+              <li><strong>Caixa</strong> — entradas, saídas e movimentos</li>
+              <li><strong>Contas bancárias</strong> e saldos</li>
+              <li><strong>DRE</strong></li>
+              <li><strong>Despesas</strong> e <strong>operações financeiras</strong> (empréstimos, financiamentos e parcelas)</li>
+              <li>No Dashboard, os indicadores <strong>“A Pagar”</strong> e <strong>“Saldo Bancário”</strong> ficam ocultos. Receita, produção e entregas continuam.</li>
+            </ul>
+          </div>
+
+          <!-- MODULO II -->
+          <div style="border:2px solid var(--accent);border-radius:10px;padding:18px;position:relative" id="box-mod2">
+            <div style="position:absolute;top:-10px;right:14px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;letter-spacing:.5px">COMPLETO</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div style="font-size:16px;font-weight:700">Módulo II — Gestão Completa</div>
+              <div style="text-align:right"><div style="font-size:20px;font-weight:700;color:var(--accent)">R$ 199,90</div><div style="font-size:11px;color:var(--text3)">por mês, no plano de 12 meses</div></div>
+            </div>
+            <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5">A operação inteira do Módulo I <strong>mais</strong> o financeiro. É o módulo que fecha o ciclo: a venda entra, o custo sai, o extrato bate e o resultado aparece no DRE.</div>
+
+            <div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--green);letter-spacing:.5px">INCLUI TUDO DO MÓDULO I, E AINDA</div>
+            <ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.85">
+              <li><strong>Categorização</strong> — extrato bancário conciliado por categoria</li>
+              <li><strong>Balancete</strong> por empresa, conta e período</li>
+              <li><strong>Lançamentos</strong> — contas a pagar e a receber, completas</li>
+              <li><strong>Caixa</strong> — entradas, saídas e movimentos entre contas</li>
+              <li><strong>Contas bancárias</strong> e saldo consolidado</li>
+              <li><strong>DRE</strong> — demonstrativo de resultado por período</li>
+              <li><strong>Despesas recorrentes</strong> com rateio por empresa</li>
+              <li><strong>Operações financeiras</strong> — empréstimos e financiamentos com parcelas</li>
+              <li><strong>Inventário</strong> valorado para o resultado</li>
+              <li>Dashboard completo, com <strong>A Pagar</strong> e <strong>Saldo Bancário</strong></li>
+            </ul>
+            <div style="margin-top:18px;font-size:11px;font-weight:700;color:var(--text3);letter-spacing:.5px">NÃO INCLUI</div>
+            <ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px;line-height:1.85;color:var(--text2)">
+              <li>Emissão de nota fiscal</li>
+              <li>Envio de arquivos para a contabilidade (SPED, ECD)</li>
+              <li>Folha de pagamento</li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Precos -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div class="card-title" style="margin:0">Contratar</div>
+          <div class="seg-base" role="group" aria-label="Módulo">
+            <button type="button" class="seg-btn active" data-mod="1" onclick="planoVerModulo(1)">Módulo I</button>
+            <button type="button" class="seg-btn" data-mod="2" onclick="planoVerModulo(2)">Módulo II</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6">
+          O pagamento é no <strong>cartão de crédito</strong>, do período inteiro de uma vez, e você escolhe em quantas vezes
+          parcelar — até uma parcela por mês contratado. Quanto maior o período, menor a mensalidade.
+          O acesso é liberado assim que o pagamento é aprovado e vale até o fim do período contratado.
+        </div>
+        <div id="plano-cards" class="grid-3"></div>
+        <div id="plano-erro" style="display:none;margin-top:12px;font-size:12px;color:var(--red)"></div>
+      </div>
+
+      <!-- Historico -->
       <div class="card">
-        <div class="empty"><div class="empty-icon">⭐</div><div class="empty-title">Planos em breve</div><div class="empty-sub">Esta seção estará disponível em breve.</div></div>
+        <div class="card-title">Histórico de pagamentos</div>
+        <div id="plano-pagamentos" style="margin-top:6px"></div>
       </div>
     </div>
 
@@ -2331,6 +2442,68 @@ let _opViewMode='cards', _bomLinhas=0, _opEntregaAtual=null, _lanEditId=null;
 let _balSemanal=false;
 let FACCAO_LOGADO=null, _faccaoCarrinho=[];
 
+// ── Acesso: situacao da assinatura e modulo contratado ──────
+// Padrao otimista de proposito. Se a leitura de profiles falhar por rede, o
+// usuario NAO e trancado fora por causa de um erro de rede — quem bloqueia de
+// verdade e a RLS no banco (politica zz_acesso), nao este objeto. Aqui so
+// decidimos o que MOSTRAR; esconder um menu nunca e a trava de seguranca.
+let ACESSO={status:'trial',modulo:2,acesso_ate:null,aviso_em:null,bloqueado:false};
+let _planos=[], _planoModVisivel=1;
+
+function _acessoCalcBloqueio(p){
+  if(!p)return false;
+  if(p.status==='bloqueado'||p.status==='cancelado')return true;
+  // acesso_ate nulo = sem prazo definido, nao bloqueia (e o estado de quem
+  // ainda nao recebeu aviso). Comparacao por string ISO, que ordena igual a data.
+  if(p.acesso_ate){
+    const hoje=new Date();
+    const hojeISO=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`;
+    if(p.acesso_ate<hojeISO)return true;
+  }
+  return false;
+}
+
+async function verificarAcesso(){
+  if(!SESSION?.user?.id)return ACESSO;
+  try{
+    const r=await sbGet('profiles',`?id=eq.${SESSION.user.id}&select=status,acesso_ate,modulo,aviso_em`);
+    const p=r[0];
+    if(p){
+      ACESSO={
+        status:p.status||'trial',
+        modulo:(p.modulo===1?1:2),
+        acesso_ate:p.acesso_ate||null,
+        aviso_em:p.aviso_em||null,
+        bloqueado:_acessoCalcBloqueio(p)
+      };
+    }
+  }catch(e){ console.error('verificarAcesso:',e); }
+  return ACESSO;
+}
+
+// Esconde o que o modulo contratado nao cobre. NAO e seguranca — e so nao
+// mostrar porta que nao abre. A trava esta na RLS.
+function aplicarAcessoUI(){
+  const fin=document.getElementById('ng-financeiro');
+  if(fin)fin.style.display=(ACESSO.modulo===2&&!ACESSO.bloqueado)?'':'none';
+
+  // Cards do dashboard que leem lancamentos_externos e saldos_conta
+  ['dash-pagar','dash-saldo'].forEach(id=>{
+    const v=document.getElementById(id);
+    const card=v?v.closest('.kpi'):null;
+    if(card)card.style.display=(ACESSO.modulo===2&&!ACESSO.bloqueado)?'':'none';
+  });
+
+  // Bloqueado: so Plano & Pagamento e Meu Perfil ficam de pe
+  ['ng-operacao','ng-vendas','ng-cadastros','nav-dashboard'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.style.display=ACESSO.bloqueado?'none':'';
+  });
+
+  // E esconder a propria entrada do menu Financeiro no Modulo I ja cobre as
+  // paginas; o item Plano & Pagamento em Configuracoes fica sempre de pe.
+}
+
 // ── Loading global ─────────────────────────────────────────
 let _loadingCount=0;
 function startLoading(){
@@ -2438,13 +2611,31 @@ async function fazerLogin(){
     if(tercs.length>0){
       throw new Error('Acesso negado. Use o login de Facção.');
     }
-    // Verificar se tem empresa vinculada
-    const rEmp=await fetch(`${SB_URL}/rest/v1/empresas?owner_id=eq.${d.user.id}&select=id&limit=1`,{
-      headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
-    });
-    const emps=await rEmp.json();
-    if(!emps.length){
-      throw new Error('Nenhuma empresa vinculada a este usuário.');
+    // Situacao da assinatura ANTES do porteiro de empresa.
+    // profiles esta fora do portao zz_acesso de proposito: um cliente bloqueado
+    // tem de conseguir ler a propria situacao para chegar na tela de pagamento.
+    let _perfilLogin=null;
+    try{
+      const rPerf=await fetch(`${SB_URL}/rest/v1/profiles?id=eq.${d.user.id}&select=status,acesso_ate,modulo,aviso_em`,{
+        headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
+      });
+      if(rPerf.ok)_perfilLogin=(await rPerf.json())[0]||null;
+    }catch(e){ console.error('login/profiles:',e); }
+    const _bloqueadoLogin=_acessoCalcBloqueio(_perfilLogin);
+
+    // Verificar se tem empresa vinculada.
+    // Este SELECT e o porteiro do login. Se o cliente esta bloqueado, pular o
+    // porteiro: nao faz sentido dizer "nenhuma empresa vinculada" para quem so
+    // esta devendo — e ele precisa entrar para poder pagar. O arquivo 22 deixa
+    // o SELECT em empresas fora do portao, mas mesmo que falhe, aqui ele entra.
+    if(!_bloqueadoLogin){
+      const rEmp=await fetch(`${SB_URL}/rest/v1/empresas?owner_id=eq.${d.user.id}&select=id&limit=1`,{
+        headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
+      });
+      const emps=await rEmp.json();
+      if(!emps.length){
+        throw new Error('Nenhuma empresa vinculada a este usuário.');
+      }
     }
     SESSION=d;
     localStorage.setItem('lume_session',JSON.stringify(d));
@@ -2508,6 +2699,16 @@ async function iniciarApp(){
   document.getElementById('lan-venc').value=fd(hoje);
   document.getElementById('venda-data').value=fd(hoje);
 
+  // Situacao da assinatura antes de carregar qualquer dado. Um cliente
+  // bloqueado nao tem o que carregar: a RLS devolve zero em tudo, e tentar
+  // encheria a tela de tabela vazia, que parece perda de dado.
+  await verificarAcesso();
+  aplicarAcessoUI();
+  if(ACESSO.bloqueado){
+    irPara('plano');
+    return;
+  }
+
   await carregarBase();
   await loadDashboard();
   irPara('dashboard');
@@ -2545,6 +2746,211 @@ async function trocarEmpresa(id){
   await carregarBase();
 }
 
+// ── Plano & Pagamento ───────────────────────────────────────
+const _PLANO_ROTULO={
+  trial:    {txt:'Avaliação',  cls:'blue',  sub:'período de avaliação'},
+  ativo:    {txt:'Ativo',      cls:'green', sub:'assinatura em dia'},
+  bloqueado:{txt:'Bloqueado',  cls:'red',   sub:'pagamento em atraso'},
+  cancelado:{txt:'Cancelado',  cls:'red',   sub:'assinatura encerrada'}
+};
+
+function _planoDias(ate){
+  if(!ate)return null;
+  const h=new Date(); h.setHours(0,0,0,0);
+  const d=new Date(ate+'T00:00:00');
+  return Math.round((d-h)/864e5);
+}
+
+async function loadPlano(){
+  // Reler a situacao: o usuario pode ter acabado de pagar em outra aba.
+  await verificarAcesso();
+  aplicarAcessoUI();
+
+  const r=_PLANO_ROTULO[ACESSO.status]||_PLANO_ROTULO.trial;
+  const elS=document.getElementById('plano-status');
+  elS.textContent=r.txt; elS.className='kpi-value '+r.cls;
+  document.getElementById('plano-status-sub').textContent=r.sub;
+
+  document.getElementById('plano-modulo').textContent=ACESSO.modulo===1?'Módulo I':'Módulo II';
+  document.getElementById('plano-modulo-sub').textContent=ACESSO.modulo===1?'Operação & Vendas':'Gestão Completa';
+
+  const dias=_planoDias(ACESSO.acesso_ate);
+  const elA=document.getElementById('plano-ate');
+  elA.textContent=ACESSO.acesso_ate?fDate(ACESSO.acesso_ate):'sem prazo';
+  elA.className='kpi-value '+(dias===null?'':(dias<0?'red':(dias<=10?'amber':'green')));
+  document.getElementById('plano-ate-sub').textContent=
+    dias===null ? 'nenhum prazo definido'
+    : dias<0    ? `venceu há ${Math.abs(dias)} dia(s)`
+    : dias===0  ? 'vence hoje'
+    :             `faltam ${dias} dia(s)`;
+
+  // Faixa de aviso no topo
+  const box=document.getElementById('plano-aviso');
+  if(ACESSO.bloqueado){
+    box.style.display='';
+    box.innerHTML='<div style="background:var(--red-bg);border:1px solid var(--red);border-radius:10px;padding:16px">'+
+      '<div style="font-weight:700;color:var(--red);font-size:14px">Seu acesso está bloqueado</div>'+
+      '<div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.6">'+
+      'Seus dados estão todos preservados — nada foi apagado. Assim que o pagamento for aprovado, '+
+      'o acesso volta na hora e tudo reaparece exatamente como estava.'+
+      '<br>As facções continuam trabalhando normalmente no portal delas: o bloqueio não as atinge.'+
+      '</div></div>';
+  }else if(dias!==null&&dias>=0&&dias<=10){
+    box.style.display='';
+    box.innerHTML='<div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:10px;padding:16px">'+
+      '<div style="font-weight:700;color:var(--amber);font-size:14px">Seu acesso vence em '+dias+' dia(s)</div>'+
+      '<div style="font-size:12.5px;color:var(--text2);margin-top:6px">Renove abaixo para não ter interrupção.</div></div>';
+  }else{
+    box.style.display='none'; box.innerHTML='';
+  }
+
+  // Planos, assinatura e pagamentos. As quatro tabelas ficam FORA do portao
+  // zz_acesso de proposito — e por isso esta tela funciona bloqueada.
+  const err=document.getElementById('plano-erro');
+  err.style.display='none'; err.textContent='';
+  try{
+    if(!_planos.length)_planos=await sbGet('planos','?ativo=eq.true&order=modulo,meses');
+  }catch(e){
+    err.style.display=''; err.textContent='Não foi possível carregar os planos: '+e.message;
+  }
+  _planoModVisivel=ACESSO.modulo||1;
+  document.querySelectorAll('#page-plano .seg-btn[data-mod]').forEach(b=>
+    b.classList.toggle('active',+b.dataset.mod===_planoModVisivel));
+  renderPlanoCards();
+
+  // Assinatura corrente
+  const elAs=document.getElementById('plano-assin'), elAsS=document.getElementById('plano-assin-sub');
+  try{
+    const ass=await sbGet('assinaturas',`?user_id=eq.${SESSION.user.id}&order=criado_em.desc&limit=1&select=status,inicio,fim,plano_id`);
+    if(!ass.length){ elAs.textContent='—'; elAs.className='kpi-value'; elAsS.textContent='nenhuma contratada'; }
+    else{
+      const a=ass[0], pl=_planos.find(p=>p.id===a.plano_id);
+      elAs.textContent=pl?pl.nome.replace('Módulo','Mód.'):a.status;
+      elAs.className='kpi-value '+(a.status==='ativa'?'green':'');
+      elAsS.textContent=(a.inicio&&a.fim)?`${fDate(a.inicio)} a ${fDate(a.fim)}`:a.status;
+    }
+  }catch(e){ elAs.textContent='—'; elAsS.textContent='não foi possível ler'; }
+
+  // Historico
+  const hist=document.getElementById('plano-pagamentos');
+  try{
+    const pg=await sbGet('pagamentos',`?user_id=eq.${SESSION.user.id}&order=criado_em.desc&limit=50&select=criado_em,pago_em,valor,parcelas,status,status_detalhe,metodo`);
+    if(!pg.length){
+      hist.innerHTML='<div class="empty"><div class="empty-icon">🧾</div><div class="empty-title">Nenhum pagamento ainda</div><div class="empty-sub">Os pagamentos aparecem aqui assim que forem processados.</div></div>';
+    }else{
+      const sit={approved:['Aprovado','green'],pending:['Pendente','amber'],in_process:['Em análise','amber'],
+                 rejected:['Recusado','red'],cancelled:['Cancelado','red'],refunded:['Devolvido','red'],
+                 charged_back:['Contestado','red']};
+      // O provedor devolve estes codigos em ingles. Traduzir os que o cliente
+      // tem chance de ver; o que nao estiver aqui aparece como veio, para nao
+      // esconder informacao de um codigo novo.
+      const met={credit_card:'Cartão de crédito',debit_card:'Cartão de débito',
+                 account_money:'Saldo em conta',ticket:'Boleto',pix:'Pix',bank_transfer:'Transferência'};
+      const det={accredited:'creditado',
+                 pending_contingency:'em processamento no banco',
+                 pending_review_manual:'em revisão manual',
+                 cc_rejected_insufficient_amount:'limite insuficiente no cartão',
+                 cc_rejected_bad_filled_security_code:'código de segurança incorreto',
+                 cc_rejected_bad_filled_date:'validade incorreta',
+                 cc_rejected_bad_filled_other:'dados do cartão incorretos',
+                 cc_rejected_call_for_authorize:'o banco pede autorização — ligue para ele',
+                 cc_rejected_card_disabled:'cartão desabilitado para compras online',
+                 cc_rejected_high_risk:'recusado por análise de risco',
+                 cc_rejected_max_attempts:'muitas tentativas — tente outro cartão',
+                 cc_rejected_duplicated_payment:'pagamento duplicado',
+                 cc_rejected_other_reason:'recusado pelo banco emissor'};
+      hist.innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr>'+
+        '<th>Data</th><th>Valor</th><th>Parcelas</th><th>Método</th><th>Situação</th></tr></thead><tbody>'+
+        pg.map(p=>{
+          const s=sit[p.status]||[p.status||'—',''];
+          const d=(p.pago_em||p.criado_em||'').split('T')[0];
+          const dt=p.status_detalhe?(det[p.status_detalhe]||p.status_detalhe):'';
+          return `<tr><td>${fDate(d)}</td><td>${p.valor!=null?fBRL(p.valor):'—'}</td>`+
+                 `<td>${p.parcelas?p.parcelas+'x':'—'}</td><td>${p.metodo?(met[p.metodo]||p.metodo):'—'}</td>`+
+                 `<td><span style="color:var(--${s[1]||'text2'})">${s[0]}</span>`+
+                 `${dt?`<div style="font-size:10px;color:var(--text3)">${dt}</div>`:''}</td></tr>`;
+        }).join('')+'</tbody></table></div>';
+    }
+  }catch(e){
+    hist.innerHTML='<div class="empty"><div class="empty-title">Não foi possível carregar o histórico</div><div class="empty-sub">'+e.message+'</div></div>';
+  }
+}
+
+function planoVerModulo(m){
+  _planoModVisivel=m;
+  document.querySelectorAll('#page-plano .seg-btn[data-mod]').forEach(b=>
+    b.classList.toggle('active',+b.dataset.mod===m));
+  renderPlanoCards();
+}
+
+function renderPlanoCards(){
+  const box=document.getElementById('plano-cards');
+  const lista=_planos.filter(p=>p.modulo===_planoModVisivel).sort((a,b)=>a.meses-b.meses);
+  if(!lista.length){
+    box.innerHTML='<div class="empty"><div class="empty-title">Nenhum plano disponível</div></div>';
+    return;
+  }
+  // Referencia do desconto: o plano mais curto do mesmo modulo.
+  const base=lista[0].preco_mes;
+  box.innerHTML=lista.map(p=>{
+    const desc=base>0?Math.round((1-p.preco_mes/base)*1000)/10:0;
+    const maior=p.meses===12;
+    const opts=[];
+    for(let i=1;i<=(p.max_parcelas||1);i++){
+      opts.push(`<option value="${i}">${i}x de ${fBRL(p.preco_total/i)}${i===1?' (à vista)':''}</option>`);
+    }
+    return '<div style="border:'+(maior?'2px solid var(--accent)':'1px solid var(--border)')+';border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;position:relative">'+
+      (maior?'<div style="position:absolute;top:-10px;left:14px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px">MELHOR PREÇO</div>':'')+
+      `<div style="font-size:13px;font-weight:700;color:var(--text2)">${p.meses} meses</div>`+
+      `<div><span style="font-size:26px;font-weight:700">${fBRL(p.preco_mes)}</span><span style="font-size:12px;color:var(--text3)"> /mês</span></div>`+
+      (desc>0?`<div style="font-size:11px;color:var(--green);font-weight:700">${desc.toLocaleString('pt-BR')}% mais barato que o plano de ${lista[0].meses} meses</div>`
+             :'<div style="font-size:11px;color:var(--text3)">preço de referência</div>')+
+      `<div style="font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:10px">Total do período: <strong>${fBRL(p.preco_total)}</strong></div>`+
+      `<select id="parc-${p.id}" class="form-control" style="font-size:12px">${opts.join('')}</select>`+
+      `<button class="btn btn-primary" style="width:100%" onclick="iniciarCheckout('${p.id}',this)">Contratar ${p.meses} meses</button>`+
+      '</div>';
+  }).join('');
+}
+
+async function iniciarCheckout(planoId,btn){
+  const p=_planos.find(x=>x.id===planoId);
+  if(!p)return;
+  const sel=document.getElementById('parc-'+planoId);
+  const parcelas=sel?+sel.value:1;
+  const err=document.getElementById('plano-erro');
+  err.style.display='none'; err.textContent='';
+
+  if(!confirm(`Contratar ${p.nome}?\n\nTotal: ${fBRL(p.preco_total)} em ${parcelas}x de ${fBRL(p.preco_total/parcelas)}\n\nVocê será levado ao ambiente seguro de pagamento para informar o cartão.`))return;
+
+  btnLoading(btn,'Abrindo pagamento...');
+  try{
+    // O cartao NUNCA passa por aqui nem pelo Supabase: o worker cria a
+    // preferencia e o cliente digita o cartao no ambiente do provedor.
+    const r=await fetch(`${MKT_WORKER}/assinatura/checkout`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+getAuthToken()},
+      body:JSON.stringify({plano_id:planoId,parcelas})
+    });
+    const txt=await r.text();
+    let d=null; try{ d=JSON.parse(txt); }catch(_){}
+    if(!r.ok||!d?.url){
+      if(r.status===404){
+        err.style.display='';
+        err.innerHTML='O pagamento online ainda não está publicado neste ambiente. '+
+          'Fale comigo para liberar — nada foi cobrado.';
+        return;
+      }
+      throw new Error(d?.erro||d?.message||`${r.status}: ${txt.slice(0,160)}`);
+    }
+    window.location.href=d.url;
+  }catch(e){
+    err.style.display='';
+    err.textContent='Não foi possível abrir o pagamento: '+e.message+'. Nada foi cobrado.';
+  }finally{
+    btnDone(btn);
+  }
+}
+
 async function verificarPerfil(){
   if(!SESSION?.user?.id)return;
   try{
@@ -2573,8 +2979,18 @@ function irPara(pagina){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-dd-item').forEach(i=>i.classList.remove('active'));
 
+  // Bloqueado: so Plano & Pagamento, Meu Perfil e a Politica de Seguranca.
+  // Qualquer outro destino redireciona para o plano em vez de abrir uma tela
+  // que a RLS vai devolver vazia.
+  if(ACESSO.bloqueado&&!['plano','perfil','seguranca'].includes(pagina))pagina='plano';
+  // Modulo I: o menu Financeiro esta escondido, mas um link antigo ou o
+  // historico do navegador ainda poderiam chamar estas paginas.
+  if(ACESSO.modulo===1&&['categorizacao','balancete','caixa','dre','lancamentos'].includes(pagina))pagina='plano';
+
   const page=document.getElementById('page-'+pagina);
   if(page)page.classList.add('active');
+
+  if(pagina==='plano'){loadPlano();return;}
 
   if(!EMPRESAS.length){
     const wraps={'ops':'ops-content','entregas':'entregas-lista','vendas':'ven-table','bom':'bom-pendencias','abc':'abc-tbody','categorizacao':'cat-wrap','lancamentos':'lan-wrap','balancete':'bal-corpo','caixa':'cx-ent-wrap','pagamentos-op':'pagamentos-op-lista'};
@@ -2597,7 +3013,7 @@ function irPara(pagina){
     'abc':loadABC,'categorizacao':loadCategorizacao,'balancete':loadBalancete,
     'lancamentos':loadLancamentos,'caixa':loadCaixa,'contas':loadContas,
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':()=>loadPrecosFaccao(true),
-    'perfil':loadPerfil,'plano':()=>{},
+    'perfil':loadPerfil,'plano':loadPlano,
     'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV,
     'canais':loadCanais,'clientes':loadClientes
   };
