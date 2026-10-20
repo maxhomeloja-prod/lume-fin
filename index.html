@@ -586,7 +586,7 @@ tr:hover td{background:var(--surface2);}
         <div class="nav-dropdown" id="dd-cadastros">
           <button class="nav-dd-item" onclick="irPara('empresas')">🏢 Empresas</button>
           <button class="nav-dd-item" onclick="irPara('marketplaces')">🛒 Marketplaces</button>
-          <button class="nav-dd-item" onclick="irPara('contas')">🏦 Contas Bancárias</button>
+          <button class="nav-dd-item" id="nav-contas" onclick="irPara('contas')">🏦 Contas Bancárias</button>
           <div class="nav-dd-sep"></div>
           <button class="nav-dd-item" onclick="irPara('terceiros')">👥 Terceiros / Facções</button>
           <button class="nav-dd-item" onclick="irPara('precos-faccao')">💲 Preços de Facção</button>
@@ -2486,8 +2486,15 @@ async function verificarAcesso(){
 // Esconde o que o modulo contratado nao cobre. NAO e seguranca — e so nao
 // mostrar porta que nao abre. A trava esta na RLS.
 function aplicarAcessoUI(){
+  const temFinanceiro=(ACESSO.modulo===2&&!ACESSO.bloqueado);
   const fin=document.getElementById('ng-financeiro');
-  if(fin)fin.style.display=(ACESSO.modulo===2&&!ACESSO.bloqueado)?'':'none';
+  if(fin)fin.style.display=temFinanceiro?'':'none';
+
+  // Contas Bancarias mora no menu Cadastros, mas le contas_bancarias, que e do
+  // modulo II. Sem isto o formulario abre e a RLS recusa a gravacao — pior que
+  // nao mostrar, porque o usuario preenche tudo para levar um erro no fim.
+  const nc=document.getElementById('nav-contas');
+  if(nc)nc.style.display=temFinanceiro?'':'none';
 
   // Cards do dashboard que leem lancamentos_externos e saldos_conta
   ['dash-pagar','dash-saldo'].forEach(id=>{
@@ -3079,7 +3086,7 @@ function irPara(pagina){
   if(ACESSO.bloqueado&&!['plano','perfil','seguranca'].includes(pagina))pagina='plano';
   // Modulo I: o menu Financeiro esta escondido, mas um link antigo ou o
   // historico do navegador ainda poderiam chamar estas paginas.
-  if(ACESSO.modulo===1&&['categorizacao','balancete','caixa','dre','lancamentos'].includes(pagina))pagina='plano';
+  if(ACESSO.modulo===1&&['categorizacao','balancete','caixa','dre','lancamentos','contas'].includes(pagina))pagina='plano';
 
   const page=document.getElementById('page-'+pagina);
   if(page)page.classList.add('active');
