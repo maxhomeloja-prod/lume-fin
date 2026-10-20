@@ -2885,9 +2885,14 @@ async function loadPlano(){
 // do cliente voltar. Entao insistimos um pouco antes de afirmar qualquer coisa:
 // dizer "nao liberou" cedo demais assusta quem acabou de pagar.
 async function tratarRetornoPagamento(){
-  const p=new URLSearchParams(location.search).get('pagamento');
+  const qs=new URLSearchParams(location.search);
+  const p=qs.get('pagamento');
   if(!p)return;
-  // Tira o parametro da URL: um F5 nao deve repetir a mensagem.
+  // O Mercado Pago devolve o id do pagamento na propria URL de retorno.
+  // Ele nao prova nada sozinho — serve para o worker ir perguntar a API,
+  // autenticado, o que de fato aconteceu.
+  const idPagamento=qs.get('payment_id')||qs.get('collection_id')||null;
+  // Tira os parametros da URL: um F5 nao deve repetir a mensagem.
   try{history.replaceState(null,'',location.pathname);}catch(e){}
 
   // Abre a aba sem passar por irPara(): irPara dispara loadPlano() sem esperar,
@@ -2918,6 +2923,36 @@ async function tratarRetornoPagamento(){
   }
 
   faixa('amber','Pagamento recebido — liberando seu acesso','Só um instante.');
+
+  // Caminho principal: pedir ao worker que confirme o pagamento direto na API
+  // do Mercado Pago. Nao depende do webhook, que pode atrasar ou falhar.
+  if(idPagamento){
+    try{
+      const r=await fetch(`${MKT_WORKER}/assinatura/confirmar`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+getAuthToken()},
+        body:JSON.stringify({payment_id:idPagamento})
+      });
+      const d=await r.json().catch(()=>({}));
+      if(r.ok&&d.liberado){
+        await verificarAcesso();
+        aplicarAcessoUI();
+        await loadPlano();
+        faixa('green','Acesso liberado',
+          'Tudo certo. Seu acesso vale até <strong>'+(ACESSO.acesso_ate?fDate(ACESSO.acesso_ate):fDate(d.acesso_ate))+'</strong>.');
+        return;
+      }
+      if(r.ok&&d.status&&d.status!=='approved'){
+        faixa('amber','Pagamento ainda não aprovado',
+          'O Mercado Pago informa a situação <strong>'+d.status+'</strong>. '+
+          'Se foi boleto, o acesso entra quando compensar. Esta página não precisa ficar aberta.');
+        return;
+      }
+    }catch(e){ console.error('confirmar:',e); }
+  }
+
+  // Caminho reserva: se a confirmacao direta nao resolveu, ainda resta o
+  // webhook. Insiste um pouco antes de dizer qualquer coisa ao cliente.
   for(let i=0;i<10;i++){
     await new Promise(r=>setTimeout(r,2000));
     await verificarAcesso();
