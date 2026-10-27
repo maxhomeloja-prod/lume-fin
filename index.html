@@ -2630,22 +2630,23 @@ async function fazerLogin(){
       });
       if(rPerf.ok)_perfilLogin=(await rPerf.json())[0]||null;
     }catch(e){ console.error('login/profiles:',e); }
-    const _bloqueadoLogin=_acessoCalcBloqueio(_perfilLogin);
+    // Lido aqui so para registro no console: quem decide o que o usuario ve e
+    // verificarAcesso(), dentro de iniciarApp(), e quem de fato bloqueia e a
+    // RLS no banco. Perfil ausente ou com status nulo nao impede o login.
+    if(_perfilLogin&&_acessoCalcBloqueio(_perfilLogin))console.log('[acesso] entrando com assinatura vencida ou bloqueada');
 
-    // Verificar se tem empresa vinculada.
-    // Este SELECT e o porteiro do login. Se o cliente esta bloqueado, pular o
-    // porteiro: nao faz sentido dizer "nenhuma empresa vinculada" para quem so
-    // esta devendo — e ele precisa entrar para poder pagar. O arquivo 22 deixa
-    // o SELECT em empresas fora do portao, mas mesmo que falhe, aqui ele entra.
-    if(!_bloqueadoLogin){
-      const rEmp=await fetch(`${SB_URL}/rest/v1/empresas?owner_id=eq.${d.user.id}&select=id&limit=1`,{
-        headers:{apikey:SB_ANON,Authorization:'Bearer '+d.access_token}
-      });
-      const emps=await rEmp.json();
-      if(!emps.length){
-        throw new Error('Nenhuma empresa vinculada a este usuário.');
-      }
-    }
+    // NAO exigir empresa vinculada para entrar.
+    //
+    // Havia aqui um SELECT em empresas que barrava o login de quem nao tivesse
+    // nenhuma, com "Nenhuma empresa vinculada a este usuario". Isso tornava o
+    // cadastro novo impossivel: quem acabou de criar conta nunca tem empresa, e
+    // o modal de "cadastre sua empresa no primeiro acesso" — que existe em
+    // irPara() — nunca era alcancado. Medido em 27/10/2026 com o cadastro da
+    // Enxovais Alves: o dono novo batia no erro e nao entrava de jeito nenhum.
+    //
+    // Quem nao pode entrar por aqui e a faccao, e isso continua sendo checado
+    // acima, pela consulta a terceiros. Falta de empresa nao e motivo de
+    // barrar: e so o primeiro acesso.
     SESSION=d;
     localStorage.setItem('lume_session',JSON.stringify(d));
     iniciarApp();
