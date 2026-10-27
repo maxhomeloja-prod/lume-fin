@@ -658,6 +658,12 @@ tr:hover td{background:var(--surface2);}
     </div>
   </header>
 
+  <!-- Faixa de vencimento: fica FORA de .main, acima de todas as paginas.
+       A faixa que existe dentro de Plano & Pagamento so e vista por quem abre
+       aquela aba — e com teste gratis de 30 dias, ser bloqueado sem nunca ter
+       aberto a aba deixa de ser hipotese e vira o caminho comum. -->
+  <div id="faixa-vencimento" style="display:none"></div>
+
   <!-- PÁGINAS -->
   <div class="main">
 
@@ -2465,6 +2471,40 @@ function _acessoCalcBloqueio(p){
   return false;
 }
 
+// Faixa fixa no topo, visivel em qualquer tela. Aparece nos 10 dias finais e
+// enquanto estiver bloqueado. Fora dessa janela some e nao ocupa espaco.
+// Nao e seguranca — e aviso. Quem bloqueia e a RLS.
+function renderFaixaVencimento(){
+  const el=document.getElementById('faixa-vencimento');
+  if(!el)return;
+  // No portal da faccao nao faz sentido: faccao nao assina nem e bloqueada.
+  if(FACCAO_LOGADO||!SESSION){el.style.display='none';el.innerHTML='';return;}
+
+  const dias=_planoDias(ACESSO.acesso_ate);
+  let cor,texto,rotulo;
+  if(ACESSO.bloqueado){
+    cor='red';
+    texto='<strong>Seu acesso está bloqueado.</strong> Seus dados estão preservados — nada foi apagado. Regularize para liberar na hora.';
+    rotulo='Ver planos';
+  }else if(dias!==null&&dias>=0&&dias<=10){
+    cor='amber';
+    texto=dias===0
+      ? '<strong>Seu acesso vence hoje.</strong> Renove para não ter interrupção.'
+      : `<strong>Seu acesso vence em ${dias} dia${dias===1?'':'s'}</strong> — em ${fDate(ACESSO.acesso_ate)}. Renove para não ter interrupção.`;
+    rotulo='Renovar';
+  }else{
+    el.style.display='none';el.innerHTML='';return;
+  }
+
+  el.style.display='';
+  el.innerHTML=
+    `<div style="background:var(--${cor}-bg);border-bottom:2px solid var(--${cor});`+
+    `padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">`+
+      `<div style="font-size:13px;color:var(--${cor})">⚠ ${texto}</div>`+
+      `<button class="btn btn-sm ${cor==='red'?'btn-danger':'btn-amber'}" onclick="irPara('plano')">${rotulo} →</button>`+
+    `</div>`;
+}
+
 async function verificarAcesso(){
   if(!SESSION?.user?.id)return ACESSO;
   try{
@@ -2511,6 +2551,10 @@ function aplicarAcessoUI(){
 
   // E esconder a propria entrada do menu Financeiro no Modulo I ja cobre as
   // paginas; o item Plano & Pagamento em Configuracoes fica sempre de pe.
+
+  // A faixa de vencimento acompanha o estado do acesso. Tambem e redesenhada
+  // em irPara(), para refletir um pagamento feito em outra aba sem F5.
+  renderFaixaVencimento();
 }
 
 // ── Loading global ─────────────────────────────────────────
@@ -3080,6 +3124,8 @@ function irPara(pagina){
   document.querySelectorAll('.nav-dropdown').forEach(d=>{d.classList.remove('open');d.previousElementSibling?.classList.remove('open');});
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-dd-item').forEach(i=>i.classList.remove('active'));
+
+  renderFaixaVencimento();
 
   // Bloqueado: so Plano & Pagamento, Meu Perfil e a Politica de Seguranca.
   // Qualquer outro destino redireciona para o plano em vez de abrir uma tela
