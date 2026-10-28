@@ -7368,17 +7368,45 @@ function renderABCChart(){
 }
 
 // ── FINANCEIRO ────────────────────────────────────────────────
+// CORRIGIDO 28/10/2026. A versao anterior fazia:
+//     const d=await r.json(); const novas=d.total_novas||0;
+//     btn.textContent=`✓ ${novas} novas`;
+// Sem olhar o status HTTP. Quando o worker passou a exigir chave no /sync,
+// esta chamada comecou a receber 403 — e como `{"error":"chave invalida"}` e
+// JSON valido, o `||0` virava zero e o botao escrevia "✓ 0 novas". Visto
+// verde para uma chamada que nunca rodou: nenhuma conta consultada, nenhum
+// Pluggy chamado. Duas regras saem disso e valem para o resto do sistema:
+//   1. conferir o status HTTP antes de acreditar no corpo
+//   2. dado ausente nunca vira zero com `||` — vira erro visivel
 async function sincronizarBanco(){
   const empresaSel=await pedirEmpresaParaSalvar();
   if(!empresaSel)return;
-  const btn=document.getElementById('btn-sync');btn.textContent='⏳ Sincronizando...';btn.disabled=true;
+  const btn=document.getElementById('btn-sync');
+  const voltar=(txt,ms)=>{btn.textContent=txt;btn.disabled=true;
+    setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},ms||6000);};
+  const tok=SESSION?.access_token;
+  if(!tok){voltar('⚠ Sessão expirada — entre de novo');return;}
+  btn.textContent='⏳ Sincronizando...';btn.disabled=true;
   try{
-    const r=await fetch(`${WORKER}/sync?empresa_id=${empresaSel}`);
-    const d=await r.json();const novas=d.total_novas||0;
-    btn.textContent=`✓ ${novas} novas`;
-    setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},3000);
+    const r=await fetch(`${WORKER}/sync?empresa_id=${encodeURIComponent(empresaSel)}`,
+      {headers:{Authorization:'Bearer '+tok}});
+    const txt=await r.text();
+    let d=null;try{d=JSON.parse(txt);}catch(_){}
+    if(!r.ok){voltar(`⚠ ${r.status}: ${d?.error||txt.slice(0,60)||'erro no servidor'}`,10000);return;}
+    if(!d||d.status==='erro'){voltar(`⚠ ${d?.mensagem||'resposta inesperada do worker'}`,10000);return;}
+    if(typeof d.total_novas!=='number'){voltar('⚠ worker respondeu sem total_novas',10000);return;}
+    const novas=d.total_novas;
+    // Erro por conta tambem aparece. Era mais um silencio: uma conta podia
+    // falhar dentro de um sync que o botao declarava bem-sucedido.
+    const comErro=(d.contas||[]).filter(c=>c.erro);
+    if(comErro.length){
+      console.warn('sync — contas com erro:',comErro);
+      voltar(`⚠ ${novas} novas, ${comErro.length} conta(s) com erro`,12000);
+    }else{
+      voltar(`✓ ${novas} novas`,3000);
+    }
     if(novas>0)await loadCategorizacao();
-  }catch(e){btn.textContent='⚠ Erro';btn.disabled=false;}
+  }catch(e){voltar('⚠ '+(e.message||'falha de rede'),10000);}
 }
 
 async function loadCategorizacao(){
