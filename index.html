@@ -3760,40 +3760,92 @@ async function processarConexaoBanco(item){
   abrirModal('modal-vincular-empresa-conta');
 }
 
+// REESCRITA EM 29/10/2026. A versao anterior tinha dois defeitos que, juntos,
+// obrigaram a repontar 8 contas na mao por SQL para nao partir 1.602
+// transacoes em duas metades:
+//
+//   1. Lia item.accounts no instante do onSuccess. Mas o widget dispara
+//      onSuccess quando a CONEXAO deu certo — a coleta das contas vem depois,
+//      de forma assincrona. A lista chegava vazia e o front gravava
+//      "PENDENTE_<itemId>", que nunca se resolvia sozinho. Aconteceu em 5 de
+//      5 reconexoes naquele dia. Agora pergunta ao worker e espera.
+//
+//   2. Sempre fazia INSERT. Reconectar criava linha NOVA, com conta_id novo,
+//      e as transacoes antigas ficavam orfas na linha velha. Agora casa pelo
+//      numero da conta — que e o mesmo no banco entre reconexoes, diferente
+//      do pluggy_account_id — e faz UPDATE quando acha.
 async function confirmarVincularConta(){
   const empresaId = document.getElementById('mvc-empresa-sel').value;
   if(!empresaId){alert('Selecione uma empresa');return;}
   if(!_itemConectadoPendente){return;}
   const item = _itemConectadoPendente;
+  const tok = SESSION?.access_token;
+  if(!tok){alert('Sessão expirada — entre de novo e reconecte o banco.');return;}
+  const aviso = t => {const el=document.getElementById('mvc-banco-nome'); if(el&&t) el.textContent=t;};
+
   try{
-    const accounts = item.accounts || [];
-    if(accounts.length > 0){
-      // Salvar cada conta do item
-      for(const acc of accounts){
-        await sbPost('contas_bancarias',{
-          empresa_id: empresaId,
-          pluggy_item_id: item.id,
-          pluggy_account_id: acc.id,
-          banco: item.connector?.name || 'Banco',
-          nome_conta: acc.name || 'Conta conectada',
-          tipo: acc.type === 'CREDIT' ? 'CREDIT' : 'BANK',
-          ativa: true
-        });
-      }
-    } else {
-      await sbPost('contas_bancarias',{
-        empresa_id: empresaId,
-        pluggy_item_id: item.id,
-        pluggy_account_id: 'PENDENTE_'+item.id,
-        banco: item.connector?.name || 'Banco',
-        nome_conta: 'Conta conectada',
-        tipo: 'BANK',
-        ativa: true
-      });
+    // ── 1. esperar o banco liberar as contas ────────────────────
+    let contas=null, ultimoAguardando=null;
+    for(let i=1;i<=12;i++){
+      aviso(`Buscando as contas no banco… (${i}/12)`);
+      const r=await fetch(`${WORKER}/item-contas?empresa_id=${encodeURIComponent(empresaId)}&item_id=${encodeURIComponent(item.id)}`,
+        {headers:{Authorization:'Bearer '+tok}});
+      const txt=await r.text(); let d=null; try{d=JSON.parse(txt);}catch(_){}
+      if(!r.ok) throw new Error(d?.error||`${r.status}: ${txt.slice(0,80)}`);
+      if(d&&d.pronto){contas=d.contas;break;}
+      ultimoAguardando=(d&&d.aguardando)||null;
+      if(i<12) await new Promise(res=>setTimeout(res,5000));
     }
+
+    // Nao cria linha nenhuma quando o banco nao liberou. A linha PENDENTE era
+    // lixo que ninguem limpava e que escondia o problema real.
+    if(!contas){
+      const motivos=((ultimoAguardando&&ultimoAguardando.avisos)||[]).join(' · ');
+      throw new Error('O banco ainda não liberou as contas desta conexão.'
+        +(motivos?'\n\n'+motivos:'')
+        +'\n\nNada foi cadastrado. Em conta PJ isso costuma exigir aprovação dentro do app do banco. Depois de aprovar, conecte novamente.');
+    }
+
+    // ── 2. casar com o cadastro pelo numero da conta ────────────
+    // Compara so os digitos: "00058433-9" e "000584339" sao a mesma conta.
+    // Casa tambem pelo tipo, para um cartao nunca repontar uma corrente.
+    const soDigitos = n => String(n==null?'':n).replace(/\D/g,'');
+    const existentes = await sbGet('contas_bancarias',
+      `?empresa_id=eq.${empresaId}&select=id,numero_conta,tipo,banco,nome_conta`);
+    let criadas=0, repontadas=0;
+
+    for(const acc of contas){
+      const chave=soDigitos(acc.numero);
+      const igual=chave
+        ? (existentes||[]).find(c=>c.tipo===acc.tipo && soDigitos(c.numero_conta)===chave)
+        : null;
+      const campos={
+        pluggy_item_id: item.id,
+        pluggy_account_id: acc.accountId,
+        numero_conta: acc.numero||null
+      };
+      if(igual){
+        // Reponta. NAO toca em banco, nome_conta nem ativa: sao escolhas do
+        // usuario, e o historico segue ligado ao mesmo conta_id.
+        await sbPatch('contas_bancarias',`id=eq.${igual.id}`,campos);
+        repontadas++;
+      }else{
+        await sbPost('contas_bancarias',Object.assign({
+          empresa_id: empresaId,
+          banco: (item.connector&&item.connector.name)||'Banco',
+          nome_conta: acc.nome||'Conta conectada',
+          tipo: acc.tipo,
+          ativa: true
+        },campos));
+        criadas++;
+      }
+    }
+
     fecharModal('modal-vincular-empresa-conta');
-    _itemConectadoPendente = null;
-    alert('Banco conectado com sucesso!');
+    _itemConectadoPendente=null;
+    alert(repontadas>0
+      ? `Banco conectado. ${repontadas} conta(s) reconectada(s) sem perder o histórico`+(criadas?` e ${criadas} nova(s)`:'')+'.'
+      : `Banco conectado. ${criadas} conta(s) cadastrada(s).`);
     loadContas();
   }catch(e){alert('Erro: '+e.message);}
 }
@@ -7368,46 +7420,10 @@ function renderABCChart(){
 }
 
 // ── FINANCEIRO ────────────────────────────────────────────────
-// CORRIGIDO 28/10/2026. A versao anterior fazia:
-//     const d=await r.json(); const novas=d.total_novas||0;
-//     btn.textContent=`✓ ${novas} novas`;
-// Sem olhar o status HTTP. Quando o worker passou a exigir chave no /sync,
-// esta chamada comecou a receber 403 — e como `{"error":"chave invalida"}` e
-// JSON valido, o `||0` virava zero e o botao escrevia "✓ 0 novas". Visto
-// verde para uma chamada que nunca rodou: nenhuma conta consultada, nenhum
-// Pluggy chamado. Duas regras saem disso e valem para o resto do sistema:
-//   1. conferir o status HTTP antes de acreditar no corpo
-//   2. dado ausente nunca vira zero com `||` — vira erro visivel
-async function sincronizarBanco(){
-  const empresaSel=await pedirEmpresaParaSalvar();
-  if(!empresaSel)return;
-  const btn=document.getElementById('btn-sync');
-  const voltar=(txt,ms)=>{btn.textContent=txt;btn.disabled=true;
-    setTimeout(()=>{btn.textContent='⚡ Sincronizar Banco';btn.disabled=false;},ms||6000);};
-  const tok=SESSION?.access_token;
-  if(!tok){voltar('⚠ Sessão expirada — entre de novo');return;}
-  btn.textContent='⏳ Sincronizando...';btn.disabled=true;
-  try{
-    const r=await fetch(`${WORKER}/sync?empresa_id=${encodeURIComponent(empresaSel)}`,
-      {headers:{Authorization:'Bearer '+tok}});
-    const txt=await r.text();
-    let d=null;try{d=JSON.parse(txt);}catch(_){}
-    if(!r.ok){voltar(`⚠ ${r.status}: ${d?.error||txt.slice(0,60)||'erro no servidor'}`,10000);return;}
-    if(!d||d.status==='erro'){voltar(`⚠ ${d?.mensagem||'resposta inesperada do worker'}`,10000);return;}
-    if(typeof d.total_novas!=='number'){voltar('⚠ worker respondeu sem total_novas',10000);return;}
-    const novas=d.total_novas;
-    // Erro por conta tambem aparece. Era mais um silencio: uma conta podia
-    // falhar dentro de um sync que o botao declarava bem-sucedido.
-    const comErro=(d.contas||[]).filter(c=>c.erro);
-    if(comErro.length){
-      console.warn('sync — contas com erro:',comErro);
-      voltar(`⚠ ${novas} novas, ${comErro.length} conta(s) com erro`,12000);
-    }else{
-      voltar(`✓ ${novas} novas`,3000);
-    }
-    if(novas>0)await loadCategorizacao();
-  }catch(e){voltar('⚠ '+(e.message||'falha de rede'),10000);}
-}
+// A funcao sincronizarBanco foi REMOVIDA em 29/10/2026. Ela chamava
+// ${WORKER}/sync e tratava a resposta, mas nao existia botao nem onclick
+// que a chamasse: era codigo morto desde sempre. O sync roda pelos crons
+// do worker, as 06:00 e 06:20 UTC.
 
 async function loadCategorizacao(){
   if(!EMPRESAS.length){semEmpresaMsg('cat-wrap');return;}
