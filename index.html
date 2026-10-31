@@ -3797,21 +3797,63 @@ async function confirmarVincularConta(){
       if(i<12) await new Promise(res=>setTimeout(res,5000));
     }
 
-    // Nao cria linha nenhuma quando o banco nao liberou. A linha PENDENTE era
-    // lixo que ninguem limpava e que escondia o problema real.
+    // O cadastro atual da empresa. Lido aqui, antes dos dois caminhos, porque
+    // os dois precisam dele: o lento para nao duplicar a linha de espera, o
+    // normal para casar por numero.
+    const existentes = await sbGet('contas_bancarias',
+      `?empresa_id=eq.${empresaId}&select=id,numero_conta,tipo,banco,nome_conta,pluggy_item_id,pluggy_account_id`);
+
+    // ── 1B. CAMINHO LENTO: o banco nao liberou em 60 segundos ───
+    //
+    // MUDADO EM 31/10/2026. A versao de 29/10 nao gravava nada aqui e mostrava
+    // erro. Mas quando chegamos neste ponto a conexao JA EXISTE na Pluggy — o
+    // widget so chama onSuccess depois de criar o item. Nao gravar jogava fora
+    // uma conexao real: o cliente via erro, reconectava, e sobrava um item
+    // orfao na Pluggy, ocupando vaga das 500, invisivel para ele e para nos.
+    //
+    // O defeito da versao antiga nunca foi a linha PENDENTE em si — era o
+    // SILENCIO: ela gravava e anunciava "banco conectado", como se estivesse
+    // resolvido. Agora grava e diz a verdade. O que fecha o ciclo e o
+    // resolverPendentes do worker, que passou a rodar no cron das 06:20 UTC em
+    // 31/10/2026; antes disso nada no caminho automatico olhava para estas
+    // linhas, e foi assim que um cliente ficou meses com uma conta corrente de
+    // R$ 44.609,35 fora do sistema.
+    //
+    // O tipo vai como BANK por nao haver como saber antes de o banco liberar.
+    // Nao e chute com consequencia: quando o item devolve UMA conta e esta e a
+    // unica linha em espera dele, o resolverPendentes aceita a conta e corrige
+    // o tipo junto, porque nao ha o que desempatar.
     if(!contas){
       const motivos=((ultimoAguardando&&ultimoAguardando.avisos)||[]).join(' · ');
-      throw new Error('O banco ainda não liberou as contas desta conexão.'
+      const jaEmEspera=(existentes||[]).some(c=>c.pluggy_item_id===item.id);
+      if(!jaEmEspera){
+        await sbPost('contas_bancarias',{
+          empresa_id: empresaId,
+          banco: (item.connector&&item.connector.name)||'Banco',
+          nome_conta: 'Conta conectada',
+          tipo: 'BANK',
+          ativa: true,
+          pluggy_item_id: item.id,
+          pluggy_account_id: 'PENDENTE_'+item.id,
+          numero_conta: null
+        });
+      }
+      fecharModal('modal-vincular-empresa-conta');
+      _itemConectadoPendente=null;
+      alert('Conexão salva, mas o banco ainda não liberou as contas.'
         +(motivos?'\n\n'+motivos:'')
-        +'\n\nNada foi cadastrado. Em conta PJ isso costuma exigir aprovação dentro do app do banco. Depois de aprovar, conecte novamente.');
+        +'\n\nEm conta PJ isso costuma exigir aprovação dentro do aplicativo do banco.'
+        +'\n\nNão precisa reconectar: a conexão ficou registrada e o sistema tenta de novo'
+        +' todas as madrugadas, por volta das 3h20. Assim que o banco liberar, a conta'
+        +' aparece aqui sozinha.');
+      loadContas();
+      return;
     }
 
     // ── 2. casar com o cadastro pelo numero da conta ────────────
     // Compara so os digitos: "00058433-9" e "000584339" sao a mesma conta.
     // Casa tambem pelo tipo, para um cartao nunca repontar uma corrente.
     const soDigitos = n => String(n==null?'':n).replace(/\D/g,'');
-    const existentes = await sbGet('contas_bancarias',
-      `?empresa_id=eq.${empresaId}&select=id,numero_conta,tipo,banco,nome_conta`);
     let criadas=0, repontadas=0;
 
     for(const acc of contas){
@@ -8105,7 +8147,15 @@ async function gerarFechamentoCliente(){
 }
 
 let _venPaginaAtual=0;
-const VEN_PAGE_SIZE=100;
+// TAMANHO DA PAGINA ESCOLHIVEL, 29/10/2026.
+// Era uma constante de 100. Com um mes de vendas passando de mil linhas, ver
+// tudo exigia folhear dezenas de paginas. Agora o usuario escolhe, e o padrao
+// continua 100 para nao deixar lento quem nao precisa.
+// O teto de 1000 nao e arbitrario: e o db-max-rows padrao do PostgREST no
+// Supabase. Pedir mais devolveria 1000 do mesmo jeito, e a paginacao passaria
+// a mentir o "de N vendas".
+let VEN_PAGE_SIZE=parseInt(localStorage.getItem('ven_page_size')||'100',10);
+if(![100,250,500,1000].includes(VEN_PAGE_SIZE))VEN_PAGE_SIZE=100;
 
 // Celula de receita liquida: o valor que entra na conta depois das taxas do
 // marketplace, com a taxa de retencao da propria linha embaixo.
@@ -8363,7 +8413,11 @@ async function loadVendas(resetarPagina=true){
     const fim=Math.min(total,inicio+VEN_PAGE_SIZE-1);
     document.getElementById('ven-paginacao').innerHTML=
       '<span>Mostrando '+fN(inicio)+'–'+fN(fim)+' de '+fN(total)+' vendas (página '+paginaHumana+' de '+fN(totalPaginas)+')</span>'+
-      '<span style="display:flex;gap:8px">'+
+      '<span style="display:flex;gap:8px;align-items:center">'+
+      '<label style="font-size:11px;color:var(--text3)">Por página</label>'+
+      '<select class="form-control" style="width:auto;padding:4px 8px;font-size:12px" onchange="venMudarTamanho(this.value)">'+
+        [100,250,500,1000].map(n=>'<option value="'+n+'"'+(n===VEN_PAGE_SIZE?' selected':'')+'>'+n+'</option>').join('')+
+      '</select>'+
       '<button class="btn btn-secondary btn-sm" '+(_venPaginaAtual<=0?'disabled':'')+' onclick="venMudarPagina(-1)">‹ Anterior</button>'+
       '<button class="btn btn-secondary btn-sm" '+(paginaHumana>=totalPaginas?'disabled':'')+' onclick="venMudarPagina(1)">Próxima ›</button>'+
       '</span>';
@@ -8373,6 +8427,17 @@ async function loadVendas(resetarPagina=true){
 }
 function venMudarPagina(delta){
   _venPaginaAtual=Math.max(0,_venPaginaAtual+delta);
+  loadVendas(false);
+}
+// Troca o tamanho da pagina e volta para a primeira, senao o offset apontaria
+// para o lugar errado. A escolha fica no navegador do usuario: cada um tem a
+// sua, e nao vira configuracao global que pesa para quem nao precisa.
+function venMudarTamanho(n){
+  n=parseInt(n,10);
+  if(![100,250,500,1000].includes(n))return;
+  VEN_PAGE_SIZE=n;
+  try{localStorage.setItem('ven_page_size',String(n));}catch(_){}
+  _venPaginaAtual=0;
   loadVendas(false);
 }
 
