@@ -6415,6 +6415,19 @@ function loadDREFacilitado(){
   if(ate&&!ate.value)ate.value=mm(h);
 }
 
+// Piso de cobertura, decidido em 02/11/2026.
+//
+// Abaixo dele a linha fica INDISPONIVEL em vez de mostrar valor escalado — e
+// com ela tudo que depende dela. A razao esta em medida, nao em gosto: em
+// setembro/2026 a cobertura de CPV era 2,38% (449 de 19.293 linhas), e a
+// extrapolacao multiplicava por 42 — pegava R$ 9.891,55 de custo conhecido e
+// projetava R$ 415.363,13. Numero redondo, cara de resultado, e essencialmente
+// ruido, porque a taxa das 449 linhas nao representa as outras 18.844.
+//
+// A fatia extrapolada e (1 - cobertura), entao "mais de 50% extrapolado" e a
+// mesma coisa que "cobertura abaixo de 50%".
+const DREF_PISO_COBERTURA = 50;
+
 async function dreFacMontar(){
   const ids=[...document.querySelectorAll('.dref-emp-chk:checked')].map(c=>c.value);
   const alvo=document.getElementById('dref-resultado');
@@ -6433,43 +6446,52 @@ async function dreFacMontar(){
   try{
     const uid=SESSION?.user?.id||'00000000-0000-0000-0000-000000000000';
     const qEmp='empresa_id=in.('+ids.join(',')+')';
-    const [kpis,liq,cpv,trans,cxSai]=await Promise.all([
-      sbRpc('vendas_kpis',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim,p_canal:null,p_canais:null,p_sku:null,p_cliente:null}),
-      // ACRESCENTADO EM 02/11/2026, e sem isto a DRE estava MUITO errada.
-      //
-      // vendas_kpis.total_receita e receita BRUTA de varejo. A comissao do
-      // marketplace nunca aparece como despesa bancaria: TikTok, Shopee e Temu
-      // depositam ja liquido. Entao, sem esta linha, a comissao nao estava em
-      // lugar nenhum — nem na receita, que e bruta, nem nas despesas, porque
-      // nunca foi debitada. O comentario da tela de Vendas mede o tamanho do
-      // buraco: em setembro/2026 a taxa real foi 30,1% do bruto.
-      //
-      // E o que a linha de deducoes da aba Resultado captura, de
-      // registros_despesa digitado a mao. Aqui sai do mesmo RPC que a tela de
-      // Vendas usa, automatico.
-      sbRpc('vendas_kpis_liquido',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim,p_canal:null,p_canais:null,p_sku:null,p_cliente:null}),
-      sbRpc('dre_cpv',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim}),
+
+    // UM RPC para receita, comissao e CPV, e nao tres.
+    //
+    // A versao de hoje de manha usava vendas_kpis (receita), vendas_kpis_liquido
+    // (comissao) e dre_cpv (custo). Dois problemas com isso:
+    //
+    //   1. dre_cpv e CPV CONTABIL — estoque inicial + compras + MO - estoque
+    //      final, lendo inventario, registros_despesa e entregas_op. Esta
+    //      correto no que faz, e depende exatamente dos controles que o usuario
+    //      desta aba nao mantem. Em 02/11/2026 ele devolvia R$ 638.487,04 onde
+    //      o custo por SKU vendido era R$ 470.336,63. Nenhum errado: medem
+    //      coisas diferentes. Minha justificativa para reaproveita-lo ("nao ter
+    //      dois CPV discordando") era o contrario do necessario.
+    //
+    //   2. Escalar numerador de uma funcao por denominador de outra exige que
+    //      as duas calculem bruto e filtrem cancelado igual. Nao da para
+    //      presumir isso lendo o nome da funcao — e foi presumindo assim que eu
+    //      errei quatro vezes neste projeto. Agora numerador e denominador saem
+    //      da MESMA funcao, com uma definicao de bruto so.
+    //
+    // A receita sai de bruto_total. Conferido contra vendas_kpis.total_receita
+    // em setembro/2026: diferenca 0,00. Se um dia divergirem, a consistencia
+    // interna com os denominadores das escalas vale mais que a igualdade.
+    const [cpvF,trans,cxSai]=await Promise.all([
+      sbRpc('dre_cpv_facilitado',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim}),
       sbGet('transacoes','?'+qEmp+'&status=eq.CONFIRMADA&data=gte.'+dIni+'&data=lte.'+dFim+'&select=valor,tipo,categoria_id&limit=5000'),
       comCaixa
         ? sbGet('caixa_saidas','?user_id=eq.'+uid+'&data=gte.'+dIni+'&data=lte.'+dFim+'&select=valor_total,categoria_id&limit=1000')
         : Promise.resolve([])
     ]);
 
-    const receita=Number((kpis&&kpis[0]&&kpis[0].total_receita)||0);
-    const cpvVal=Number(((cpv&&cpv[0])||{}).cpv||0);
+    const f=(Array.isArray(cpvF)?cpvF[0]:cpvF)||{};
+    const num=v=>(v===null||v===undefined)?null:Number(v);
+    const receita   =num(f.bruto_total)||0;
+    const cobCpv    =num(f.cobertura_cpv_pct);
+    const cobLiq    =num(f.cobertura_liq_pct);
+    const skusSemCpv=parseInt(f.skus_sem_cpv)||0;
+    const linhasComCpv=parseInt(f.linhas_com_cpv)||0;
+    const linhasTotal =parseInt(f.linhas_total)||0;
 
-    // Comissao conhecida = bruto das linhas que TEM liquido, menos o liquido
-    // delas. NUNCA extrapolada para as linhas sem liquido: estimar a comissao
-    // das que faltam seria inventar numero. Quando a cobertura e parcial, a
-    // comissao sai menor do que a real e o aviso diz isso, com quantas linhas
-    // faltam — mesma disciplina do KPI de liquido da tela de Vendas.
-    const qL=(Array.isArray(liq)?liq[0]:liq)||{};
-    const liqTot    =Number(qL.total_liquido)||0;
-    const brutoCom  =Number(qL.bruto_com_liquido)||0;
-    const nComLiq   =parseInt(qL.linhas_com_liquido)||0;
-    const nTotLinhas=parseInt(qL.linhas_total)||0;
-    const comissao  =nComLiq?Math.max(0,brutoCom-liqTot):0;
-    const receitaLiq=receita-comissao;
+    // null aqui nao e "zero": e "nao sei". Propaga para baixo em vez de virar
+    // um numero que ninguem conferiu.
+    const cpvOk=(cobCpv!==null&&cobCpv>=DREF_PISO_COBERTURA);
+    const liqOk=(cobLiq!==null&&cobLiq>=DREF_PISO_COBERTURA);
+    const cpvVal  =cpvOk?(num(f.cpv_extrapolado)||0):null;
+    const comissao=liqOk?(num(f.comissao_extrapolada)||0):null;
 
     // Soma por grupo, espelhando o balancete: pula transferencia, le o tipo no
     // filho, e acumula o valor COM SINAL (despesa negativa). O abs sai so na
@@ -6489,42 +6511,48 @@ async function dreFacMontar(){
     cxSai.forEach(s=>somar(s.categoria_id, -Math.abs(s.valor_total)));
 
     // Sem grupo entra como operacional. Erro conservador: se na verdade for
-    // juro ou imposto, o EBITDA sai menor do que e — nunca maior. O contrario
-    // mostraria lucro operacional que nao existe.
+    // juro ou imposto, o EBITDA sai menor do que e — nunca maior.
     const opex =Math.abs(porG.OPERACIONAL)+Math.abs(porG.SEM);
     const fin  =Math.abs(porG.FINANCEIRA);
     const imp  =Math.abs(porG.IMPOSTO);
 
-    const lucroBruto=receitaLiq-cpvVal;
-    const ebitda=lucroBruto-opex;
-    const lucroLiq=ebitda-fin-imp;
+    const receitaLiq=(comissao===null)?null:receita-comissao;
+    const lucroBruto=(receitaLiq===null||cpvVal===null)?null:receitaLiq-cpvVal;
+    const ebitda    =(lucroBruto===null)?null:lucroBruto-opex;
+    const lucroLiq  =(ebitda===null)?null:ebitda-fin-imp;
 
-    _drefDados={receita,comissao,receitaLiq,cpvVal,lucroBruto,opex,ebitda,fin,imp,lucroLiq,detG,porG,
-                nComLiq,nTotLinhas,dIni,dFim,comCaixa,
-                empresas:EMPRESAS.filter(e=>ids.indexOf(e.id)>=0)};
+    _drefDados={receita,comissao,receitaLiq,cpvVal,lucroBruto,opex,ebitda,fin,imp,lucroLiq,
+                detG,porG,cobCpv,cobLiq,cpvOk,liqOk,skusSemCpv,linhasComCpv,linhasTotal,
+                cpvConhecido:num(f.cpv_conhecido),comissaoConhecida:num(f.comissao_conhecida),
+                dIni,dFim,comCaixa,empresas:EMPRESAS.filter(e=>ids.indexOf(e.id)>=0)};
 
-    if(porG.SEM!==0){
-      const quantas=Object.keys(detG.SEM).length;
-      avisoEl.innerHTML='<div class="card" style="border-left:3px solid var(--amber);background:var(--amber-bg);margin-bottom:12px;padding:10px 12px;font-size:12px;color:var(--text)">'+
-        '<b>'+quantas+' categoria(s) de despesa sem grupo</b>, somando '+fBRL(Math.abs(porG.SEM))+'. '+
-        'Entraram em Despesas Operacionais, que é a regra para o que não é imposto, despesa bancária ou empréstimo — '+
-        'então o resultado abaixo não está errado por causa disso. '+
-        'Vale conferir só se alguma delas é uma dessas três exceções: aí sim o EBITDA estaria menor do que é. '+
-        'O bloco âmbar do Balancete mostra quais são.</div>';
+    const card=(cor,html)=>'<div class="card" style="border-left:3px solid var('+cor+');background:var(--surface2);margin-bottom:12px;padding:10px 12px;font-size:12px;color:var(--text)">'+html+'</div>';
+
+    if(!cpvOk){
+      avisoEl.innerHTML+=card('--red',
+        '<b>CPV indisponível neste período.</b> Só '+(cobCpv===null?'0':cobCpv.toFixed(2))+'% da receita '+
+        'vem de vendas cujo SKU tem custo cadastrado com vigência na data do pedido ('+
+        linhasComCpv.toLocaleString('pt-BR')+' de '+linhasTotal.toLocaleString('pt-BR')+' linhas). '+
+        'Abaixo de '+DREF_PISO_COBERTURA+'% o sistema não estima: projetar o custo de '+
+        (100-(cobCpv||0)).toFixed(0)+'% da receita a partir do resto não seria estimativa, seria chute. '+
+        (skusSemCpv?'<br><br>Faltam cadastrar '+skusSemCpv+' SKU(s) em Cadastros → Custos (CPV). ':'')+
+        'Se o período for antigo, pode ser só vigência: custo cadastrado hoje não vale para venda de antes, por desenho.');
     }
-    // Cobertura parcial de líquido: a comissão abaixo está INCOMPLETA, e o
-    // lucro sai otimista. Não extrapolo — digo quantas linhas faltam.
-    if(nTotLinhas>0 && nComLiq<nTotLinhas){
-      const falta=nTotLinhas-nComLiq;
-      avisoEl.innerHTML+='<div class="card" style="border-left:3px solid var(--red);background:var(--surface2);margin-bottom:12px;padding:10px 12px;font-size:12px;color:var(--text)">'+
-        '<b>'+falta+' de '+nTotLinhas+' linha(s) de venda ainda sem valor líquido</b> ('+(nComLiq/nTotLinhas*100).toFixed(1)+'% de cobertura). '+
-        'A comissão de marketplace abaixo é só a das linhas que já têm líquido — a das outras não entrou, e não é estimada. '+
-        'Então o Lucro Líquido abaixo está <b>otimista</b>, por um valor que só se conhece quando o líquido dessas linhas chegar.</div>';
+    if(!liqOk){
+      avisoEl.innerHTML+=card('--red',
+        '<b>Comissão de marketplace indisponível neste período.</b> Só '+(cobLiq===null?'0':cobLiq.toFixed(2))+'% da receita '+
+        'tem valor líquido recebido. Sem ela não dá para calcular receita líquida, e tudo abaixo depende disso.');
     }
-    if(nTotLinhas>0 && nComLiq===0){
-      avisoEl.innerHTML+='<div class="card" style="border-left:3px solid var(--red);background:var(--surface2);margin-bottom:12px;padding:10px 12px;font-size:12px;color:var(--text)">'+
-        '<b>Nenhuma linha do período tem valor líquido.</b> A comissão de marketplace está como zero, e no TikTok, Shopee e Temu ela costuma ficar perto de 30% do bruto. '+
-        'O resultado abaixo não serve para decisão enquanto for assim.</div>';
+    if(cpvOk&&cobCpv<99.5){
+      avisoEl.innerHTML+=card('--amber',
+        '<b>CPV extrapolado.</b> '+cobCpv.toFixed(2)+'% da receita tem custo cadastrado; os outros '+
+        (100-cobCpv).toFixed(2)+'% foram projetados pela mesma proporção, sobre a receita. '+
+        (skusSemCpv?skusSemCpv+' SKU(s) a cadastrar. ':'')+
+        'O resultado fica tão completo quanto o cadastro.');
+    }
+    if(liqOk&&cobLiq<99.5){
+      avisoEl.innerHTML+=card('--amber',
+        '<b>Comissão extrapolada.</b> '+cobLiq.toFixed(2)+'% da receita tem líquido recebido; o restante foi projetado na mesma proporção.');
     }
     if(porG.CPV!==0){
       avisoEl.innerHTML+='<div style="font-size:11px;color:var(--text3);margin-bottom:12px">'+
@@ -6542,22 +6570,28 @@ function dreFacHtml(d){
   // Base da análise vertical: receita LÍQUIDA, igual à aba Resultado, que usa
   // a ROL. Sobre o bruto, todo percentual de custo apareceria menor do que é.
   const base=d.receitaLiq||d.receita||1;
-  const av=v=>(v/base*100).toFixed(1)+'%';
+  // null = "não sei", e sai como travessão. Zero sairia como R$ 0,00 e seria
+  // lido como "não houve", que é outra afirmação.
+  const av=v=>(v===null)?'':(v/base*100).toFixed(1)+'%';
+  const val=v=>(v===null)?'—':dreNum(v);
   const L=(t,v,k,nota)=>'<tr class="'+(k||'')+'"><td class="dre-n">'+t+
     (nota?'<span style="color:var(--text3);font-weight:400;font-size:10px"> · '+nota+'</span>':'')+
-    '</td><td class="dre-v'+(v<0?' neg':'')+'">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
+    '</td><td class="dre-v'+(v!==null&&v<0?' neg':'')+'">'+val(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
   const I=(t,v)=>'<tr class="dre-item"><td class="dre-n">'+t+'</td><td class="dre-v">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
   const itens=o=>Object.entries(o).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))
     .map(([n,v])=>I('   '+n,-Math.abs(v))).join('');
 
   let h='<table class="dre-tbl"><thead><tr><th>Conta</th><th style="text-align:right">Valor</th><th style="text-align:right">AV%</th></tr></thead><tbody>';
   h+=L('Receita de faturamento (bruta)',d.receita,'dre-calc','dos registros de venda, a varejo');
-  h+=L('(−) Comissões e taxas de marketplace',-d.comissao,'',
-       d.nTotLinhas&&d.nComLiq<d.nTotLinhas
-         ? 'INCOMPLETA: só as '+d.nComLiq+' de '+d.nTotLinhas+' linhas que já têm líquido'
-         : 'bruto menos líquido das vendas do período');
+  h+=L('(−) Comissões e taxas de marketplace',d.comissao===null?null:-d.comissao,'',
+       d.liqOk
+         ? (d.cobLiq<99.5?'extrapolada de '+d.cobLiq.toFixed(1)+'% da receita':'bruto menos líquido das vendas do período')
+         : 'cobertura de líquido abaixo de '+DREF_PISO_COBERTURA+'%');
   h+=L('= Receita líquida',d.receitaLiq,'dre-calc');
-  h+=L('(−) CPV',-d.cpvVal,'','custo por SKU vendido, do mesmo cálculo da aba Resultado');
+  h+=L('(−) CPV',d.cpvVal===null?null:-d.cpvVal,'',
+       d.cpvOk
+         ? (d.cobCpv<99.5?'extrapolado de '+d.cobCpv.toFixed(1)+'% da receita, por SKU vendido':'custo por SKU vendido')
+         : 'cobertura de custo cadastrado abaixo de '+DREF_PISO_COBERTURA+'%');
   h+=L('= Lucro Bruto',d.lucroBruto,'dre-calc');
   h+=L('(−) Despesas Operacionais',-d.opex);
   h+=itens(d.detG.OPERACIONAL);
@@ -6572,6 +6606,7 @@ function dreFacHtml(d){
   h+='<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6">'+
      'Período: '+fDate(d.dIni)+' a '+fDate(d.dFim)+' · '+d.empresas.map(e=>e.nome).join(', ')+
      (d.comCaixa?' · com caixa físico':' · sem caixa físico')+'<br>'+
+     'CPV por SKU vendido, com a vigência do custo respeitada — não é o CPV contábil da aba Resultado, que usa estoque e compras e exige controle de inventário.<br>'+
      'Despesas pelo que saiu do banco e do caixa (regime de caixa). A aba Resultado usa registros_despesa por competência — os dois números não precisam coincidir.'+
      '</div>';
   return h;
