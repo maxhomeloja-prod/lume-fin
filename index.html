@@ -1272,6 +1272,7 @@ tr:hover td{background:var(--surface2);}
         <button class="dre-tab"            data-sub="registros"  onclick="dreSubAba('registros')">🧾 Registros de Despesa</button>
         <button class="dre-tab"            data-sub="inventario" onclick="dreSubAba('inventario')">📦 Inventário</button>
         <button class="dre-tab"            data-sub="opfin"      onclick="dreSubAba('opfin')">🏦 Operações Financeiras</button>
+        <button class="dre-tab"            data-sub="facilitado" onclick="dreSubAba('facilitado')">⚡ DRE Facilitado</button>
       </div>
 
       <!-- ─────────── RESULTADO ─────────── -->
@@ -1369,6 +1370,33 @@ tr:hover td{background:var(--surface2);}
           </div>
         </div>
         <div class="card"><div id="of-lista"></div></div>
+      </div>
+
+      <!-- ─────────── DRE FACILITADO ─────────── -->
+      <!-- A diferença em relação à aba Resultado: lá as despesas vêm de
+           registros_despesa, digitadas uma por uma por competência. Aqui vêm do
+           que já foi categorizado no balancete — banco e caixa. Receita e CPV
+           usam os MESMOS RPCs da outra aba, para os dois CPV nunca discordarem. -->
+      <div id="dre-sub-facilitado" class="dre-sub" style="display:none">
+        <div class="filters">
+          <div class="filter-group">
+            <label class="filter-label">Empresas</label>
+            <div id="dref-empresas" style="max-height:110px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:7px;background:var(--surface2);min-width:250px"></div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">De</label>
+            <input type="month" class="filter-control" id="dref-de">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Até</label>
+            <input type="month" class="filter-control" id="dref-ate">
+          </div>
+          <div class="filter-group" style="justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="dreFacMontar()">Calcular</button>
+          </div>
+        </div>
+        <div id="dref-aviso"></div>
+        <div id="dref-resultado"><div class="empty"><div class="empty-title">Escolha as empresas e o período e clique em Calcular</div></div></div>
       </div>
     </div>
 
@@ -6297,6 +6325,7 @@ function _dreExportarPDF(d,emps,ano){
 // ═══════════════════════════════════════════════════════════════
 
 let _dreDados=null;
+let _drefDados=null;
 
 function loadDRE(){
   const box=document.getElementById('dre-empresas');
@@ -6332,6 +6361,172 @@ function dreSubAba(nome){
   if(nome==='registros')loadRegistrosDespesa();
   if(nome==='inventario')loadInventario();
   if(nome==='opfin')loadOperacoesFin();
+  if(nome==='facilitado')loadDREFacilitado();
+}
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  DRE FACILITADO — 02/11/2026                                            ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+//
+// POR QUE EXISTE, AO LADO DE UMA DRE QUE JA FUNCIONA
+//   A aba Resultado tira as despesas de registros_despesa, por
+//   data_competencia — e nada popula essa tabela sozinha: cada linha e
+//   digitada a mao. Entao a DRE da certo so quando alguem mantem o
+//   lancamento em dia. Esta aba troca essa disciplina pelo que ja chega do
+//   banco e esta categorizado no balancete.
+//
+//   As duas vao divergir, e isso e desenho, nao defeito: competencia contra
+//   caixa, digitado contra bancario. Nenhuma das duas esta errada; elas
+//   respondem perguntas diferentes.
+//
+// O QUE E REAPROVEITADO, E POR QUE
+//   Receita e CPV saem dos MESMOS RPCs da aba Resultado (vendas_kpis e
+//   dre_cpv). Reescrever o CPV aqui — inclusive a proporcionalidade que vive
+//   dentro do dre_cpv — produziria dois CPV que discordam, e aí nenhum dos
+//   dois seria confiavel.
+//
+// O CUIDADO PRINCIPAL: NAO CONTAR O MESMO CUSTO DUAS VEZES
+//   Fornecedor de materia prima, faccao e folha aparecem no extrato bancario
+//   E dentro do CPV por SKU vendido. Subtrair os dois seria contar o custo
+//   duas vezes. Por isso as transacoes do grupo CPV ficam DE FORA do opex:
+//   quem representa esse custo na DRE e a linha de CPV.
+//
+//   Pelo mesmo motivo as categorias de transferencia (CATS_ESPECIAIS, onde
+//   mora a Compensacao de Mercadorias) ficam fora de tudo — nao e dinheiro
+//   saindo, e a mercadoria recebida ja vira custo quando for vendida.
+function loadDREFacilitado(){
+  const box=document.getElementById('dref-empresas');
+  if(box&&!box.children.length){
+    box.innerHTML=EMPRESAS.map(e=>
+      '<label style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px">'+
+      '<input type="checkbox" class="dref-emp-chk" value="'+e.id+'" checked><span>'+e.nome+'</span></label>'
+    ).join('')+
+    // Caixa fisico e por USUARIO, nao por empresa: caixa_saidas nao tem
+    // empresa_id. Entao ele entra inteiro ou nao entra — nao da para ratear
+    // por empresa, e fingir que da seria inventar numero. Mesmo modelo do
+    // balancete, que trata o caixa como uma opcao separada das empresas.
+    '<label style="display:flex;align-items:center;gap:7px;padding:3px 0;cursor:pointer;font-size:12px;border-top:1px solid var(--border);margin-top:4px;padding-top:6px">'+
+    '<input type="checkbox" id="dref-caixa" checked><span>Caixa físico<span style="color:var(--text3);font-size:10px"> · entra inteiro, não é dividido por empresa</span></span></label>';
+  }
+  const h=new Date();
+  const mm=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const de=document.getElementById('dref-de'), ate=document.getElementById('dref-ate');
+  if(de&&!de.value)de.value=mm(h);
+  if(ate&&!ate.value)ate.value=mm(h);
+}
+
+async function dreFacMontar(){
+  const ids=[...document.querySelectorAll('.dref-emp-chk:checked')].map(c=>c.value);
+  const alvo=document.getElementById('dref-resultado');
+  const avisoEl=document.getElementById('dref-aviso');
+  avisoEl.innerHTML='';
+  if(!ids.length){alvo.innerHTML='<div class="empty"><div class="empty-title">Selecione ao menos uma empresa</div></div>';return;}
+  const mDe=document.getElementById('dref-de').value, mAte=document.getElementById('dref-ate').value;
+  if(!mDe||!mAte){alvo.innerHTML='<div class="empty"><div class="empty-title">Informe o período</div></div>';return;}
+  if(mAte<mDe){alvo.innerHTML='<div class="empty"><div class="empty-title">O mês final é anterior ao inicial</div></div>';return;}
+  const comCaixa=document.getElementById('dref-caixa')?.checked;
+  const dIni=mDe+'-01';
+  const [aAte,mesAte]=mAte.split('-').map(Number);
+  const dFim=_ultimoDia(aAte,mesAte);
+
+  alvo.innerHTML='<div class="loading"><div class="spinner"></div> Calculando...</div>';
+  try{
+    const uid=SESSION?.user?.id||'00000000-0000-0000-0000-000000000000';
+    const qEmp='empresa_id=in.('+ids.join(',')+')';
+    const [kpis,cpv,trans,cxSai]=await Promise.all([
+      sbRpc('vendas_kpis',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim,p_canal:null,p_canais:null,p_sku:null,p_cliente:null}),
+      sbRpc('dre_cpv',{p_empresa_ids:ids,p_de:dIni,p_ate:dFim}),
+      sbGet('transacoes','?'+qEmp+'&status=eq.CONFIRMADA&data=gte.'+dIni+'&data=lte.'+dFim+'&select=valor,tipo,categoria_id&limit=5000'),
+      comCaixa
+        ? sbGet('caixa_saidas','?user_id=eq.'+uid+'&data=gte.'+dIni+'&data=lte.'+dFim+'&select=valor_total,categoria_id&limit=1000')
+        : Promise.resolve([])
+    ]);
+
+    const receita=Number((kpis&&kpis[0]&&kpis[0].total_receita)||0);
+    const cpvVal=Number(((cpv&&cpv[0])||{}).cpv||0);
+
+    // Soma por grupo, espelhando o balancete: pula transferencia, le o tipo no
+    // filho, e acumula o valor COM SINAL (despesa negativa). O abs sai so na
+    // hora de exibir — igual ao renderBalancete.
+    const porG={CPV:0,OPERACIONAL:0,FINANCEIRA:0,IMPOSTO:0,SEM:0};
+    const detG={CPV:{},OPERACIONAL:{},FINANCEIRA:{},IMPOSTO:{},SEM:{}};
+    function somar(catId,valorAssinado){
+      if(CATS_ESPECIAIS.has(catId))return;
+      if(tipoDaCategoria(catId)==='RECEITA')return;
+      const g=grupoDaCategoria(catId);
+      const k=(porG[g]!==undefined)?g:'SEM';
+      porG[k]+=valorAssinado;
+      const nome=nomeDoPaiCategoria(catId);
+      detG[k][nome]=(detG[k][nome]||0)+valorAssinado;
+    }
+    trans.forEach(t=>somar(t.categoria_id, t.tipo==='DEBIT'?-Math.abs(t.valor):Math.abs(t.valor)));
+    cxSai.forEach(s=>somar(s.categoria_id, -Math.abs(s.valor_total)));
+
+    // Sem grupo entra como operacional. Erro conservador: se na verdade for
+    // juro ou imposto, o EBITDA sai menor do que e — nunca maior. O contrario
+    // mostraria lucro operacional que nao existe.
+    const opex =Math.abs(porG.OPERACIONAL)+Math.abs(porG.SEM);
+    const fin  =Math.abs(porG.FINANCEIRA);
+    const imp  =Math.abs(porG.IMPOSTO);
+
+    const lucroBruto=receita-cpvVal;
+    const ebitda=lucroBruto-opex;
+    const lucroLiq=ebitda-fin-imp;
+
+    _drefDados={receita,cpvVal,lucroBruto,opex,ebitda,fin,imp,lucroLiq,detG,porG,
+                dIni,dFim,comCaixa,empresas:EMPRESAS.filter(e=>ids.indexOf(e.id)>=0)};
+
+    if(porG.SEM!==0){
+      const quantas=Object.keys(detG.SEM).length;
+      avisoEl.innerHTML='<div class="card" style="border-left:3px solid var(--amber);background:var(--amber-bg);margin-bottom:12px;padding:10px 12px;font-size:12px;color:var(--text)">'+
+        '<b>'+quantas+' categoria(s) de despesa sem grupo</b>, somando '+fBRL(Math.abs(porG.SEM))+'. '+
+        'Entraram em Despesas Operacionais, que é a regra para o que não é imposto, despesa bancária ou empréstimo — '+
+        'então o resultado abaixo não está errado por causa disso. '+
+        'Vale conferir só se alguma delas é uma dessas três exceções: aí sim o EBITDA estaria menor do que é. '+
+        'O bloco âmbar do Balancete mostra quais são.</div>';
+    }
+    if(porG.CPV!==0){
+      avisoEl.innerHTML+='<div style="font-size:11px;color:var(--text3);margin-bottom:12px">'+
+        'Os '+fBRL(Math.abs(porG.CPV))+' lançados em categorias do grupo CPV no período <b>não</b> foram subtraídos aqui: '+
+        'esse custo já está na linha de CPV, que vem do custo por SKU vendido. Subtrair os dois contaria o mesmo custo duas vezes.</div>';
+    }
+
+    alvo.innerHTML=dreFacHtml(_drefDados);
+  }catch(e){
+    alvo.innerHTML='<div class="empty"><div class="empty-title">Erro</div><div style="font-size:12px;color:var(--text2)">'+e.message+'</div></div>';
+  }
+}
+
+function dreFacHtml(d){
+  const base=d.receita||1;
+  const av=v=>(v/base*100).toFixed(1)+'%';
+  const L=(t,v,k,nota)=>'<tr class="'+(k||'')+'"><td class="dre-n">'+t+
+    (nota?'<span style="color:var(--text3);font-weight:400;font-size:10px"> · '+nota+'</span>':'')+
+    '</td><td class="dre-v'+(v<0?' neg':'')+'">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
+  const I=(t,v)=>'<tr class="dre-item"><td class="dre-n">'+t+'</td><td class="dre-v">'+dreNum(v)+'</td><td class="dre-av">'+av(v)+'</td></tr>';
+  const itens=o=>Object.entries(o).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))
+    .map(([n,v])=>I('   '+n,-Math.abs(v))).join('');
+
+  let h='<table class="dre-tbl"><thead><tr><th>Conta</th><th style="text-align:right">Valor</th><th style="text-align:right">AV%</th></tr></thead><tbody>';
+  h+=L('Receita de faturamento',d.receita,'dre-calc');
+  h+=L('(−) CPV',-d.cpvVal,'','custo por SKU vendido, do mesmo cálculo da aba Resultado');
+  h+=L('= Lucro Bruto',d.lucroBruto,'dre-calc');
+  h+=L('(−) Despesas Operacionais',-d.opex);
+  h+=itens(d.detG.OPERACIONAL);
+  h+=itens(d.detG.SEM);
+  h+=L('= EBITDA',d.ebitda,'dre-calc','igual ao EBIT: não há depreciação lançada no sistema');
+  h+=L('(−) Despesas Financeiras',-d.fin);
+  h+=itens(d.detG.FINANCEIRA);
+  h+=L('(−) Impostos',-d.imp);
+  h+=itens(d.detG.IMPOSTO);
+  h+=L('= Lucro Líquido do período',d.lucroLiq,'dre-calc');
+  h+='</tbody></table>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.6">'+
+     'Período: '+fDate(d.dIni)+' a '+fDate(d.dFim)+' · '+d.empresas.map(e=>e.nome).join(', ')+
+     (d.comCaixa?' · com caixa físico':' · sem caixa físico')+'<br>'+
+     'Despesas pelo que saiu do banco e do caixa (regime de caixa). A aba Resultado usa registros_despesa por competência — os dois números não precisam coincidir.'+
+     '</div>';
+  return h;
 }
 
 const _ultimoDia=(ano,mes)=>new Date(ano,mes,0).toISOString().split('T')[0];
@@ -7581,6 +7776,55 @@ async function loadBalancete(){
     ].join('');
   }catch(e){document.getElementById('bal-corpo').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
+// ── Em qual bloco de despesa esta categoria cai ───────────────
+// ACRESCENTADO EM 02/11/2026, junto com a coluna grupo_dre (SQL 34).
+//
+// O grupo mora na categoria-PAI e o filho herda. Nao e preguica: o balancete
+// agrupa transacao pelo NOME DO PAI, entao uma linha do quadro de despesas E
+// um pai. Se dois filhos do mesmo pai tivessem grupos diferentes, aquela linha
+// teria de aparecer em dois blocos ao mesmo tempo.
+//
+// Devolve 'CPV' | 'OPERACIONAL' | 'FINANCEIRA' | 'IMPOSTO' | null.
+// Nulo e estado valido: despesa que ninguem classificou ainda. O balancete
+// mostra essas num bloco ambar, e a DRE Facilitado as soma em OPERACIONAL
+// avisando na tela — subestimar lucro e o erro menos perigoso.
+function grupoDaCategoria(catId){
+  var cat=CATEGORIAS.find(function(c){return c.id===catId;});
+  if(!cat)return null;
+  if(cat.categoria_pai_id){
+    var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});
+    return (pai&&pai.grupo_dre)||null;
+  }
+  return cat.grupo_dre||null;
+}
+
+// O nome que o balancete usa como rótulo da linha: o do PAI quando existe.
+// Compartilhado com a DRE Facilitado de propósito — se cada tela resolvesse o
+// nome por conta própria, as duas poderiam agrupar diferente e mostrar totais
+// diferentes para os mesmos lançamentos.
+function nomeDoPaiCategoria(catId){
+  var cat=CATEGORIAS.find(function(c){return c.id===catId;});
+  if(!cat)return '(Sem categoria)';
+  if(cat.categoria_pai_id){
+    var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});
+    return (pai&&pai.nome)||cat.nome;
+  }
+  return cat.nome;
+}
+
+// DESPESA, RECEITA ou null. Lido no FILHO, igual ao balancete (tipoFinal).
+function tipoDaCategoria(catId){
+  var cat=CATEGORIAS.find(function(c){return c.id===catId;});
+  return (cat&&cat.tipo)||null;
+}
+
+const GRUPOS_DESP=[
+  {k:'CPV',        titulo:'Despesas CPV'},
+  {k:'OPERACIONAL',titulo:'Despesas Operacionais'},
+  {k:'FINANCEIRA', titulo:'Despesas Financeiras'},
+  {k:'IMPOSTO',    titulo:'Impostos'}
+];
+
 function renderBalancete(){
   const agrupado={};let totalRec=0,totalDesp=0,countT=0;
   _balTransacoes.forEach(function(t){
@@ -7588,7 +7832,7 @@ function renderBalancete(){
     var cat=CATEGORIAS.find(function(c){return c.id===catId;});var nomeFinal,tipoFinal,key;
     if(ehEsp){key='ESP::'+catId;nomeFinal=(cat&&cat.nome)||'Outros';tipoFinal=(cat&&cat.tipo)||(t.valor>=0?'RECEITA':'DESPESA');}
     else{if(cat&&cat.categoria_pai_id){var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});nomeFinal=(pai&&pai.nome)||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=(cat&&cat.nome)||'(Sem categoria)';tipoFinal=(cat&&cat.tipo)||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
-    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,trans:[]};
+    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,grupo:(ehEsp?null:grupoDaCategoria(catId)),trans:[]};
     agrupado[key].total+=t.valor;
     agrupado[key].trans.push(t);
     if(!ehEsp){countT++;if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=t.valor;}
@@ -7601,13 +7845,18 @@ function renderBalancete(){
 
   if(_balSemanal){renderBalanceteSemanal(agrupado);return;}
 
-  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){
-    var ordem=['Fornecedores de Matéria Prima','Mão de Obra Interna','Facção','Custos Fixos','Impostos e Taxas','Despesas Bancárias','Empréstimos e Financiamentos','Pró-labore'];
-    var ia=ordem.indexOf(a.nome);var ib=ordem.indexOf(b.nome);
-    if(ia===-1&&ib===-1)return a.total-b.total; // categorias fora da lista: mantém ordem por valor
-    if(ia===-1)return 1; // categorias não mapeadas vão para o final
-    if(ib===-1)return -1;
-    return ia-ib;
+  // DIVIDIDO EM QUATRO BLOCOS EM 02/11/2026. A ordenacao por lista de nomes
+  // escrita no codigo saiu junto: ela so acertava as categorias das empresas
+  // do Murilo, quebrava se alguem renomeasse, e mandava para o fim justamente
+  // o que nao estava na lista. Agora o bloco vem da coluna grupo_dre e, dentro
+  // dele, a maior despesa aparece primeiro (total e negativo, logo crescente).
+  var despTodas=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;});
+  var porGrupo={CPV:[],OPERACIONAL:[],FINANCEIRA:[],IMPOSTO:[],SEM:[]};
+  despTodas.forEach(function(g){
+    porGrupo[porGrupo[g.grupo]?g.grupo:'SEM'].push(g);
+  });
+  Object.keys(porGrupo).forEach(function(k){
+    porGrupo[k].sort(function(a,b){return a.total-b.total;});
   });
   var rec=Object.values(agrupado).filter(function(g){return g.tipo==='RECEITA'&&!g.especial;}).sort(function(a,b){return b.total-a.total;});
   var esp=Object.values(agrupado).filter(function(g){return g.especial;});
@@ -7623,12 +7872,17 @@ function renderBalancete(){
     return '<div id="'+rowId+'" style="display:none">'+rows+'</div>';
   }
 
-  function secao(titulo,itens,cls,totalRecBase){
+  // A 'chave' entrou em 02/11/2026 e e obrigatoria. O rowId antes era
+  // 'balr'+idx+titulo.charCodeAt(0) — com um bloco so de despesa isso bastava,
+  // mas 'Despesas CPV' e 'Despesas Operacionais' comecam com a mesma letra, e
+  // os ids colidiriam: clicar numa linha expandiria o detalhe da outra.
+  function secao(titulo,itens,cls,totalRecBase,chave,opt){
     if(!itens.length)return'';
+    opt=opt||{};
     var sub=itens.reduce(function(s,i){return s+i.total;},0); // soma direta (valores negativos para despesas)
     var subAbs=Math.abs(sub);
     var linhas=itens.map(function(item,idx){
-      var rowId='balr'+idx+''+titulo.charCodeAt(0);
+      var rowId='balr_'+chave+'_'+idx;
       var pct=(totalRecBase>0&&Math.abs(item.total)>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((Math.abs(item.total)/totalRecBase)*100).toFixed(1)+'%)</span>':'';
       var header='<div class="bal-row" style="cursor:pointer;display:flex;justify-content:space-between" onclick="toggleBalRow(\''+rowId+'\')">'+
         '<span class="bal-row-name">\u25b6 '+item.nome+'</span>'+
@@ -7637,15 +7891,24 @@ function renderBalancete(){
       return header+buildDetalhes(item.trans,rowId);
     }).join('');
     var pctTotal=(totalRecBase>0&&subAbs>0)?' <span style="color:var(--text3);font-size:10px;font-weight:400">('+((subAbs/totalRecBase)*100).toFixed(1)+'%)</span>':'';
-    return '<div class="bal-section"><div class="bal-section-title">'+titulo+'</div>'+
+    return '<div class="bal-section"><div class="bal-section-title"'+(opt.tituloEstilo?' style="'+opt.tituloEstilo+'"':'')+'>'+titulo+'</div>'+
+      (opt.nota?'<div style="font-size:10px;color:var(--text3);padding:6px 12px 2px">'+opt.nota+'</div>':'')+
       '<div class="bal-table">'+linhas+
       '<div class="bal-row bal-subtotal"><span class="bal-row-name">Total '+titulo+'</span>'+
       '<span class="bal-row-val '+cls+'">'+fBRL(subAbs)+pctTotal+'</span></div></div></div>';
   }
 
   document.getElementById('bal-corpo').innerHTML=
-    secao('Receitas',rec,'recei',totalRec)+
-    secao('Despesas',desp,'desp',totalRec)+
+    secao('Receitas',rec,'recei',totalRec,'rec')+
+    GRUPOS_DESP.map(function(g){
+      return secao(g.titulo,porGrupo[g.k],'desp',totalRec,g.k);
+    }).join('')+
+    // Bloco ambar das nao classificadas, depois dos quatro e antes das
+    // transferencias, dizendo o que a falta de grupo provoca na DRE.
+    secao('Despesas sem grupo',porGrupo.SEM,'desp',totalRec,'sem',{
+      tituloEstilo:'background:var(--amber-bg);color:var(--amber)',
+      nota:'Entram no total de despesas normalmente e, na DRE Facilitado, somam em Despesas Operacionais \u2014 que \u00e9 a regra: o que n\u00e3o \u00e9 imposto, despesa banc\u00e1ria ou empr\u00e9stimo \u00e9 operacional. O resultado n\u00e3o est\u00e1 errado por causa disto. Confira s\u00f3 se alguma destas \u00e9 uma das tr\u00eas exce\u00e7\u00f5es; se for, classifique, porque a\u00ed o EBITDA estaria menor do que \u00e9.'
+    })+
     (esp.length?'<div class="bal-section"><div class="bal-section-title" style="background:var(--amber-bg);color:var(--amber)">Transfer\u00eancias</div>'+
       '<div style="font-size:10px;color:var(--text3);padding:6px 12px 2px">N\u00e3o entram no total de receitas nem na an\u00e1lise vertical \u00b7 clique na linha para expandir e editar</div>'+
       '<div class="bal-table">'+
@@ -7671,18 +7934,22 @@ function imprimirBalancete(){
     var cat=CATEGORIAS.find(function(c){return c.id===catId;});var nomeFinal,tipoFinal,key;
     if(ehEsp){key='ESP::'+catId;nomeFinal=(cat&&cat.nome)||'Outros';tipoFinal=(cat&&cat.tipo)||(t.valor>=0?'RECEITA':'DESPESA');}
     else{if(cat&&cat.categoria_pai_id){var pai=CATEGORIAS.find(function(c){return c.id===cat.categoria_pai_id;});nomeFinal=(pai&&pai.nome)||cat.nome;tipoFinal=cat.tipo;}else{nomeFinal=(cat&&cat.nome)||'(Sem categoria)';tipoFinal=(cat&&cat.tipo)||'DESPESA';}key=tipoFinal+'::'+nomeFinal;}
-    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp};
+    if(!agrupado[key])agrupado[key]={nome:nomeFinal,tipo:tipoFinal,total:0,especial:ehEsp,grupo:(ehEsp?null:grupoDaCategoria(catId))};
     agrupado[key].total+=t.valor;
     if(!ehEsp){if(tipoFinal==='RECEITA')totalRec+=t.valor;else totalDesp+=t.valor;}
   });
   var saldo=totalRec+totalDesp;
 
-  var ordemDesp=['Fornecedores de Matéria Prima','Mão de Obra Interna','Facção','Custos Fixos','Impostos e Taxas','Despesas Bancárias','Empréstimos e Financiamentos','Pró-labore'];
-  var desp=Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;}).sort(function(a,b){
-    var ia=ordemDesp.indexOf(a.nome);var ib=ordemDesp.indexOf(b.nome);
-    if(ia===-1&&ib===-1)return a.total-b.total;
-    if(ia===-1)return 1;if(ib===-1)return -1;
-    return ia-ib;
+  // MESMOS QUATRO BLOCOS DA TELA, desde 02/11/2026. Esta funcao tem uma copia
+  // propria do agrupamento do renderBalancete, e tinha tambem uma copia da
+  // lista de ordenacao por nome. Se a divisao entrasse so na tela, o balancete
+  // impresso passaria a discordar dela — mesmo periodo, mesmos dados, blocos
+  // diferentes. A ordenacao por nome saiu das duas.
+  var porGrupoPr={CPV:[],OPERACIONAL:[],FINANCEIRA:[],IMPOSTO:[],SEM:[]};
+  Object.values(agrupado).filter(function(g){return g.tipo==='DESPESA'&&!g.especial;})
+    .forEach(function(g){porGrupoPr[porGrupoPr[g.grupo]?g.grupo:'SEM'].push(g);});
+  Object.keys(porGrupoPr).forEach(function(k){
+    porGrupoPr[k].sort(function(a,b){return a.total-b.total;});
   });
   var rec=Object.values(agrupado).filter(function(g){return g.tipo==='RECEITA'&&!g.especial;}).sort(function(a,b){return b.total-a.total;});
 
@@ -7740,10 +8007,18 @@ function imprimirBalancete(){
       rec.map(function(i){return linhaHtml(i,'#1a7a4a');}).join('')+
       '<tr class="pr-totalrow"><td class="pr-nome">Total Receitas</td><td class="pr-pct"></td><td class="pr-val green">'+fBRL(totalRec)+'</td></tr>'+
       '</table>':'')+
-    (desp.length?'<div class="pr-section-title">Despesas</div><table class="pr-table">'+
-      desp.map(function(i){return linhaHtml(i,'#b32424');}).join('')+
-      '<tr class="pr-totalrow"><td class="pr-nome">Total Despesas</td><td class="pr-pct"></td><td class="pr-val red">'+fBRL(Math.abs(totalDesp))+'</td></tr>'+
-      '</table>':'')+
+    GRUPOS_DESP.concat([{k:'SEM',titulo:'Despesas sem grupo'}]).map(function(g){
+      var itens=porGrupoPr[g.k];
+      if(!itens.length)return'';
+      var sub=itens.reduce(function(s,i){return s+i.total;},0);
+      return '<div class="pr-section-title">'+g.titulo+'</div><table class="pr-table">'+
+        itens.map(function(i){return linhaHtml(i,'#b32424');}).join('')+
+        '<tr class="pr-totalrow"><td class="pr-nome">Total '+g.titulo+'</td><td class="pr-pct"></td><td class="pr-val red">'+fBRL(Math.abs(sub))+'</td></tr>'+
+        '</table>';
+    }).join('')+
+    '<table class="pr-table" style="margin-top:2px">'+
+      '<tr class="pr-totalrow"><td class="pr-nome">Total Geral de Despesas</td><td class="pr-pct"></td><td class="pr-val red">'+fBRL(Math.abs(totalDesp))+'</td></tr>'+
+      '</table>'+
     '<div class="pr-saldo"><div class="pr-saldo-box"><div class="pr-saldo-label">Saldo do Per\u00edodo</div><div class="pr-saldo-val '+(saldo>=0?'green':'red')+'">'+fBRL(saldo)+'</div></div></div>'+
     '<div class="pr-footer">Lume Financeiro \u00b7 Relat\u00f3rio gerado automaticamente</div>'+
     '<script>window.onload=function(){window.print();}<\/script>'+
