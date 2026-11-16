@@ -1104,6 +1104,7 @@ tr:hover td{background:var(--surface2);}
       <div class="page-header">
         <div><div class="page-title">Estoque de Produtos</div><div class="page-sub">Entradas lançadas menos vendas importadas, por SKU com CPV</div></div>
         <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="abrirModalBalancoEstoque()">⚖ Balanço de estoque</button>
           <button class="btn btn-primary btn-sm" onclick="abrirModalEntradaEstoque()">+ Entrada de estoque</button>
         </div>
       </div>
@@ -1114,13 +1115,6 @@ tr:hover td{background:var(--surface2);}
             <label class="form-label">Empresa</label>
             <select class="form-control" id="estp-empresa" onchange="loadEstoqueProd()"></select>
           </div>
-          <div class="form-group" style="margin:0">
-            <label class="form-label">Controle começa em</label>
-            <div style="display:flex;gap:6px">
-              <input class="form-control" type="date" id="estp-inicio" style="min-width:140px">
-              <button class="btn btn-secondary btn-sm" onclick="salvarInicioEstoque()">Salvar</button>
-            </div>
-          </div>
           <div class="form-group" style="margin:0;flex:1;min-width:150px">
             <label class="form-label">SKU</label>
             <input class="form-control" type="text" id="estp-filtro" placeholder="Filtrar por SKU..." oninput="renderEstoqueProd()">
@@ -1129,6 +1123,8 @@ tr:hover td{background:var(--surface2);}
             <label class="form-label">Mostrar</label>
             <select class="form-control" id="estp-mostrar" onchange="renderEstoqueProd()">
               <option value="todos">Todos</option>
+              <option value="contados">Contados</option>
+              <option value="nao-contados">Não contados</option>
               <option value="positivo">Com saldo</option>
               <option value="negativo">Negativos</option>
               <option value="zerado">Zerados</option>
@@ -1140,9 +1136,9 @@ tr:hover td{background:var(--surface2);}
 
       <div class="kpi-grid" style="margin-bottom:16px">
         <div class="kpi"><div class="kpi-label">Valor em estoque</div><div class="kpi-value green" id="estp-valor">—</div></div>
-        <div class="kpi"><div class="kpi-label">SKUs com saldo</div><div class="kpi-value" id="estp-com">—</div></div>
+        <div class="kpi"><div class="kpi-label">SKUs contados</div><div class="kpi-value" id="estp-com">—</div></div>
         <div class="kpi"><div class="kpi-label">SKUs negativos</div><div class="kpi-value red" id="estp-neg">—</div></div>
-        <div class="kpi"><div class="kpi-label">Sem CPV vigente</div><div class="kpi-value" id="estp-semcpv">—</div></div>
+        <div class="kpi"><div class="kpi-label">Não contados</div><div class="kpi-value" id="estp-naocont">—</div></div>
       </div>
 
       <div id="estp-wrap"></div>
@@ -1805,6 +1801,24 @@ tr:hover td{background:var(--surface2);}
     <div class="form-group"><label class="form-label">Razão Social</label><input class="form-control" type="text" id="emp-nome" placeholder="Nome completo da empresa"></div>
     <div class="form-group"><label class="form-label">CNPJ</label><input class="form-control" type="text" id="emp-cnpj" placeholder="00.000.000/0000-00"></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-empresa')">Cancelar</button><button class="btn btn-primary" onclick="salvarEmpresa()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-balanco-estoque">
+  <div class="modal"><div class="modal-title">Balanço de estoque</div><div class="modal-sub">Declare a quantidade contada. Isto substitui o saldo calculado deste SKU.</div>
+    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="bal-empresa"></select></div>
+    <div class="form-group"><label class="form-label">SKU</label>
+      <input class="form-control" type="text" id="bal-sku" list="bal-sku-lista" placeholder="Digite ou escolha" autocomplete="off">
+      <datalist id="bal-sku-lista"></datalist>
+    </div>
+    <div class="form-group"><label class="form-label">Quantidade contada</label><input class="form-control" type="number" step="0.001" min="0" id="bal-qtd" placeholder="Zero é válido: contei e não tem nenhum"></div>
+    <div class="form-group"><label class="form-label">Data de referência</label>
+      <input class="form-control" type="date" id="bal-data">
+      <small style="color:var(--text3);font-size:11px">A contagem reflete tudo até este dia, inclusive. Vendas e entradas posteriores a ele entram no saldo; anteriores já estão na contagem.</small>
+    </div>
+    <div class="form-group"><label class="form-label">Observação</label><input class="form-control" type="text" id="bal-obs" placeholder="Opcional — quem contou, onde, divergência"></div>
+    <div id="bal-erro" style="display:none;color:var(--red);font-size:12px;margin-bottom:10px;line-height:1.4"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-balanco-estoque')">Cancelar</button><button class="btn btn-primary" id="bal-btn" onclick="salvarBalancoEstoque()">Lançar balanço</button></div>
   </div>
 </div>
 
@@ -4383,42 +4397,21 @@ function estpEmpresaSel(){
 }
 
 async function loadEstoqueProd(){
-  const wrap=document.getElementById('estp-wrap');
   if(!EMPRESAS.length){semEmpresaMsg('estp-wrap');return;}
   const emp=estpEmpresaSel();
   if(!emp)return;
   try{
-    // A data de corte mora na propria empresa. Nula = controle desligado, e a
-    // funcao devolve zero linhas de proposito (SQL 43).
-    const e=await sbGet('empresas',`?id=eq.${emp}&select=estoque_inicio`);
-    const inicio=(e&&e[0]&&e[0].estoque_inicio)||'';
-    const di=document.getElementById('estp-inicio');
-    if(di)di.value=inicio;
-
-    if(!inicio){
-      _estpDados=[];
-      ['estp-valor','estp-com','estp-neg','estp-semcpv'].forEach(id=>{
-        const el=document.getElementById(id); if(el)el.textContent='—';
-      });
-      wrap.innerHTML=`<div class="empty">
-        <div class="empty-icon">📦</div>
-        <div class="empty-title">Defina a data em que o controle de estoque começa</div>
-        <div class="empty-sub" style="max-width:520px;margin:0 auto;line-height:1.6">
-          Toda venda a partir dessa data debita o estoque; venda anterior não.
-          A ordem certa é contar o estoque, lançar as entradas com o que foi
-          contado, e só então pôr aqui a data da contagem. Data antiga sem as
-          entradas daquele período faz todo SKU nascer negativo.
-        </div></div>`;
-      return;
-    }
-
     _estpDados=await sbRpc('estoque_saldo',{p_empresa_id:emp})||[];
-    // Datalist do modal: so SKU com CPV, que e exatamente o que a funcao lista.
-    const dl=document.getElementById('ent-sku-lista');
-    if(dl)dl.innerHTML=_estpDados.map(r=>`<option value="${r.sku}">`).join('');
+    // Datalist dos dois modais: so SKU com CPV, que e exatamente o que a
+    // funcao lista. O usuario nao cadastra produto no estoque.
+    const opts=_estpDados.map(r=>`<option value="${r.sku}">`).join('');
+    ['ent-sku-lista','bal-sku-lista'].forEach(id=>{
+      const dl=document.getElementById(id); if(dl)dl.innerHTML=opts;
+    });
     renderEstoqueProd();
   }catch(err){
-    wrap.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">${err.message}</div></div>`;
+    document.getElementById('estp-wrap').innerHTML=
+      `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">${err.message}</div></div>`;
   }
 }
 
@@ -4426,39 +4419,53 @@ function renderEstoqueProd(){
   const wrap=document.getElementById('estp-wrap');
   const filtro=(document.getElementById('estp-filtro')?.value||'').trim().toUpperCase();
   const modo=document.getElementById('estp-mostrar')?.value||'todos';
-
   const num=v=>(v===null||v===undefined)?null:parseFloat(v);
 
-  // KPIs sempre sobre o CONJUNTO INTEIRO, nao sobre o filtro: o valor em
-  // estoque da empresa nao muda porque alguem digitou um SKU na busca.
-  let valor=0, comSaldo=0, negativos=0, semCpv=0;
+  // KPIs sobre o conjunto INTEIRO, nunca sobre o filtro: o valor em estoque
+  // da empresa nao muda porque alguem digitou um SKU na busca.
+  let valor=0, contados=0, negativos=0, naoContados=0;
   _estpDados.forEach(r=>{
-    const sal=num(r.saldo), cpv=num(r.cpv_vigente), vpz=num(r.valor_piso_zero);
-    if(sal>0)comSaldo++;
+    const sal=num(r.saldo), vpz=num(r.valor_piso_zero);
+    if(sal===null){naoContados++;return;}   // sem balanco: nao se sabe
+    contados++;
     if(sal<0)negativos++;
-    if(cpv===null)semCpv++;
     // PISO ZERO no valor, regra do usuario: negativo conta como zero no
-    // relatorio financeiro. E so aqui — o saldo segue negativo na tabela,
-    // porque operacionalmente ele e informacao.
+    // relatorio financeiro. So aqui — o saldo segue negativo na tabela.
     if(vpz!==null)valor+=vpz;
   });
   document.getElementById('estp-valor').textContent=fBRL(valor);
-  document.getElementById('estp-com').textContent=fN(comSaldo);
+  document.getElementById('estp-com').textContent=fN(contados);
   document.getElementById('estp-neg').textContent=fN(negativos);
-  document.getElementById('estp-semcpv').textContent=fN(semCpv);
+  document.getElementById('estp-naocont').textContent=fN(naoContados);
 
   const linhas=_estpDados.filter(r=>{
     if(filtro&&!String(r.sku).toUpperCase().includes(filtro))return false;
     const sal=num(r.saldo), cpv=num(r.cpv_vigente);
-    if(modo==='positivo')return sal>0;
-    if(modo==='negativo')return sal<0;
-    if(modo==='zerado')return sal===0;
-    if(modo==='sem-cpv')return cpv===null;
+    if(modo==='contados')      return sal!==null;
+    if(modo==='nao-contados')  return sal===null;
+    if(modo==='positivo')      return sal!==null&&sal>0;
+    if(modo==='negativo')      return sal!==null&&sal<0;
+    if(modo==='zerado')        return sal===0;
+    if(modo==='sem-cpv')       return cpv===null;
     return true;
   });
 
   if(!_estpDados.length){
-    wrap.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Nenhum SKU com CPV nesta empresa</div><div class="empty-sub">O estoque nasce do cadastro de CPV. Cadastre o custo por unidade em Cadastros &gt; Custos (CPV) e o SKU aparece aqui com saldo zero.</div></div>`;
+    wrap.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Nenhum SKU com CPV nesta empresa</div><div class="empty-sub">O estoque nasce do cadastro de CPV. Cadastre o custo por unidade em Cadastros &gt; Custos (CPV) e o SKU aparece aqui, aguardando contagem.</div></div>`;
+    return;
+  }
+  if(!contados){
+    wrap.innerHTML=`<div class="empty">
+      <div class="empty-icon">⚖</div>
+      <div class="empty-title">Nenhum SKU foi contado ainda</div>
+      <div class="empty-sub" style="max-width:560px;margin:0 auto;line-height:1.6">
+        O saldo de um SKU começa no balanço dele, e cada SKU tem a sua própria
+        data — pode contar aos poucos, na ordem que quiser. Use
+        <strong>⚖ Balanço de estoque</strong> para declarar a quantidade
+        contada; depois disso, as vendas passam a debitar e as entradas a somar.
+        <br><br>Se um SKU está zerado de verdade, lance balanço com quantidade
+        zero: é uma afirmação, e vale.
+      </div></div>`;
     return;
   }
   if(!linhas.length){
@@ -4472,43 +4479,107 @@ function renderEstoqueProd(){
     <table class="tbl">
       <thead><tr>
         <th>SKU</th>
+        <th style="text-align:right">Contado</th>
+        <th>Balanço</th>
         <th style="text-align:right">Entradas</th>
         <th style="text-align:right">Saídas</th>
         <th style="text-align:right">Saldo</th>
         <th style="text-align:right">CPV unit.</th>
         <th style="text-align:right">Valor</th>
-        <th>Última entrada</th>
       </tr></thead>
       <tbody>${mostra.map(r=>{
-        const sal=num(r.saldo), cpv=num(r.cpv_vigente), val=num(r.valor);
+        const sal=num(r.saldo), cpv=num(r.cpv_vigente), val=num(r.valor), cont=num(r.contado);
+        // SEM BALANCO: a linha inteira diz "nao contado". Nao mostro entradas
+        // nem zero em lugar nenhum — zero afirmaria "nao tem", e a verdade e
+        // que nao se sabe. Meia-informacao aqui viraria decisao de producao.
+        if(sal===null){
+          return `<tr>
+            <td style="font-weight:500">${r.sku}</td>
+            <td colspan="5" style="color:var(--text3);font-size:11px">não contado — lance um balanço para este SKU começar a contar</td>
+            <td style="text-align:right;color:var(--text2)">${cpv===null?'—':fBRL(cpv)}</td>
+            <td style="text-align:right;color:var(--text3)">—</td>
+          </tr>`;
+        }
         const cor=sal<0?'var(--red)':(sal>0?'var(--green)':'var(--text2)');
         return `<tr>
           <td style="font-weight:500">${r.sku}</td>
+          <td style="text-align:right;color:var(--text2)">${fQ(cont)}</td>
+          <td style="color:var(--text3);font-size:11px">${fDate(String(r.data_balanco).slice(0,10))}</td>
           <td style="text-align:right;color:var(--text2)">${fQ(r.entradas)}</td>
           <td style="text-align:right;color:var(--text2)">${fQ(r.saidas)}</td>
           <td style="text-align:right;font-weight:600;color:${cor}">${fQ(sal)}</td>
           <td style="text-align:right;color:var(--text2)">${cpv===null?'<span style="color:var(--text3)" title="Sem CPV vigente hoje: existe cadastro, mas com vigência futura">—</span>':fBRL(cpv)}</td>
-          <td style="text-align:right">${val===null?'<span style="color:var(--text3)">—</span>':(val<0?`<span style="color:var(--text3)" title="Saldo negativo vale zero no relatório financeiro">R$ 0,00</span>`:fBRL(val))}</td>
-          <td style="color:var(--text3);font-size:11px">${r.ultima_entrada?fDate(String(r.ultima_entrada).slice(0,10)):'nunca'}</td>
+          <td style="text-align:right">${val===null?'<span style="color:var(--text3)">—</span>':(val<0?'<span style="color:var(--text3)" title="Saldo negativo vale zero no relatório financeiro">R$ 0,00</span>':fBRL(val))}</td>
         </tr>`;}).join('')}</tbody>
     </table>
     </div>${linhas.length>TETO?`<div style="padding:10px 14px;font-size:11px;color:var(--text3)">Mostrando ${TETO} de ${fN(linhas.length)} SKUs. Use o filtro para estreitar.</div>`:''}
   </div>`;
 }
 
-// A data de corte muda TODO saldo da empresa, porque redefine quais vendas
-// debitam. Por isso confirma antes, dizendo o que vai acontecer.
-async function salvarInicioEstoque(){
-  const emp=estpEmpresaSel();
-  if(!emp)return;
-  const v=document.getElementById('estp-inicio').value;
-  if(!v){alert('Escolha a data em que o controle de estoque começa.');return;}
-  if(!confirm('A partir de '+fDate(v)+', toda venda importada passa a debitar o estoque; venda anterior não debita.\n\nIsso recalcula o saldo de todos os SKUs desta empresa. Confirmar?'))return;
-  try{
-    await sbPatch('empresas',`id=eq.${emp}`,{estoque_inicio:v});
-    await loadEstoqueProd();
-  }catch(e){alert('Não foi possível salvar: '+e.message);}
+function abrirModalBalancoEstoque(){
+  if(!EMPRESAS.length){alert('Cadastre uma empresa primeiro.');return;}
+  const sel=document.getElementById('bal-empresa');
+  sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  sel.value=estpEmpresaSel()||EMPRESAS[0].id;
+  document.getElementById('bal-sku').value='';
+  document.getElementById('bal-qtd').value='';
+  document.getElementById('bal-obs').value='';
+  document.getElementById('bal-data').value=new Date().toISOString().slice(0,10);
+  const err=document.getElementById('bal-erro');
+  err.style.display='none';err.textContent='';
+  abrirModal('modal-balanco-estoque');
 }
+
+async function salvarBalancoEstoque(){
+  const err=document.getElementById('bal-erro');
+  const btn=document.getElementById('bal-btn');
+  const mostrar=m=>{err.textContent=m;err.style.display='';};
+  err.style.display='none';
+
+  const empresa_id=document.getElementById('bal-empresa').value;
+  const sku=document.getElementById('bal-sku').value.trim();
+  const qtd=parseFloat(String(document.getElementById('bal-qtd').value).replace(',','.'));
+  const data=document.getElementById('bal-data').value;
+  const obs=document.getElementById('bal-obs').value.trim();
+
+  if(!empresa_id){mostrar('Escolha a empresa.');return;}
+  if(!sku){mostrar('Informe o SKU.');return;}
+  // ZERO E VALIDO no balanco, diferente de entrada: "contei e nao tem nenhum"
+  // e afirmacao util. So negativo e recusado.
+  if(!Number.isFinite(qtd)||qtd<0){mostrar('A quantidade contada não pode ser negativa. Zero é válido — significa que você contou e não há nenhum.');return;}
+  if(!data){mostrar('Informe a data de referência.');return;}
+  if(data>new Date().toISOString().slice(0,10)){mostrar('A data de referência não pode estar no futuro: a contagem reflete o que existe até a data informada.');return;}
+
+  // O balanco SUBSTITUI o saldo calculado. Confirma dizendo isso, porque e
+  // irreversivel do ponto de vista do numero na tela — o lancamento fica no
+  // historico, mas o saldo passa a sair deste.
+  const atual=_estpDados.find(r=>String(r.sku)===sku);
+  const temSaldo=atual&&atual.saldo!==null&&atual.saldo!==undefined;
+  const aviso=temSaldo
+    ? 'O saldo deste SKU hoje é '+fQ(atual.saldo)+'. O balanço passa a valer no lugar dele, a partir de '+fDate(data)+'.\n\nEntradas e vendas até essa data deixam de entrar na conta, porque a contagem já as reflete. Confirmar?'
+    : 'Este SKU passa a contar a partir de '+fDate(data)+', com '+fQ(qtd)+'.\n\nVendas e entradas posteriores a essa data entram no saldo; anteriores não. Confirmar?';
+  if(!confirm(aviso))return;
+
+  btn.disabled=true;
+  try{
+    await sbPost('estoque_balancos',{
+      empresa_id, sku, quantidade:qtd, data_referencia:data,
+      observacao:obs||null,
+      criado_por:SESSION?.user?.id||null
+    });
+    fecharModal('modal-balanco-estoque');
+    const sel=document.getElementById('estp-empresa');
+    if(sel&&sel.value!==empresa_id)sel.value=empresa_id;
+    await loadEstoqueProd();
+  }catch(e){
+    // A mensagem do gatilho (SQL 45) e escrita para o usuario e diz o que
+    // fazer. Repassar inteira em vez de trocar por "erro ao salvar".
+    mostrar(e.message||'Não foi possível lançar o balanço.');
+  }finally{
+    btn.disabled=false;
+  }
+}
+
 
 function abrirModalEntradaEstoque(){
   if(!EMPRESAS.length){alert('Cadastre uma empresa primeiro.');return;}
