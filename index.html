@@ -308,6 +308,15 @@ tr:hover td{background:var(--surface2);}
 .saldo-val{font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:600;}
 .saldo-val.pos{color:var(--green);}
 .saldo-val.neg{color:var(--red);}
+/* Idade e procedencia do saldo. Antes de 16/11/2026 o card mostrava so o
+   numero: saldo de 11/11 aparecia igual a saldo de agora, e foi assim que 6
+   contas ficaram de 5 a 18 dias paradas sem ninguem ver. */
+.saldo-meta{font-size:10px;color:var(--text3);margin-top:6px;display:flex;flex-direction:column;gap:2px;}
+.saldo-meta .velho{color:var(--amber,#b45309);font-weight:600;}
+.saldo-card.sem-tempo-real{border-left:3px solid var(--amber,#b45309);}
+.saldo-topo{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;}
+.saldo-topo-rot{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);font-weight:600;}
+.saldo-topo-status{font-size:11px;color:var(--text2);flex:1;min-width:120px;}
 
 /* ── BALANCETE ── */
 .bal-section{margin-bottom:16px;}
@@ -1430,6 +1439,11 @@ tr:hover td{background:var(--surface2);}
         <div class="filter-group"><span class="filter-label">Conta</span><select class="filter-control" id="fbal-conta" style="min-width:180px" onchange="loadBalancete()"><option value="">Todas as contas</option></select></div>
         <button class="btn btn-primary btn-sm" style="align-self:flex-end" onclick="loadBalancete()">Aplicar</button>
       </div>
+      <div class="saldo-topo">
+        <span class="saldo-topo-rot">Saldos bancários</span>
+        <span id="bal-saldos-status" class="saldo-topo-status"></span>
+        <button class="btn btn-sm" id="bal-btn-saldos" onclick="atualizarSaldosAgora()">Atualizar saldos</button>
+      </div>
       <div id="bal-saldos" class="saldo-cards"></div>
       <div class="kpi-grid">
         <div class="kpi"><div class="kpi-label">Receitas</div><div class="kpi-value green" id="bal-rec">—</div></div>
@@ -1983,6 +1997,12 @@ tr:hover td{background:var(--surface2);}
       <div class="form-group"><label class="form-label">Vencimento</label><input class="form-control" type="date" id="lan-venc"></div>
     </div>
     <div class="form-group"><label class="form-label">Observação</label><input class="form-control" type="text" id="lan-obs"></div>
+    <!-- REPETIÇÃO, acrescentada em 09/11/2026. Só aparece na criação: editar um
+         lançamento que já faz parte de uma série não deve gerar série nova. -->
+    <div class="form-row" id="lan-rep-wrap">
+      <div class="form-group"><label class="form-label">Repetir</label><select class="form-control" id="lan-rep" onchange="toggleLanRep()"><option value="">Não repetir</option><option value="DIA">Todo dia</option><option value="SEMANA">Toda semana</option><option value="MES">Todo mês</option></select></div>
+      <div class="form-group" id="lan-rep-ate-wrap" style="display:none"><label class="form-label">Repetir até</label><input class="form-control" type="date" id="lan-rep-ate"></div>
+    </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-lancamento')">Cancelar</button><button class="btn btn-primary" onclick="salvarLancamento()">Salvar</button></div>
   </div>
 </div>
@@ -3464,12 +3484,12 @@ async function loadDashboard(){
       sbGet('ordens_producao',`?empresa_id=in.(${empIds})&situacao=neq.CANCELADA&select=situacao,quantidade`),
       // A pagar: apenas atrasados + mês atual (vencimento até fim do mês corrente)
       sbGet('lancamentos_externos',`?empresa_id=in.(${empIds})&situacao=eq.EM_ABERTO&tipo_lancamento=eq.PAGAR&data_vencimento=lte.${fd(fimMes)}&select=valor`),
-      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`)
+      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo,ativa)`)
     ]);
     const rec=kpisVendas[0]?.total_receita||0;
     const opAb=ops.filter(o=>o.situacao==='ABERTA'||o.situacao==='EM_PRODUCAO').reduce((s,o)=>s+(o.quantidade||0),0);
     const pagar=lans.reduce((s,l)=>s+l.valor,0);
-    const saldo=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
+    const saldo=saldos.filter(ehContaCorrenteAtiva).reduce((s,r)=>s+r.saldo_atual,0);
     document.getElementById('dash-receita').textContent=fBRL(rec);
     document.getElementById('dash-ops').textContent=fN(opAb);
     document.getElementById('dash-pagar').textContent=fBRL(pagar);
@@ -3746,6 +3766,57 @@ async function loadContas(){
     el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">'+contas.map(c=>`<div class="card" style="border-left:3px solid ${c.tipo==='BANK'?'var(--green)':'var(--accent)'}"><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px"><div><div style="font-size:15px;font-weight:600;color:var(--text)">${c.banco}</div><div style="font-size:11px;color:var(--text2)">${c.nome_conta}</div><div style="font-size:10px;color:var(--text3);margin-top:2px">${empNomes[c.empresa_id]||'—'}</div></div><span class="badge ${c.ativa?'badge-green':'badge-gray'}">${c.ativa?'ATIVA':'INATIVA'}</span></div><div style="font-size:10px;color:var(--text3);margin-bottom:12px">Tipo: ${c.tipo} · ID: ${c.pluggy_account_id?.slice(0,8)||'—'}...</div><div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="reconectarBanco('${c.pluggy_item_id}')">↻ Reconectar</button><button class="btn btn-danger btn-sm" onclick="desativarConta('${c.id}')">Desativar</button></div></div>`).join('')+'</div>';
   }catch(e){document.getElementById('contas-lista').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
 }
+// ── QUAIS BANCOS O WIDGET PODE MOSTRAR ─────────────────────────────────
+// ACRESCENTADO EM 16/11/2026.
+//
+// O PROBLEMA, medido na lista real de 228 conectores da Pluggy: ONZE bancos
+// aparecem DUAS vezes, com nome IDENTICO — uma entrada Open Finance e uma
+// direta (login e senha). Em oito deles o proprio 'type' tambem e igual,
+// entao nao ha NADA na tela que permita ao usuario distinguir. Os diretos
+// sao os ids 2xx; os Open Finance, 6xx a 8xx. Exemplo que custou caro:
+//   "Santander Empresas"  id 621 Open Finance  ·  id 221 direto
+// Seis contas do sistema foram conectadas no 221. Consequencia: o endpoint
+// de saldo em tempo real responde 400 "connector is not open finance", o
+// saldo passa a vir do sync da madrugada, e o conector direto ainda guarda
+// a SENHA do banco em vez de usar consentimento OAuth.
+//
+// A REGRA: remove todo conector sem Open Finance que tenha um gemeo de mesmo
+// nome COM Open Finance. Os outros conectores diretos ficam — para Cora,
+// Efi, Wise, XP e companhia nao existe alternativa regulada, e esconde-los
+// tiraria o unico jeito de conectar.
+//
+// CALCULADA EM TEMPO DE EXECUCAO, de proposito: conector novo que a Pluggy
+// publicar entra sozinho. Uma lista fixa de ids no HTML envelheceria calada.
+//
+// FALHA ABERTA: se o /connectors nao responder, devolve null e o widget abre
+// sem filtro. Travar a conexao do usuario seria pior que mostrar as duas
+// opcoes — a conexao e o que ele veio fazer.
+let _connectorsPermitidos=null;
+async function conectoresPermitidos(){
+  if(_connectorsPermitidos)return _connectorsPermitidos;
+  try{
+    const r=await fetch(`${WORKER}/connectors`);
+    if(!r.ok)throw new Error('connectors '+r.status);
+    const lista=(await r.json()).connectors||[];
+    if(!lista.length)return null;
+    const nome=c=>String(c.name||'').trim().toLowerCase();
+    const temGemeoOF=new Set();
+    lista.forEach(c=>{if(c.isOpenFinance)temGemeoOF.add(nome(c));});
+    const ids=lista
+      .filter(c=>c.isOpenFinance||!temGemeoOF.has(nome(c)))
+      .map(c=>c.id)
+      .filter(n=>Number.isFinite(n));
+    // Se a regra derrubasse quase tudo, algo mudou no formato da resposta.
+    // Melhor abrir sem filtro que oferecer tres bancos.
+    if(ids.length<lista.length*0.5)return null;
+    _connectorsPermitidos=ids;
+    return ids;
+  }catch(e){
+    console.error('conectoresPermitidos:',e.message,'— widget abre sem filtro');
+    return null;
+  }
+}
+
 async function abrirConectarBanco(){
   try{
     const r=await fetch(`${WORKER}/connect-token`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientUserId:SESSION.user.id})});
@@ -3754,7 +3825,13 @@ async function abrirConectarBanco(){
     await carregarPluggyScript();
     const PC=window.PluggyConnect||(window.window&&window.window.PluggyConnect);
     if(!PC)throw new Error('Pluggy Connect não carregou');
-    const pluggy=new PC({connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}});
+    const opts={connectToken:d.accessToken,onSuccess:async(item)=>await processarConexaoBanco(item.item||item),onError:e=>console.error(e),onClose:()=>{}};
+    // connectorIds e opcional no SDK: conferido nos tipos do pluggy-connect-sdk
+    // 2.5.0, que e a versao carregada em carregarPluggyScript.
+    // "If defined, only connectors of specified ids will be listed".
+    const permitidos=await conectoresPermitidos();
+    if(permitidos&&permitidos.length)opts.connectorIds=permitidos;
+    const pluggy=new PC(opts);
     if(typeof pluggy.open==='function')pluggy.open();
     else if(typeof pluggy.init==='function')pluggy.init();
     else throw new Error('Método de abertura não encontrado');
@@ -7847,17 +7924,136 @@ async function loadBalancete(){
       ...caixaSai.map(s=>({id:s.id,data:s.data||s.criado_em?.split('T')[0],descricao:s.descricao||s.fornecedor,valor:-Math.abs(s.valor_total),tipo:'DEBIT',categoria_id:s.categoria_id,fonte:'caixa'}))
     ];
     renderBalancete();
-    const _empIdsB=EMPRESAS.map(e=>e.id).join(',');
-    const saldos=await sbGet('saldos_conta','?empresa_id=in.('+_empIdsB+')&select=saldo_atual,empresa_id,contas_bancarias(banco,nome_conta,tipo)');
-    const cxFis=caixaEnt.reduce((s,e)=>s+e.valor_disponivel,0);
-    const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+r.saldo_atual,0);
-    const empMap={};EMPRESAS.forEach(e=>{empMap[e.id]=e.nome;});
-    document.getElementById('bal-saldos').innerHTML=[
-      ...saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').map(s=>`<div class="saldo-card"><div class="saldo-banco">${s.contas_bancarias.banco}</div><div class="saldo-nome">${s.contas_bancarias.nome_conta}<br><span style="font-size:10px;color:var(--text3)">${empMap[s.empresa_id]||''}</span></div><div class="saldo-val ${s.saldo_atual>=0?'pos':'neg'}">${fBRL(s.saldo_atual)}</div></div>`),
-      `<div class="saldo-card"><div class="saldo-banco">Caixa Físico</div><div class="saldo-nome">Dinheiro & Cheques</div><div class="saldo-val pos">${fBRL(cxFis)}</div></div>`,
-      `<div class="saldo-card" style="background:var(--surface2);border-color:var(--border2)"><div class="saldo-banco">Total Geral</div><div class="saldo-nome">Banco + Caixa</div><div class="saldo-val ${(totalBanco+cxFis)>=0?'pos':'neg'}" style="font-size:22px">${fBRL(totalBanco+cxFis)}</div></div>`
-    ].join('');
+    _balCaixaFisico=caixaEnt.reduce((s,e)=>s+e.valor_disponivel,0);
+    await carregarSaldosBalancete();
   }catch(e){document.getElementById('bal-corpo').innerHTML=`<div class="empty">Erro: ${e.message}</div>`;}
+}
+
+// ── SALDOS DO BALANCETE ────────────────────────────────────────────────
+// Separado do loadBalancete em 16/11/2026 para o botao "Atualizar saldos"
+// poder redesenhar so os cards, sem reler transacoes, caixa e balancete
+// inteiro. O caixa fisico vem do ultimo loadBalancete e nao muda com a
+// leitura bancaria, entao fica guardado aqui.
+let _balCaixaFisico=0;
+
+// ── O QUE CONTA COMO SALDO BANCARIO ────────────────────────────────────
+// ACRESCENTADO EM 16/11/2026.
+//
+// Antes, QUATRO lugares diferentes somavam saldo com o mesmo filtro escrito
+// a mao — so tipo === 'BANK', sem olhar se a conta esta ativa. Medido no
+// banco em 16/11: havia uma conta corrente DESATIVADA com R$ 4.424,92
+// congelados desde 02/09, 75 dias, entrando em todos os quatro totais.
+// Um desses totais e o window._saldoAtualBC, que e o ponto de partida da
+// previsao de caixa — ou seja, a projecao comecava com dinheiro que nao
+// existe mais.
+//
+// Virou funcao unica de proposito: o defeito nasceu de repetir a regra em
+// quatro lugares, e repetir de novo so adiaria o proximo.
+//
+// saldos_conta tem linha para conta desativada e para cartao porque o
+// gatilho antigo gravava todas; nao ha nada a apagar, so a nao somar.
+function ehContaCorrenteAtiva(s){
+  const c=s&&s.contas_bancarias;
+  return !!c&&c.tipo==='BANK'&&c.ativa!==false;
+}
+
+// Quao velho e o DINHEIRO (nao a nossa leitura). Devolve texto curto e um
+// aviso quando passa de 36h — 36h e deliberado: o cron roda 03:20 todos os
+// dias, entao passar disso significa que DOIS crons nao pegaram a conta, o
+// que e defeito e nao rotina. Nao inventei limite menor para nao pintar de
+// ambar um saldo de fim de tarde que esta normal.
+function idadeSaldo(iso){
+  if(!iso)return{txt:'sem data',velho:true};
+  const t=Date.parse(iso);
+  if(!Number.isFinite(t))return{txt:'sem data',velho:true};
+  const min=Math.floor((Date.now()-t)/60000);
+  const velho=min>36*60;
+  if(min<2)   return{txt:'agora',velho:false};
+  if(min<60)  return{txt:'há '+min+' min',velho:false};
+  if(min<36*60)return{txt:'há '+Math.floor(min/60)+' h',velho:false};
+  const d=new Date(t);
+  const p=n=>String(n).padStart(2,'0');
+  return{txt:p(d.getDate())+'/'+p(d.getMonth()+1)+' '+p(d.getHours())+':'+p(d.getMinutes()),velho:velho};
+}
+
+async function carregarSaldosBalancete(){
+  const _empIdsB=EMPRESAS.map(e=>e.id).join(',');
+  const saldos=await sbGet('saldos_conta','?empresa_id=in.('+_empIdsB+')&select=conta_id,saldo_atual,empresa_id,atualizado_em,lido_em,saldo_fonte,contas_bancarias(banco,nome_conta,tipo,ativa)');
+  const cxFis=_balCaixaFisico;
+  const bancos=saldos.filter(ehContaCorrenteAtiva);
+  const totalBanco=bancos.reduce((s,r)=>s+r.saldo_atual,0);
+  const empMap={};EMPRESAS.forEach(e=>{empMap[e.id]=e.nome;});
+  document.getElementById('bal-saldos').innerHTML=[
+    ...bancos.map(s=>{
+      const id=idadeSaldo(s.atualizado_em);
+      // recurso_conta = a conexao nao oferece saldo em tempo real (conector
+      // que nao e Open Finance). O numero vem do ultimo sync do item, ou
+      // seja da madrugada, e clicar em atualizar NAO muda isso. Dizer na
+      // tela e o unico caminho honesto: o usuario decide pagamento com este
+      // numero.
+      const semTR=s.saldo_fonte==='recurso_conta';
+      return `<div class="saldo-card${semTR?' sem-tempo-real':''}">`
+        +`<div class="saldo-banco">${s.contas_bancarias.banco}</div>`
+        +`<div class="saldo-nome">${s.contas_bancarias.nome_conta}<br><span style="font-size:10px;color:var(--text3)">${empMap[s.empresa_id]||''}</span></div>`
+        +`<div class="saldo-val ${s.saldo_atual>=0?'pos':'neg'}">${fBRL(s.saldo_atual)}</div>`
+        +`<div class="saldo-meta">`
+        +`<span class="${id.velho?'velho':''}" title="Horário que o banco informou para este saldo">${id.velho?'⚠ ':''}saldo de ${id.txt}</span>`
+        +(semTR?`<span class="velho" title="Esta conexão usa conector que não é Open Finance. O saldo vem do sync da madrugada e atualizar não muda. Reconectar o banco pelo Open Finance resolve.">sem tempo real · reconectar por Open Finance</span>`:'')
+        +`</div></div>`;
+    }),
+    `<div class="saldo-card"><div class="saldo-banco">Caixa Físico</div><div class="saldo-nome">Dinheiro &amp; Cheques</div><div class="saldo-val pos">${fBRL(cxFis)}</div></div>`,
+    `<div class="saldo-card" style="background:var(--surface2);border-color:var(--border2)"><div class="saldo-banco">Total Geral</div><div class="saldo-nome">Banco + Caixa</div><div class="saldo-val ${(totalBanco+cxFis)>=0?'pos':'neg'}" style="font-size:22px">${fBRL(totalBanco+cxFis)}</div></div>`
+  ].join('');
+}
+
+// ── BOTAO "ATUALIZAR SALDOS" ───────────────────────────────────────────
+// Chama o worker uma vez por empresa do usuario. O worker valida o token do
+// Supabase e so atualiza conta de empresa que o RLS deixa ele ver — nao ha
+// ADMIN_KEY no HTML, que viveria exposta e nao protegeria nada.
+//
+// Espera de 5 minutos por conta, aplicada no worker. Conta em espera volta
+// como "em_espera" e nao gasta chamada no banco.
+async function atualizarSaldosAgora(){
+  const btn=document.getElementById('bal-btn-saldos');
+  const st=document.getElementById('bal-saldos-status');
+  const tok=SESSION?.access_token;
+  if(!tok){st.textContent='Entre novamente para atualizar os saldos.';return;}
+  if(!EMPRESAS.length){st.textContent='Nenhuma empresa no seu acesso.';return;}
+  btn.disabled=true;
+  const rotuloOriginal=btn.textContent;
+  btn.textContent='Atualizando…';
+  st.textContent='Consultando os bancos…';
+  let gravadas=0,espera=0,erros=0,semVinculo=0;
+  const falhas=[];
+  try{
+    for(const emp of EMPRESAS){
+      try{
+        const r=await fetch(`${WORKER}/meus-saldos?empresa_id=${encodeURIComponent(emp.id)}`,
+                            {headers:{Authorization:'Bearer '+tok}});
+        const d=await r.json();
+        if(!r.ok){falhas.push((emp.nome||'empresa')+': '+(d.error||r.status));continue;}
+        gravadas   += d.gravadas||0;
+        espera     += d.em_espera||0;
+        erros      += d.erros||0;
+        semVinculo += d.sem_vinculo||0;
+        // O motivo de cada erro fica no console: a barra de status nao tem
+        // espaco e o detalhe do Pluggy e longo.
+        (d.contas||[]).filter(c=>c.situacao==='erro')
+          .forEach(c=>console.error('saldo',c.banco,c.nome,'→',c.detalhe));
+      }catch(e){falhas.push((emp.nome||'empresa')+': '+e.message);}
+    }
+    await carregarSaldosBalancete();
+    const partes=[];
+    if(gravadas)   partes.push(gravadas+(gravadas>1?' contas atualizadas':' conta atualizada'));
+    if(espera)     partes.push(espera+' em espera (lida há menos de 5 min)');
+    if(semVinculo) partes.push(semVinculo+' sem conexão concluída');
+    if(erros)      partes.push(erros+' com erro (detalhe no console)');
+    falhas.forEach(f=>partes.push(f));
+    st.textContent=partes.length?partes.join(' · '):'Nenhuma conta corrente para atualizar.';
+  }finally{
+    btn.disabled=false;
+    btn.textContent=rotuloOriginal;
+  }
 }
 // ── Em qual bloco de despesa esta categoria cai ───────────────
 // ACRESCENTADO EM 02/11/2026, junto com a coluna grupo_dre (SQL 34).
@@ -8157,10 +8353,10 @@ async function loadLancamentos(){
       try{
         const empIds=EMPRESAS.map(e=>e.id).join(',');
         const[saldos,cxEnt]=await Promise.all([
-          sbGet('saldos_conta','?empresa_id=in.('+empIds+')&select=saldo_atual,contas_bancarias(tipo)'),
+          sbGet('saldos_conta','?empresa_id=in.('+empIds+')&select=saldo_atual,contas_bancarias(tipo,ativa)'),
           sbGet('caixa_entradas','?user_id=eq.'+(SESSION?.user?.id||'')+'&select=valor_disponivel')
         ]);
-        const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
+        const totalBanco=saldos.filter(ehContaCorrenteAtiva).reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
         const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
         const totalBC=totalBanco+totalCaixa;
         window._saldoAtualBC=totalBC; // usado pelo fluxo de caixa projetado
@@ -8257,7 +8453,70 @@ function abrirModalLancamento(id){
   document.getElementById('lan-valor').value=l?.valor||'';
   document.getElementById('lan-venc').value=l?.data_vencimento||new Date().toISOString().split('T')[0];
   document.getElementById('lan-obs').value=l?.observacao||'';
+  // A repetição é zerada e escondida na edição: regenerar série ao editar um
+  // lançamento que já pertence a uma criaria duplicatas silenciosas.
+  const rep=document.getElementById('lan-rep'), repW=document.getElementById('lan-rep-wrap');
+  if(rep)rep.value='';
+  const repAte=document.getElementById('lan-rep-ate');
+  if(repAte)repAte.value='';
+  if(repW)repW.style.display=id?'none':'';
+  toggleLanRep();
   toggleLanFields();abrirModal('modal-lancamento');acInit('lan-cf',acFetchFornClientes);
+}
+
+function toggleLanRep(){
+  const v=document.getElementById('lan-rep')?.value;
+  const w=document.getElementById('lan-rep-ate-wrap');
+  if(w)w.style.display=v?'':'none';
+}
+
+// ── Datas de uma série de lançamentos ─────────────────────────
+// ACRESCENTADO EM 09/11/2026. Antes disto o formulário tinha um vencimento só,
+// e lançar uma entrada diária de um mês exigia 31 aberturas do modal — ou SQL
+// por fora, que não é o caminho: dado financeiro entra pela tela.
+//
+// POR QUE A ARITMÉTICA É EM ANO/MÊS/DIA, E NÃO COM setDate/setMonth
+//   1. setMonth erra o mensal. new Date('2026-01-31').setMonth(1) não dá 28 de
+//      fevereiro: dá 3 de março, porque o 31 não existe em fevereiro e o Date
+//      transborda para o mês seguinte. Repetir "todo mês no dia 31" tem de
+//      virar 28 ou 30 conforme o mês, não pular para o mês errado.
+//   2. Date em horário local mais toISOString() desloca o dia em fuso
+//      negativo. Aqui o passo diário e semanal usa meio-dia UTC, que não
+//      cruza fronteira de dia nem com horário de verão.
+//
+// O teto existe para que um erro de digitação em "repetir até" — um ano a mais
+// — não crie milhares de lançamentos antes de alguém perceber.
+const LAN_REP_MAX = 400;
+
+function lanDatasSerie(inicioISO, ateISO, passo){
+  if(!inicioISO) return [];
+  if(!passo) return [inicioISO];
+  if(!ateISO || ateISO < inicioISO) return [inicioISO];
+
+  const out=[];
+  if(passo==='MES'){
+    const [a,m,dia]=inicioISO.split('-').map(Number);
+    for(let i=0;i<LAN_REP_MAX;i++){
+      const corrido=m-1+i;
+      const ano=a+Math.floor(corrido/12);
+      const mes=((corrido%12)+12)%12;
+      const ultimoDia=new Date(Date.UTC(ano,mes+1,0)).getUTCDate();
+      const iso=ano+'-'+String(mes+1).padStart(2,'0')+'-'+String(Math.min(dia,ultimoDia)).padStart(2,'0');
+      if(iso>ateISO) break;
+      out.push(iso);
+    }
+    return out;
+  }
+
+  const salto=(passo==='SEMANA')?7:1;
+  const d=new Date(inicioISO+'T12:00:00Z');
+  while(out.length<LAN_REP_MAX){
+    const iso=d.toISOString().split('T')[0];
+    if(iso>ateISO) break;
+    out.push(iso);
+    d.setUTCDate(d.getUTCDate()+salto);
+  }
+  return out;
 }
 function toggleLanFields(){const tipo=document.getElementById('lan-tipo')?.value;const el=document.getElementById('lan-cf-label');if(el)el.textContent=tipo==='PAGAR'?'Fornecedor':'Cliente';}
 async function salvarLancamento(){
@@ -8268,7 +8527,36 @@ async function salvarLancamento(){
   if(!id){empresaSel=await pedirEmpresaParaSalvar();if(!empresaSel)return;}
   const body={data:new Date().toISOString().split('T')[0],data_vencimento:document.getElementById('lan-venc').value,descricao:document.getElementById('lan-desc').value.trim(),valor:parseFloat(document.getElementById('lan-valor').value),tipo_lancamento:tipo,meio_pagamento:document.getElementById('lan-meio').value,situacao:'EM_ABERTO',categoria_id:document.getElementById('lan-cat').value||null,fornecedor:tipo==='PAGAR'?cf:null,cliente:tipo==='RECEBER'?cf:null,observacao:document.getElementById('lan-obs').value.trim()||null};
   if(!id)body.empresa_id=empresaSel; // só define empresa na criação — edição preserva a empresa original do lançamento
-  try{if(id)await sbPatch('lancamentos_externos',`id=eq.${id}`,body);else await sbPost('lancamentos_externos',body);fecharModal('modal-lancamento');loadLancamentos();}catch(e){alert('Erro: '+e.message);}
+  if(!(body.valor>0)){alert('Informe um valor maior que zero.');return;}
+  if(!body.data_vencimento){alert('Informe o vencimento.');return;}
+
+  // Série só na criação. Na edição é sempre uma linha, a que está aberta.
+  const passo=id?'':(document.getElementById('lan-rep')?.value||'');
+  const ate=document.getElementById('lan-rep-ate')?.value||'';
+  if(passo&&!ate){alert('Informe até quando repetir.');return;}
+  if(passo&&ate<body.data_vencimento){alert('A data final da repetição é anterior ao vencimento.');return;}
+
+  const serie=id?[body.data_vencimento]:lanDatasSerie(body.data_vencimento,ate,passo);
+  if(!serie.length){alert('Não foi possível montar as datas da repetição.');return;}
+  if(serie.length>=LAN_REP_MAX){
+    alert('A repetição passaria de '+LAN_REP_MAX+' lançamentos. Encurte o período.');
+    return;
+  }
+  if(serie.length>1){
+    const total=serie.length*body.valor;
+    if(!confirm(serie.length+' lançamentos de '+fBRL(body.valor)+', de '+fDate(serie[0])+' a '+fDate(serie[serie.length-1])+'.'+
+                '\n\nTotal: '+fBRL(total)+'\n\nConfirmar?'))return;
+  }
+
+  try{
+    if(id){
+      await sbPatch('lancamentos_externos',`id=eq.${id}`,body);
+    }else{
+      const corpos=serie.map(d=>Object.assign({},body,{data_vencimento:d}));
+      await sbPost('lancamentos_externos',corpos.length===1?corpos[0]:corpos);
+    }
+    fecharModal('modal-lancamento');loadLancamentos();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 async function loadCaixa(){
@@ -9814,10 +10102,10 @@ async function _buildFluxoProjetado(lancamentos){
   try{
     const empIds=EMPRESAS.map(e=>e.id).join(',');
     const[saldos,cxEnt]=await Promise.all([
-      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo)`),
+      sbGet('saldos_conta',`?empresa_id=in.(${empIds})&select=saldo_atual,contas_bancarias(tipo,ativa)`),
       sbGet('caixa_entradas',`?user_id=eq.${SESSION?.user?.id||''}&select=valor_disponivel`)
     ]);
-    const totalBanco=saldos.filter(s=>s.contas_bancarias?.tipo==='BANK').reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
+    const totalBanco=saldos.filter(ehContaCorrenteAtiva).reduce((s,r)=>s+parseFloat(r.saldo_atual||0),0);
     const totalCaixa=cxEnt.reduce((s,e)=>s+parseFloat(e.valor_disponivel||0),0);
     saldo=totalBanco+totalCaixa;
     window._saldoAtualBC=saldo;
