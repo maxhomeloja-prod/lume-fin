@@ -7978,7 +7978,7 @@ function idadeSaldo(iso){
 
 async function carregarSaldosBalancete(){
   const _empIdsB=EMPRESAS.map(e=>e.id).join(',');
-  const saldos=await sbGet('saldos_conta','?empresa_id=in.('+_empIdsB+')&select=conta_id,saldo_atual,empresa_id,atualizado_em,lido_em,saldo_fonte,contas_bancarias(banco,nome_conta,tipo,ativa)');
+  const saldos=await sbGet('saldos_conta','?empresa_id=in.('+_empIdsB+')&select=conta_id,saldo_atual,empresa_id,atualizado_em,lido_em,saldo_fonte,saldo_outro,contas_bancarias(banco,nome_conta,tipo,ativa)');
   const cxFis=_balCaixaFisico;
   const bancos=saldos.filter(ehContaCorrenteAtiva);
   const totalBanco=bancos.reduce((s,r)=>s+r.saldo_atual,0);
@@ -7999,6 +7999,15 @@ async function carregarSaldosBalancete(){
         +`<div class="saldo-meta">`
         +`<span class="${id.velho?'velho':''}" title="Horário que o banco informou para este saldo">${id.velho?'⚠ ':''}saldo de ${id.txt}</span>`
         +(semTR?`<span class="velho" title="Esta conexão usa conector que não é Open Finance. O saldo vem do sync da madrugada e atualizar não muda. Reconectar o banco pelo Open Finance resolve.">sem tempo real · reconectar por Open Finance</span>`:'')
+        // DIVERGENCIA. O banco devolveu dois numeros diferentes para a mesma
+        // conta e o sistema usou o configurado. Medido em 16/11/2026 na
+        // Santander: balance -26.500,00 e o liquido -19.365,30, que e o saldo
+        // real. O significado desses campos ja mudou duas vezes em tres
+        // semanas, e das duas vezes a gente descobriu dias depois. Esta linha
+        // existe para a descoberta ser no dia.
+        +(s.saldo_outro!==null&&s.saldo_outro!==undefined
+            ?`<span class="velho" title="O banco devolveu dois valores diferentes para esta conta. O sistema está usando o que foi configurado para ela. Confira no aplicativo do banco qual dos dois é o saldo que importa.">⚠ o banco também reportou ${fBRL(s.saldo_outro)} — confira no app</span>`
+            :'')
         +`</div></div>`;
     }),
     `<div class="saldo-card"><div class="saldo-banco">Caixa Físico</div><div class="saldo-nome">Dinheiro &amp; Cheques</div><div class="saldo-val pos">${fBRL(cxFis)}</div></div>`,
