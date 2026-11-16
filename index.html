@@ -614,6 +614,7 @@ tr:hover td{background:var(--surface2);}
           <button class="nav-dd-item" onclick="irPara('ops')">📋 Ordens de Produção</button>
           <button class="nav-dd-item" onclick="irPara('entregas')">📦 Entregas</button>
           <button class="nav-dd-item" onclick="irPara('pagamentos-op')">💰 Pagamentos Facção</button>
+          <button class="nav-dd-item" id="nav-estoque-prod" onclick="irPara('estoque-prod')">📦 Estoque de Produtos</button>
         </div>
       </div>
 
@@ -1093,6 +1094,58 @@ tr:hover td{background:var(--surface2);}
         </div></div>
       <div id="bom-pendencias" class="mb16"></div>
       <div id="bom-cadastrados"></div>
+    </div>
+
+    <!-- ESTOQUE DE PRODUTOS -->
+    <!-- Nao confundir com "Estoque Modelo", logo abaixo: aquele e projecao de
+         materia-prima para 30 dias a partir do historico de vendas. Este e
+         saldo de produto acabado. Nomes distintos de proposito. -->
+    <div id="page-estoque-prod" class="page">
+      <div class="page-header">
+        <div><div class="page-title">Estoque de Produtos</div><div class="page-sub">Entradas lançadas menos vendas importadas, por SKU com CPV</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="abrirModalEntradaEstoque()">+ Entrada de estoque</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;padding:14px 20px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin:0;min-width:220px">
+            <label class="form-label">Empresa</label>
+            <select class="form-control" id="estp-empresa" onchange="loadEstoqueProd()"></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Controle começa em</label>
+            <div style="display:flex;gap:6px">
+              <input class="form-control" type="date" id="estp-inicio" style="min-width:140px">
+              <button class="btn btn-secondary btn-sm" onclick="salvarInicioEstoque()">Salvar</button>
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:150px">
+            <label class="form-label">SKU</label>
+            <input class="form-control" type="text" id="estp-filtro" placeholder="Filtrar por SKU..." oninput="renderEstoqueProd()">
+          </div>
+          <div class="form-group" style="margin:0;min-width:160px">
+            <label class="form-label">Mostrar</label>
+            <select class="form-control" id="estp-mostrar" onchange="renderEstoqueProd()">
+              <option value="todos">Todos</option>
+              <option value="positivo">Com saldo</option>
+              <option value="negativo">Negativos</option>
+              <option value="zerado">Zerados</option>
+              <option value="sem-cpv">Sem CPV vigente</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="margin-bottom:16px">
+        <div class="kpi"><div class="kpi-label">Valor em estoque</div><div class="kpi-value green" id="estp-valor">—</div></div>
+        <div class="kpi"><div class="kpi-label">SKUs com saldo</div><div class="kpi-value" id="estp-com">—</div></div>
+        <div class="kpi"><div class="kpi-label">SKUs negativos</div><div class="kpi-value red" id="estp-neg">—</div></div>
+        <div class="kpi"><div class="kpi-label">Sem CPV vigente</div><div class="kpi-value" id="estp-semcpv">—</div></div>
+      </div>
+
+      <div id="estp-wrap"></div>
     </div>
 
     <!-- ESTOQUE MODELO -->
@@ -1752,6 +1805,22 @@ tr:hover td{background:var(--surface2);}
     <div class="form-group"><label class="form-label">Razão Social</label><input class="form-control" type="text" id="emp-nome" placeholder="Nome completo da empresa"></div>
     <div class="form-group"><label class="form-label">CNPJ</label><input class="form-control" type="text" id="emp-cnpj" placeholder="00.000.000/0000-00"></div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-empresa')">Cancelar</button><button class="btn btn-primary" onclick="salvarEmpresa()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-entrada-estoque">
+  <div class="modal"><div class="modal-title">Entrada de estoque</div><div class="modal-sub">Só SKU com CPV cadastrado aceita entrada — é o CPV que cria o produto no estoque</div>
+    <div class="form-group"><label class="form-label">Empresa</label><select class="form-control" id="ent-empresa"></select></div>
+    <div class="form-group"><label class="form-label">SKU</label>
+      <input class="form-control" type="text" id="ent-sku" list="ent-sku-lista" placeholder="Digite ou escolha" autocomplete="off">
+      <datalist id="ent-sku-lista"></datalist>
+      <small style="color:var(--text3);font-size:11px">Só aparecem os SKUs com CPV desta empresa.</small>
+    </div>
+    <div class="form-group"><label class="form-label">Quantidade</label><input class="form-control" type="number" step="0.001" min="0.001" id="ent-qtd" placeholder="Em unidades, a mesma unidade do CPV"></div>
+    <div class="form-group"><label class="form-label">Data da entrada</label><input class="form-control" type="date" id="ent-data"></div>
+    <div class="form-group"><label class="form-label">Observação</label><input class="form-control" type="text" id="ent-obs" placeholder="Opcional — contagem, nota, origem"></div>
+    <div id="ent-erro" style="display:none;color:var(--red);font-size:12px;margin-bottom:10px;line-height:1.4"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="fecharModal('modal-entrada-estoque')">Cancelar</button><button class="btn btn-primary" id="ent-btn" onclick="salvarEntradaEstoque()">Lançar</button></div>
   </div>
 </div>
 
@@ -2584,6 +2653,12 @@ function aplicarAcessoUI(){
   const nc=document.getElementById('nav-contas');
   if(nc)nc.style.display=temFinanceiro?'':'none';
 
+  // Estoque de Produtos mora no menu Operacao, que o Modulo I ve inteiro, mas
+  // a tabela estoque_entradas esta no grupo do Modulo II na RLS (SQL 43).
+  // Entao esconde o item, nao o grupo — senao o Modulo I perde OPs e Entregas.
+  const nep=document.getElementById('nav-estoque-prod');
+  if(nep)nep.style.display=temFinanceiro?'':'none';
+
   // Cards do dashboard que leem lancamentos_externos e saldos_conta
   ['dash-pagar','dash-saldo'].forEach(id=>{
     const v=document.getElementById(id);
@@ -3181,7 +3256,7 @@ function irPara(pagina){
   if(ACESSO.bloqueado&&!['plano','perfil','seguranca'].includes(pagina))pagina='plano';
   // Modulo I: o menu Financeiro esta escondido, mas um link antigo ou o
   // historico do navegador ainda poderiam chamar estas paginas.
-  if(ACESSO.modulo===1&&['categorizacao','balancete','caixa','dre','lancamentos','contas'].includes(pagina))pagina='plano';
+  if(ACESSO.modulo===1&&['categorizacao','balancete','caixa','dre','lancamentos','contas','estoque-prod'].includes(pagina))pagina='plano';
 
   const page=document.getElementById('page-'+pagina);
   if(page)page.classList.add('active');
@@ -3189,7 +3264,7 @@ function irPara(pagina){
   if(pagina==='plano'){loadPlano();return;}
 
   if(!EMPRESAS.length){
-    const wraps={'ops':'ops-content','entregas':'entregas-lista','vendas':'ven-table','bom':'bom-pendencias','abc':'abc-tbody','categorizacao':'cat-wrap','lancamentos':'lan-wrap','balancete':'bal-corpo','caixa':'cx-ent-wrap','pagamentos-op':'pagamentos-op-lista'};
+    const wraps={'ops':'ops-content','entregas':'entregas-lista','vendas':'ven-table','bom':'bom-pendencias','abc':'abc-tbody','categorizacao':'cat-wrap','lancamentos':'lan-wrap','balancete':'bal-corpo','caixa':'cx-ent-wrap','pagamentos-op':'pagamentos-op-lista','estoque-prod':'estp-wrap'};
     if(wraps[pagina]){const el=document.getElementById(wraps[pagina]);if(el)el.innerHTML='<div class="empty"><div class="empty-icon">🏢</div><div class="empty-title">Cadastre uma empresa primeiro</div><div class="empty-sub"><button class="btn btn-primary btn-sm" onclick="irPara(\'empresas\')">Ir para Empresas</button></div></div>';}
     if(pagina==='empresas')loadEmpresas();
     if(pagina==='perfil')loadPerfil();
@@ -3211,7 +3286,7 @@ function irPara(pagina){
     'empresas':loadEmpresas,'terceiros':loadTerceiros,'precos-faccao':()=>loadPrecosFaccao(true),
     'perfil':loadPerfil,'plano':loadPlano,
     'correlacao':loadCorrelacao,'estoque':()=>{const deEl=document.getElementById('fest-de'),ateEl=document.getElementById('fest-ate');if(deEl&&!deEl.value){const hoje=new Date();deEl.value=new Date(hoje.getFullYear(),hoje.getMonth(),1).toISOString().split('T')[0];}if(ateEl&&!ateEl.value){ateEl.value=new Date().toISOString().split('T')[0];}},'calc':()=>{const selCE=document.getElementById('calc-empresa');if(selCE&&!selCE.children.length)selCE.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');if(!document.getElementById('calc-materiais-lista').children.length)addCalcMaterial();renderHistoricoCalc();},'marketplaces':loadMarketplaces,'dre':loadDRE,'custos-cpv':loadCustosCPV,
-    'canais':loadCanais,'clientes':loadClientes
+    'canais':loadCanais,'clientes':loadClientes,'estoque-prod':loadEstoqueProd
   };
   if(loaders[pagina])loaders[pagina]();
 
@@ -3221,6 +3296,10 @@ function irPara(pagina){
 const fBRL=v=>'R$ '+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fN=v=>v.toLocaleString('pt-BR');
 const fDate=s=>s?s.split('-').reverse().join('/'):'—';
+// fBRL usa Math.abs de proposito: nos cards a COR carrega o sinal. Em texto
+// corrido isso mente — "o banco reportou R$ 26.500,00" para -26.500,00 e
+// informacao errada. Para frase, use fBRLs. Pego em revisao em 16/11/2026.
+const fBRLs=v=>((parseFloat(v)||0)<0?'−':'')+fBRL(v);
 const PAL=['#1e9be8','#00d4a0','#a78bfa','#ffb020','#ff4d6a','#00c4ff','#f472b6','#34d399'];
 function abrirModal(id){document.getElementById(id).classList.add('open');}
 function fecharModal(id){document.getElementById(id).classList.remove('open');}
@@ -4271,6 +4350,220 @@ function cpvEmpresaSel(){
     sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
   }
   return sel?sel.value:(EMPRESAS[0]?.id||null);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  ESTOQUE DE PRODUTOS
+//  O produto nasce no cadastro de CPV. O usuario so da ENTRADA. A saida sai
+//  das vendas importadas e e calculada na LEITURA, pela funcao estoque_saldo
+//  (SQL 43) — nunca gravada. Debito gravado por venda duplicaria no dia em
+//  que o sync reprocessasse um pedido, e nao ha chave unica que pegue isso.
+//
+//  Consequencia boa: nao existe sync de estoque para ficar velho. O saldo e
+//  sempre consistente com as vendas que estao na tabela naquele instante.
+//  Shopee, TikTok e Mercado Livre entram por webhook em segundos; so a Temu
+//  depende de polling de 5 minutos.
+// ══════════════════════════════════════════════════════════════════════════
+let _estpDados=[];
+
+// Quantidade sem zeros a direita: 12 em vez de 12,000, mas 1,5 preservado.
+const fQ=v=>{
+  const n=parseFloat(v)||0;
+  return n.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:3});
+};
+
+function estpEmpresaSel(){
+  const sel=document.getElementById('estp-empresa');
+  if(!sel)return null;
+  if(!sel.children.length){
+    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+    if(EMPRESA_ID)sel.value=EMPRESA_ID;
+  }
+  return sel.value||null;
+}
+
+async function loadEstoqueProd(){
+  const wrap=document.getElementById('estp-wrap');
+  if(!EMPRESAS.length){semEmpresaMsg('estp-wrap');return;}
+  const emp=estpEmpresaSel();
+  if(!emp)return;
+  try{
+    // A data de corte mora na propria empresa. Nula = controle desligado, e a
+    // funcao devolve zero linhas de proposito (SQL 43).
+    const e=await sbGet('empresas',`?id=eq.${emp}&select=estoque_inicio`);
+    const inicio=(e&&e[0]&&e[0].estoque_inicio)||'';
+    const di=document.getElementById('estp-inicio');
+    if(di)di.value=inicio;
+
+    if(!inicio){
+      _estpDados=[];
+      ['estp-valor','estp-com','estp-neg','estp-semcpv'].forEach(id=>{
+        const el=document.getElementById(id); if(el)el.textContent='—';
+      });
+      wrap.innerHTML=`<div class="empty">
+        <div class="empty-icon">📦</div>
+        <div class="empty-title">Defina a data em que o controle de estoque começa</div>
+        <div class="empty-sub" style="max-width:520px;margin:0 auto;line-height:1.6">
+          Toda venda a partir dessa data debita o estoque; venda anterior não.
+          A ordem certa é contar o estoque, lançar as entradas com o que foi
+          contado, e só então pôr aqui a data da contagem. Data antiga sem as
+          entradas daquele período faz todo SKU nascer negativo.
+        </div></div>`;
+      return;
+    }
+
+    _estpDados=await sbRpc('estoque_saldo',{p_empresa_id:emp})||[];
+    // Datalist do modal: so SKU com CPV, que e exatamente o que a funcao lista.
+    const dl=document.getElementById('ent-sku-lista');
+    if(dl)dl.innerHTML=_estpDados.map(r=>`<option value="${r.sku}">`).join('');
+    renderEstoqueProd();
+  }catch(err){
+    wrap.innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Não foi possível carregar</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+function renderEstoqueProd(){
+  const wrap=document.getElementById('estp-wrap');
+  const filtro=(document.getElementById('estp-filtro')?.value||'').trim().toUpperCase();
+  const modo=document.getElementById('estp-mostrar')?.value||'todos';
+
+  const num=v=>(v===null||v===undefined)?null:parseFloat(v);
+
+  // KPIs sempre sobre o CONJUNTO INTEIRO, nao sobre o filtro: o valor em
+  // estoque da empresa nao muda porque alguem digitou um SKU na busca.
+  let valor=0, comSaldo=0, negativos=0, semCpv=0;
+  _estpDados.forEach(r=>{
+    const sal=num(r.saldo), cpv=num(r.cpv_vigente), vpz=num(r.valor_piso_zero);
+    if(sal>0)comSaldo++;
+    if(sal<0)negativos++;
+    if(cpv===null)semCpv++;
+    // PISO ZERO no valor, regra do usuario: negativo conta como zero no
+    // relatorio financeiro. E so aqui — o saldo segue negativo na tabela,
+    // porque operacionalmente ele e informacao.
+    if(vpz!==null)valor+=vpz;
+  });
+  document.getElementById('estp-valor').textContent=fBRL(valor);
+  document.getElementById('estp-com').textContent=fN(comSaldo);
+  document.getElementById('estp-neg').textContent=fN(negativos);
+  document.getElementById('estp-semcpv').textContent=fN(semCpv);
+
+  const linhas=_estpDados.filter(r=>{
+    if(filtro&&!String(r.sku).toUpperCase().includes(filtro))return false;
+    const sal=num(r.saldo), cpv=num(r.cpv_vigente);
+    if(modo==='positivo')return sal>0;
+    if(modo==='negativo')return sal<0;
+    if(modo==='zerado')return sal===0;
+    if(modo==='sem-cpv')return cpv===null;
+    return true;
+  });
+
+  if(!_estpDados.length){
+    wrap.innerHTML=`<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Nenhum SKU com CPV nesta empresa</div><div class="empty-sub">O estoque nasce do cadastro de CPV. Cadastre o custo por unidade em Cadastros &gt; Custos (CPV) e o SKU aparece aqui com saldo zero.</div></div>`;
+    return;
+  }
+  if(!linhas.length){
+    wrap.innerHTML=`<div class="empty"><div class="empty-title">Nenhum SKU com esse filtro</div></div>`;
+    return;
+  }
+
+  const TETO=1000;
+  const mostra=linhas.slice(0,TETO);
+  wrap.innerHTML=`<div class="card"><div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr>
+        <th>SKU</th>
+        <th style="text-align:right">Entradas</th>
+        <th style="text-align:right">Saídas</th>
+        <th style="text-align:right">Saldo</th>
+        <th style="text-align:right">CPV unit.</th>
+        <th style="text-align:right">Valor</th>
+        <th>Última entrada</th>
+      </tr></thead>
+      <tbody>${mostra.map(r=>{
+        const sal=num(r.saldo), cpv=num(r.cpv_vigente), val=num(r.valor);
+        const cor=sal<0?'var(--red)':(sal>0?'var(--green)':'var(--text2)');
+        return `<tr>
+          <td style="font-weight:500">${r.sku}</td>
+          <td style="text-align:right;color:var(--text2)">${fQ(r.entradas)}</td>
+          <td style="text-align:right;color:var(--text2)">${fQ(r.saidas)}</td>
+          <td style="text-align:right;font-weight:600;color:${cor}">${fQ(sal)}</td>
+          <td style="text-align:right;color:var(--text2)">${cpv===null?'<span style="color:var(--text3)" title="Sem CPV vigente hoje: existe cadastro, mas com vigência futura">—</span>':fBRL(cpv)}</td>
+          <td style="text-align:right">${val===null?'<span style="color:var(--text3)">—</span>':(val<0?`<span style="color:var(--text3)" title="Saldo negativo vale zero no relatório financeiro">R$ 0,00</span>`:fBRL(val))}</td>
+          <td style="color:var(--text3);font-size:11px">${r.ultima_entrada?fDate(String(r.ultima_entrada).slice(0,10)):'nunca'}</td>
+        </tr>`;}).join('')}</tbody>
+    </table>
+    </div>${linhas.length>TETO?`<div style="padding:10px 14px;font-size:11px;color:var(--text3)">Mostrando ${TETO} de ${fN(linhas.length)} SKUs. Use o filtro para estreitar.</div>`:''}
+  </div>`;
+}
+
+// A data de corte muda TODO saldo da empresa, porque redefine quais vendas
+// debitam. Por isso confirma antes, dizendo o que vai acontecer.
+async function salvarInicioEstoque(){
+  const emp=estpEmpresaSel();
+  if(!emp)return;
+  const v=document.getElementById('estp-inicio').value;
+  if(!v){alert('Escolha a data em que o controle de estoque começa.');return;}
+  if(!confirm('A partir de '+fDate(v)+', toda venda importada passa a debitar o estoque; venda anterior não debita.\n\nIsso recalcula o saldo de todos os SKUs desta empresa. Confirmar?'))return;
+  try{
+    await sbPatch('empresas',`id=eq.${emp}`,{estoque_inicio:v});
+    await loadEstoqueProd();
+  }catch(e){alert('Não foi possível salvar: '+e.message);}
+}
+
+function abrirModalEntradaEstoque(){
+  if(!EMPRESAS.length){alert('Cadastre uma empresa primeiro.');return;}
+  const sel=document.getElementById('ent-empresa');
+  sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
+  sel.value=estpEmpresaSel()||EMPRESAS[0].id;
+  document.getElementById('ent-sku').value='';
+  document.getElementById('ent-qtd').value='';
+  document.getElementById('ent-obs').value='';
+  document.getElementById('ent-data').value=new Date().toISOString().slice(0,10);
+  const err=document.getElementById('ent-erro');
+  err.style.display='none';err.textContent='';
+  abrirModal('modal-entrada-estoque');
+}
+
+async function salvarEntradaEstoque(){
+  const err=document.getElementById('ent-erro');
+  const btn=document.getElementById('ent-btn');
+  const mostrar=m=>{err.textContent=m;err.style.display='';};
+  err.style.display='none';
+
+  const empresa_id=document.getElementById('ent-empresa').value;
+  const sku=document.getElementById('ent-sku').value.trim();
+  const qtd=parseFloat(String(document.getElementById('ent-qtd').value).replace(',','.'));
+  const data=document.getElementById('ent-data').value;
+  const obs=document.getElementById('ent-obs').value.trim();
+
+  if(!empresa_id){mostrar('Escolha a empresa.');return;}
+  if(!sku){mostrar('Informe o SKU.');return;}
+  // Entrada e entrada: quantidade positiva. Nao existe ajuste negativo neste
+  // desenho, e o banco tem CHECK (quantidade > 0) — recusar aqui so evita a
+  // viagem ate o servidor para levar o mesmo nao.
+  if(!Number.isFinite(qtd)||qtd<=0){mostrar('A quantidade tem de ser maior que zero. Para corrigir uma entrada errada, apague o lançamento.');return;}
+  if(!data){mostrar('Informe a data da entrada.');return;}
+
+  btn.disabled=true;
+  try{
+    await sbPost('estoque_entradas',{
+      empresa_id, sku, quantidade:qtd, data,
+      observacao:obs||null,
+      criado_por:SESSION?.user?.id||null
+    });
+    fecharModal('modal-entrada-estoque');
+    // Se a entrada foi em outra empresa que a da tela, troca para ela — senao
+    // o usuario lanca e nao ve nada acontecer.
+    const sel=document.getElementById('estp-empresa');
+    if(sel&&sel.value!==empresa_id)sel.value=empresa_id;
+    await loadEstoqueProd();
+  }catch(e){
+    // A mensagem do gatilho de CPV (SQL 43) e escrita para o usuario e diz o
+    // que fazer. Repassar inteira em vez de trocar por "erro ao salvar".
+    mostrar(e.message||'Não foi possível lançar a entrada.');
+  }finally{
+    btn.disabled=false;
+  }
 }
 
 async function loadCustosCPV(){
@@ -8006,7 +8299,7 @@ async function carregarSaldosBalancete(){
         // semanas, e das duas vezes a gente descobriu dias depois. Esta linha
         // existe para a descoberta ser no dia.
         +(s.saldo_outro!==null&&s.saldo_outro!==undefined
-            ?`<span class="velho" title="O banco devolveu dois valores diferentes para esta conta. O sistema está usando o que foi configurado para ela. Confira no aplicativo do banco qual dos dois é o saldo que importa.">⚠ o banco também reportou ${fBRL(s.saldo_outro)} — confira no app</span>`
+            ?`<span class="velho" title="O banco devolveu dois valores diferentes para esta conta. O sistema está usando o que foi configurado para ela. Confira no aplicativo do banco qual dos dois é o saldo que importa.">⚠ o banco também reportou ${fBRLs(s.saldo_outro)} — confira no app</span>`
             :'')
         +`</div></div>`;
     }),
