@@ -1102,7 +1102,7 @@ tr:hover td{background:var(--surface2);}
          saldo de produto acabado. Nomes distintos de proposito. -->
     <div id="page-estoque-prod" class="page">
       <div class="page-header">
-        <div><div class="page-title">Estoque de Produtos</div><div class="page-sub">Entradas lançadas menos vendas importadas, por SKU com CPV</div></div>
+        <div><div class="page-title">Estoque de Produtos</div><div class="page-sub">Consolidado de todas as suas empresas — a mercadoria sai do mesmo lugar</div></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-secondary btn-sm" onclick="abrirModalBalancoEstoque()">⚖ Balanço de estoque</button>
           <button class="btn btn-primary btn-sm" onclick="abrirModalEntradaEstoque()">+ Entrada de estoque</button>
@@ -1111,10 +1111,6 @@ tr:hover td{background:var(--surface2);}
 
       <div class="card" style="margin-bottom:16px;padding:14px 20px">
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group" style="margin:0;min-width:220px">
-            <label class="form-label">Empresa</label>
-            <select class="form-control" id="estp-empresa" onchange="loadEstoqueProd()"></select>
-          </div>
           <div class="form-group" style="margin:0;flex:1;min-width:150px">
             <label class="form-label">SKU</label>
             <input class="form-control" type="text" id="estp-filtro" placeholder="Filtrar por SKU..." oninput="renderEstoqueProd()">
@@ -4386,22 +4382,22 @@ const fQ=v=>{
   return n.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:3});
 };
 
-function estpEmpresaSel(){
-  const sel=document.getElementById('estp-empresa');
-  if(!sel)return null;
-  if(!sel.children.length){
-    sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-    if(EMPRESA_ID)sel.value=EMPRESA_ID;
-  }
-  return sel.value||null;
+// Qual empresa recebe o LANCAMENTO. ALTERADO EM 16/11/2026: o estoque passou
+// a ser consolidado do dono (SQL 46), porque a mercadoria sai do mesmo
+// barracao e atende os dois CNPJs. Entao esta escolha nao muda saldo nenhum —
+// ela so diz por qual empresa a linha entra, que continua sendo a chave do
+// RLS. A tela nao tem mais seletor de empresa de proposito: ter um filtro que
+// nao filtra nada seria pior que nao ter.
+function estpEmpresaLancamento(){
+  return EMPRESA_ID||(EMPRESAS[0]&&EMPRESAS[0].id)||null;
 }
 
 async function loadEstoqueProd(){
   if(!EMPRESAS.length){semEmpresaMsg('estp-wrap');return;}
-  const emp=estpEmpresaSel();
-  if(!emp)return;
   try{
-    _estpDados=await sbRpc('estoque_saldo',{p_empresa_id:emp})||[];
+    // Sem parametro: a funcao resolve as empresas pelo owner_id do token.
+    // Nao ha onde apontar para o estoque de outro assinante.
+    _estpDados=await sbRpc('estoque_saldo',{})||[];
     // Datalist dos dois modais: so SKU com CPV, que e exatamente o que a
     // funcao lista. O usuario nao cadastra produto no estoque.
     const opts=_estpDados.map(r=>`<option value="${r.sku}">`).join('');
@@ -4520,7 +4516,7 @@ function abrirModalBalancoEstoque(){
   if(!EMPRESAS.length){alert('Cadastre uma empresa primeiro.');return;}
   const sel=document.getElementById('bal-empresa');
   sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  sel.value=estpEmpresaSel()||EMPRESAS[0].id;
+  sel.value=estpEmpresaLancamento()||EMPRESAS[0].id;
   document.getElementById('bal-sku').value='';
   document.getElementById('bal-qtd').value='';
   document.getElementById('bal-obs').value='';
@@ -4568,8 +4564,6 @@ async function salvarBalancoEstoque(){
       criado_por:SESSION?.user?.id||null
     });
     fecharModal('modal-balanco-estoque');
-    const sel=document.getElementById('estp-empresa');
-    if(sel&&sel.value!==empresa_id)sel.value=empresa_id;
     await loadEstoqueProd();
   }catch(e){
     // A mensagem do gatilho (SQL 45) e escrita para o usuario e diz o que
@@ -4585,7 +4579,7 @@ function abrirModalEntradaEstoque(){
   if(!EMPRESAS.length){alert('Cadastre uma empresa primeiro.');return;}
   const sel=document.getElementById('ent-empresa');
   sel.innerHTML=EMPRESAS.map(e=>`<option value="${e.id}">${e.nome}</option>`).join('');
-  sel.value=estpEmpresaSel()||EMPRESAS[0].id;
+  sel.value=estpEmpresaLancamento()||EMPRESAS[0].id;
   document.getElementById('ent-sku').value='';
   document.getElementById('ent-qtd').value='';
   document.getElementById('ent-obs').value='';
@@ -4623,10 +4617,6 @@ async function salvarEntradaEstoque(){
       criado_por:SESSION?.user?.id||null
     });
     fecharModal('modal-entrada-estoque');
-    // Se a entrada foi em outra empresa que a da tela, troca para ela — senao
-    // o usuario lanca e nao ve nada acontecer.
-    const sel=document.getElementById('estp-empresa');
-    if(sel&&sel.value!==empresa_id)sel.value=empresa_id;
     await loadEstoqueProd();
   }catch(e){
     // A mensagem do gatilho de CPV (SQL 43) e escrita para o usuario e diz o
